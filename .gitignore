@@ -1,0 +1,11 @@
+/build*/
+/out/
+CMakeUserPresets.json
+*.user
+.vs/
+.vscode/
+*.log
+/config/*.local.ini
+/import/dati/
+.env
+.env.*

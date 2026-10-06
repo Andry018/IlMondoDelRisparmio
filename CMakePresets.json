@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "msys2-debug",
+      "displayName": "MSYS2 UCRT64 - Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/g++.exe",
+        "CMAKE_PREFIX_PATH": "C:/msys64/ucrt64"
+      }
+    },
+    {
+      "name": "msys2-release",
+      "displayName": "MSYS2 UCRT64 - Release",
+      "inherits": "msys2-debug",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug",   "configurePreset": "msys2-debug" },
+    { "name": "release", "configurePreset": "msys2-release" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "msys2-debug", "output": { "outputOnFailure": true } }
+  ]
+}
