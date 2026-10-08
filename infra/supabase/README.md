@@ -56,14 +56,58 @@ psql -h <ip-server> -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supaba
 
 In alternativa la Supabase CLI: `supabase db push --db-url postgres://postgres:<pwd>@<ip-server>:5432/postgres`.
 
+Il ciclo `for` va bene **solo sul database vuoto**: le migrazioni non sono ripetibili.
+Per gli aggiornamenti applicare solo i file nuovi, oppure usare `supabase db push`, che
+tiene traccia di quelle già applicate. Prima di ogni aggiornamento: backup (vedi sotto).
+
 ## Primo amministratore
 
 1. Studio → Authentication → Add user (email + password).
 2. Studio → SQL Editor:
    ```sql
-   insert into operatori (id, nome, ruolo)
-   select id, 'Amministratore', 'amministratore' from auth.users where email = '<email>';
+   insert into operatori (id, nome, ruolo, codice)
+   select id, 'Amministratore', 'amministratore', '1' from auth.users where email = '<email>';
    ```
+
+## Casse: un account per terminale
+
+Ogni cassa resta collegata con un proprio utente e lavora con i permessi del cassiere;
+chi batte lo scontrino si identifica con codice + PIN (vedi `docs/API.md`, "Accesso").
+
+1. Studio → Authentication → Add user: `cassa1@negozio.lan` con una password lunga
+   casuale (va solo nella configurazione della cassa, nessuno la digita).
+2. SQL Editor:
+   ```sql
+   update terminali set utente_id = (select id from auth.users where email = 'cassa1@negozio.lan')
+    where id = 'CASSA1';
+   ```
+3. Cassa dismessa o rubata: `update terminali set attivo = false where id = 'CASSA1';`
+   (l'account smette subito di funzionare; poi cancellare l'utente in Studio).
+
+## Operatori
+
+1. Studio → Authentication → Add user (email + password: serve solo a chi usa il PC
+   ufficio o il palmare con il proprio nome; per i soli cassieri basta una password casuale).
+2. SQL Editor:
+   ```sql
+   insert into operatori (id, nome, ruolo, codice)
+   select id, 'Anna', 'cassiere', '11' from auth.users where email = 'anna@negozio.lan';
+   ```
+3. PIN: l'amministratore lo imposta dal gestionale (`imposta_pin`), poi ognuno può cambiarlo.
+
+Gli operatori non si cancellano (servono allo storico): `update operatori set attivo = false`.
+
+## Fatture elettroniche
+
+Prima della prima fattura completare i dati del negozio:
+
+```sql
+update impostazioni set ragione_sociale = '...', partita_iva = '...', codice_fiscale = '...',
+       indirizzo = '...', cap = '...', comune = '...', provincia = '..', regime_fiscale = 'RF01',
+       iban = '...';
+```
+
+L'invio allo SDI lo fa il connettore: vedi [`infra/connettore-sdi/README.md`](../connettore-sdi/README.md).
 
 ## Servizi non necessari
 

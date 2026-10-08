@@ -35,6 +35,8 @@ Tutto gira nella rete locale del negozio: nessun dato in cloud.
 | `supabase/migrations` | Schema del database, sicurezza (RLS) e funzioni di business |
 | `supabase/tests` | Test dello schema su un PostgreSQL temporaneo |
 | `infra/supabase` | Istruzioni di installazione del server |
+| `infra/connettore-sdi` | Connettore che invia le fatture allo SDI tramite Openapi (Python, sul server) |
+| `docs/API.md` | Contratto con i client: viste, RPC, payload, errori, sincronizzazione della cassa |
 
 ## Scelte principali
 
@@ -63,6 +65,25 @@ correggere si registra una rettifica, mai una modifica.
 
 **Se una cassa si guasta** si continua dal PC ufficio, che ha lo stesso programma.
 
+**Accesso delle casse.** Ogni cassa ha un proprio account (collegato a `terminali`) e
+resta collegata tutto il giorno con i permessi del cassiere. Chi batte lo scontrino si
+identifica con codice + PIN, verificati dalla cassa anche offline su una copia locale
+degli operatori; ogni vendita porta l'operatore. PC ufficio e palmari usano il login
+personale dell'operatore, con il suo ruolo.
+
+**Chiusura giornaliera.** Dopo la chiusura Z la cassa invia i totali letti dal
+registratore (`registra_chiusura`); il server li confronta con le vendite ricevute con la
+stessa matricola e lo stesso azzeramento (`v_riconciliazione_chiusure`).
+
+**Fatture elettroniche.** `emetti_fattura` numera la fattura, scorpora l'IVA dai prezzi
+IVA inclusa (il totale resta quello dello scontrino) e genera l'XML FatturaPA nel database.
+Un connettore sul server (`infra/connettore-sdi`) lo invia allo SDI tramite Openapi e
+riporta lo stato; il server non è esposto a Internet, quindi il connettore interroga
+Openapi invece di ricevere webhook. Il token Openapi sta solo sul server. Lo stesso
+connettore scarica le fatture passive dei fornitori.
+
+Il contratto completo con i client (viste, RPC, payload, errori) è in [`API.md`](API.md).
+
 **Palmare.** Usa le stesse API: in Capacitor con `supabase-js`, in Android nativo con
 `supabase-kt` o semplici chiamate REST. Nessun lavoro lato server in più.
 
@@ -72,12 +93,17 @@ correggere si registra una rettifica, mai una modifica.
 |---|---|
 | amministratore | tutto, compresa la gestione operatori |
 | responsabile | anagrafiche, prezzi, vendite, carichi, inventario |
-| cassiere | vendere, annullare, registrare nuovi clienti |
+| cassiere | vendere, annullare, chiusura Z, fatturare, registrare nuovi clienti |
 | magazziniere | carichi e inventario |
+
+L'account di un terminale (cassa) lavora con i permessi del cassiere.
 
 ## Da decidere / da fare
 
-- Modello del registratore telematico (RCH / Custom / Olivetti) e collegamento (rete o USB).
-- Invio delle fatture elettroniche allo SDI (intermediario).
+- ~~Modello del registratore telematico~~: **Custom K3F RT** in rete (LAN). Manca il manuale del
+  protocollo per il driver (vedi `COSA_SERVE.md`).
+- ~~Invio delle fatture elettroniche allo SDI~~: Openapi (`infra/connettore-sdi`); manca la
+  prova in sandbox con le credenziali del negozio.
+- Imposta di bollo: dichiarata sempre; addebitarla ai clienti? (`impostazioni.addebita_bollo`, ora no).
 - Importazione dati da SystemApp (in attesa del tipo di database).
 - Client desktop Qt e sincronizzazione offline.
