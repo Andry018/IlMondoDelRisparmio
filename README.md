@@ -24,6 +24,41 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+Lanciare la cassa (simulatore RT; senza server parte con un catalogo di prova,
+codici 1001–1003, 2001–2002, 3001–3002):
+
+```powershell
+.\build\debug\bin\mdr-cassa.exe                    # dati in %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa
+.\build\debug\bin\mdr-cassa.exe --dati C:\prova    # archivio e impostazioni in un'altra cartella
+.\build\debug\bin\mdr-cassa.exe --schermo-intero  # postazione cassa (POS Custom Silk 15", 1024x768)
+.\build\debug\bin\mdr-cassa.exe --finestra 1024x768  # prova della risoluzione del POS su un PC
+```
+
+Schede (Alt+1…4):
+
+- **Cassa** — barcode o codice + Invio (`3*1001` = 3 pezzi). Articolo che manca in archivio:
+  prezzo sul tastierino + tasto reparto (`250` = 2,50; `2,50` va bene uguale; `3 X 120` = 3 pezzi
+  da 1,20), oppure F2 *Articolo libero* con descrizione. F9 quantità riga, F3 sconto % riga,
+  F4 storna riga, F5 contanti (finestra con banconote e monete da toccare: mostra subito il resto), F6 carta,
+  F7 bancomat, F8 annulla scontrino, F10 riepilogo e chiusura Z.
+  Due scontrini paralleli (tasti *Scontrino 1/2* o F11): uno resta in attesa con righe e acconti
+  mentre si serve un altro cliente; chiuso il secondo si torna al primo. F12 *Verifica prezzo*:
+  mostra il prezzo dell'articolo letto senza aggiungerlo.
+- **Vendite** — giornale per giorno, dettaglio, *Annulla vendita* e *Reso* (quantità per riga).
+- **Articoli** — ricerca, nuovo, modifica, disattiva (in sola lettura se c'è un server).
+- **Impostazioni** — terminale, server Supabase e chiave, accesso, sincronizzazione, reparti.
+
+Senza server la cassa lavora in locale: vendite, resi e annulli restano in coda e partono
+alla prima sincronizzazione riuscita.
+
+Pacchetto di installazione per il POS (Windows 10 1809+ o 11, 64 bit; non serve installare altro):
+
+```powershell
+.\scripts\crea_pacchetto.ps1    # -> dist\MondoDelRisparmio-Cassa-<versione>.zip
+```
+
+Sul POS: estrarre lo zip, doppio clic su `Installa.bat` (istruzioni in `installazione\LEGGIMI.txt`).
+
 Test del database (avvia un PostgreSQL temporaneo, applica le migrazioni e prova i flussi):
 
 ```powershell

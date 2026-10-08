@@ -31,6 +31,7 @@ public:
     void aggiungi(const Articolo& a, Quantita q = Quantita::pezzi(1));
     void aggiungiRiga(const RigaCarrello& r) { m_righe.append(r); }
     void rimuovi(int indice);
+    void quantitaRiga(int indice, Quantita q);   // azzera lo sconto della riga
     void scontoRiga(int indice, Money sconto);
     void scontoPercentualeRiga(int indice, int basisPoints);
     void svuota();

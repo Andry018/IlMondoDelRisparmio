@@ -1,0 +1,19 @@
+Immagini di banconote e monete in euro da Wikimedia Commons (miniature a bassa risoluzione).
+Banconote: riproduzione consentita dalla BCE (decisione BCE/2013/10) perché non confondibili
+con quelle vere: piccole, solo fronte, con la scritta SPECIMEN.
+Faccia comune delle monete: riproduzione consentita dalla Commissione europea.
+
+banconota_500.png: File:EUR 5 obverse (2013 issue).png - ECB decisions ECB/2003/4 and ECB/2003/5 - https://commons.wikimedia.org/wiki/File%3AEUR_5_obverse_%282013_issue%29.png
+banconota_1000.png: File:EUR 10 obverse (2014 issue).png - ECB decisions ECB/2003/4 and ECB/2003/5 - https://commons.wikimedia.org/wiki/File%3AEUR_10_obverse_%282014_issue%29.png
+banconota_2000.png: File:The Europa series 20 € obverse side.jpg - ECB decisions ECB/2003/4 and ECB/2003/5 - https://commons.wikimedia.org/wiki/File%3AThe_Europa_series_20_%E2%82%AC_obverse_side.jpg
+banconota_5000.png: File:The Europa series 50 € obverse side.png - ECB decisions ECB/2003/4 and ECB/2003/5 - https://commons.wikimedia.org/wiki/File%3AThe_Europa_series_50_%E2%82%AC_obverse_side.png
+banconota_10000.png: File:The Europa series 100 € obverse side.jpg - ECB decisions ECB/2003/4 and ECB/2003/5 - https://commons.wikimedia.org/wiki/File%3AThe_Europa_series_100_%E2%82%AC_obverse_side.jpg
+moneta_200.png: File:2 Euro common face (Old Design) (5133941308).jpg - CC BY 2.0 - https://commons.wikimedia.org/wiki/File%3A2_Euro_common_face_%28Old_Design%29_%285133941308%29.jpg
+moneta_100.png: File:Euro 1 coin.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_1_coin.gif
+moneta_50.png: File:Euro 50 cent.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_50_cent.gif
+moneta_20.png: File:Euro 20 cent.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_20_cent.gif
+moneta_10.png: File:Euro 10 cent.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_10_cent.gif
+moneta_5.png: File:Euro 5 cent.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_5_cent.gif
+moneta_2.png: File:Euro 2 cent.gif - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File%3AEuro_2_cent.gif
+moneta_1.png: File:Euro 1 cent.gif - ? - https://commons.wikimedia.org/wiki/File%3AEuro_1_cent.gif
+(Convertite in PNG e ridimensionate.)

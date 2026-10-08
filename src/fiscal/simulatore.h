@@ -19,6 +19,9 @@ public:
     EsitoFiscale chiusuraGiornaliera() override;
     EsitoFiscale aperturaCassetto() override;
 
+    // Riprende la numerazione salvata (dopo un riavvio del programma).
+    void riprendi(int azzeramento, int documento, Money totaleGiorno);
+
     const QStringList& giornale() const { return m_giornale; }
     Money totaleGiorno() const { return m_totaleGiorno; }
 

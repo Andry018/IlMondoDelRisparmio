@@ -11,14 +11,15 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Il server è Supabase self-hosted (vedi supabase/ e infra/), non c'è un server C++.
-# Client desktop: da attivare quando il modulo sarà presente.
-option(MDR_BUILD_DESKTOP "Compila il client desktop (mdr-cassa)" OFF)
+# Client desktop: vista cassa Qt Widgets.
+option(MDR_BUILD_DESKTOP "Compila il client desktop (mdr-cassa)" ON)
 option(MDR_BUILD_TESTS   "Compila i test"                         ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Sql Network)
 
 add_subdirectory(src/core)
 add_subdirectory(src/fiscal)
+add_subdirectory(src/locale)
 
 if(MDR_BUILD_DESKTOP)
     add_subdirectory(src/desktop)

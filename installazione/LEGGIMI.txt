@@ -1,0 +1,36 @@
+CASSA MONDO DEL RISPARMIO - INSTALLAZIONE
+==========================================
+
+Requisiti: Windows 10 (versione 1809 o successiva) o Windows 11, 64 bit.
+Non serve installare altro: tutto il necessario e' nella cartella "app".
+
+INSTALLARE
+1. Estrarre TUTTO lo zip (tasto destro > Estrai tutto...). Non avviare da dentro lo zip.
+2. Doppio clic su  Installa.bat
+3. Rispondere alle domande:
+   - avvio automatico all'accensione del PC (consigliato sul POS: S)
+   - avviare subito la cassa
+
+Vengono creati:
+   - sul desktop: "Cassa Mondo del Risparmio" (a schermo intero)
+   - nel menu Start, cartella "Mondo del Risparmio": Cassa, Cassa (in finestra), Disinstalla cassa
+
+Se Windows mostra "Windows ha protetto il PC": "Ulteriori informazioni" > "Esegui comunque".
+
+AGGIORNARE
+Estrarre lo zip della nuova versione e rifare doppio clic su Installa.bat.
+Vendite, coda di invio e impostazioni restano come sono.
+Chiudere prima la cassa (Impostazioni > Esci dal programma).
+
+USCIRE DAL PROGRAMMA A SCHERMO INTERO
+Scheda Impostazioni > "Esci dal programma" (oppure Alt+F4 con la tastiera).
+
+DOVE SONO I DATI
+%LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa
+   cassa.sqlite     archivio: articoli, vendite, coda verso il server
+   mdr-cassa.ini    impostazioni: terminale, server, accesso
+Fare una copia di questa cartella prima di cambiare PC.
+
+DISINSTALLARE
+Menu Start > Mondo del Risparmio > Disinstalla cassa.
+Il programma viene rimosso, i dati restano (vedi sopra).

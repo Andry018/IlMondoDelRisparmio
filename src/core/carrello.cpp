@@ -22,6 +22,14 @@ void Carrello::rimuovi(int indice)
         m_righe.removeAt(indice);
 }
 
+void Carrello::quantitaRiga(int indice, Quantita q)
+{
+    if (indice >= 0 && indice < m_righe.size() && q > Quantita()) {
+        m_righe[indice].quantita = q;
+        m_righe[indice].sconto = {};
+    }
+}
+
 void Carrello::scontoRiga(int indice, Money sconto)
 {
     if (indice >= 0 && indice < m_righe.size())

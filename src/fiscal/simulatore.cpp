@@ -7,6 +7,13 @@ EsitoFiscale StampanteSimulata::esitoOk()
     return {true, {}, m_azzeramento, m_documento, QDateTime::currentDateTime()};
 }
 
+void StampanteSimulata::riprendi(int azzeramento, int documento, Money totaleGiorno)
+{
+    m_azzeramento = azzeramento;
+    m_documento = documento;
+    m_totaleGiorno = totaleGiorno;
+}
+
 EsitoFiscale StampanteSimulata::stato()
 {
     return esitoOk();

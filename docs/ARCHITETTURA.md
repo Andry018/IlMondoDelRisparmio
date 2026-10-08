@@ -31,7 +31,7 @@ Tutto gira nella rete locale del negozio: nessun dato in cloud.
 |---|---|
 | `src/core` | Logica di dominio in C++ senza dipendenze da UI o DB: importi, quantità, IVA, barcode, carrello |
 | `src/fiscal` | Interfaccia `StampanteFiscale` e driver dei registratori telematici (per ora il simulatore) |
-| `src/desktop` | *(da fare)* applicazione Qt Widgets: cassa, magazzino, anagrafiche, documenti |
+| `src/desktop` | Applicazione Qt Widgets `mdr-cassa`: per ora la vista cassa sul simulatore RT con catalogo dimostrativo |
 | `supabase/migrations` | Schema del database, sicurezza (RLS) e funzioni di business |
 | `supabase/tests` | Test dello schema su un PostgreSQL temporaneo |
 | `infra/supabase` | Istruzioni di installazione del server |

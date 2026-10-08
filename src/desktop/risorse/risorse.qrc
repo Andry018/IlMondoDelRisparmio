@@ -1,0 +1,17 @@
+<RCC>
+    <qresource prefix="/euro">
+        <file alias="banconota_1000">euro/banconota_1000.png</file>
+        <file alias="banconota_10000">euro/banconota_10000.png</file>
+        <file alias="banconota_2000">euro/banconota_2000.png</file>
+        <file alias="banconota_500">euro/banconota_500.png</file>
+        <file alias="banconota_5000">euro/banconota_5000.png</file>
+        <file alias="moneta_1">euro/moneta_1.png</file>
+        <file alias="moneta_10">euro/moneta_10.png</file>
+        <file alias="moneta_100">euro/moneta_100.png</file>
+        <file alias="moneta_2">euro/moneta_2.png</file>
+        <file alias="moneta_20">euro/moneta_20.png</file>
+        <file alias="moneta_200">euro/moneta_200.png</file>
+        <file alias="moneta_5">euro/moneta_5.png</file>
+        <file alias="moneta_50">euro/moneta_50.png</file>
+    </qresource>
+</RCC>
