@@ -12,6 +12,7 @@ class QTableWidget;
 
 namespace mdr {
 
+class Aggiornatore;
 class ArchivioLocale;
 class Sincronizzatore;
 
@@ -21,7 +22,7 @@ class VistaImpostazioni : public QWidget {
 
 public:
     VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& archivio, Sincronizzatore& sync,
-                      QString infoPostazione, QWidget* parent = nullptr);
+                      Aggiornatore& aggiornatore, QString infoPostazione, QWidget* parent = nullptr);
 
     const Impostazioni& impostazioni() const { return m_imp; }
     void aggiorna();
@@ -29,6 +30,7 @@ public:
 
 signals:
     void impostazioniCambiate(const Impostazioni& impostazioni);
+    void installazioneRichiesta();
 
 private:
     void salva();
@@ -38,6 +40,7 @@ private:
     Impostazioni m_imp;
     ArchivioLocale& m_archivio;
     Sincronizzatore& m_sync;
+    Aggiornatore& m_aggiornatore;
 
     QLineEdit* m_terminale = nullptr;
     QLineEdit* m_server = nullptr;
@@ -52,6 +55,12 @@ private:
     QTableWidget* m_reparti = nullptr;
     QPlainTextEdit* m_log = nullptr;
     QString m_infoPostazione;
+    QLineEdit* m_repository = nullptr;
+    QLineEdit* m_tokenAggiornamenti = nullptr;
+    QLabel* m_statoAggiornamenti = nullptr;
+    QPushButton* m_controlla = nullptr;
+    QPushButton* m_installa = nullptr;
+    void aggiornaStatoAggiornamenti();
 };
 
 } // namespace mdr

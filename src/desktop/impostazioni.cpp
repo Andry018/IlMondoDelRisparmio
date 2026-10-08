@@ -13,6 +13,8 @@ Impostazioni Impostazioni::carica(const QString& file)
     i.apiKey = s.value("server/api_key").toString();
     i.email = s.value("accesso/email").toString();
     i.refreshToken = s.value("accesso/refresh_token").toString();
+    i.repositoryAggiornamenti = s.value("aggiornamenti/repository", i.repositoryAggiornamenti).toString();
+    i.tokenAggiornamenti = s.value("aggiornamenti/token").toString();
     return i;
 }
 
@@ -24,6 +26,8 @@ void Impostazioni::salva(const QString& file) const
     s.setValue("server/api_key", apiKey);
     s.setValue("accesso/email", email);
     s.setValue("accesso/refresh_token", refreshToken);
+    s.setValue("aggiornamenti/repository", repositoryAggiornamenti);
+    s.setValue("aggiornamenti/token", tokenAggiornamenti);
 }
 
 } // namespace mdr

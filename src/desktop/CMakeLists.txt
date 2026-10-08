@@ -14,10 +14,13 @@ add_library(mdr_desktop STATIC
     vistaarticoli.h      vistaarticoli.cpp
     vistaimpostazioni.h  vistaimpostazioni.cpp
     finestraprincipale.h finestraprincipale.cpp
+    installazioneaggiornamento.h installazioneaggiornamento.cpp
     ${MDR_RISORSE}
 )
 target_include_directories(mdr_desktop PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(mdr_desktop PUBLIC mdr_core mdr_fiscal mdr_locale Qt6::Widgets)
+# Versione del programma (project() in CMakeLists.txt): la usa l'aggiornamento automatico.
+target_compile_definitions(mdr_desktop PUBLIC MDR_VERSIONE="${PROJECT_VERSION}")
 
 add_executable(mdr-cassa WIN32 main.cpp)
 target_link_libraries(mdr-cassa PRIVATE mdr_desktop)

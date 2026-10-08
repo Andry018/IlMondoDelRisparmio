@@ -41,7 +41,7 @@ $aggiornamento = Test-Path (Join-Path $Cartella "mdr-cassa.exe")
 if (Test-Path $Cartella) { Remove-Item -Recurse -Force $Cartella }
 New-Item -ItemType Directory -Force $Cartella | Out-Null
 Copy-Item -Recurse -Force (Join-Path $origine "*") $Cartella
-Copy-Item -Force (Join-Path $PSScriptRoot "disinstalla.ps1"), (Join-Path $PSScriptRoot "Disinstalla.bat") $Cartella
+Copy-Item -Force (Join-Path $PSScriptRoot "disinstalla.ps1"), (Join-Path $PSScriptRoot "Disinstalla.bat"), (Join-Path $PSScriptRoot "aggiorna.ps1") $Cartella
 $exe = Join-Path $Cartella "mdr-cassa.exe"
 Write-Host "Programma copiato in $Cartella"
 

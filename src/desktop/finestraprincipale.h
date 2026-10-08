@@ -11,6 +11,7 @@ class QTimer;
 
 namespace mdr {
 
+class Aggiornatore;
 class Sincronizzatore;
 class VistaArticoli;
 class VistaCassa;
@@ -25,6 +26,7 @@ public:
                        QString fileImpostazioni, QString infoPostazione, QWidget* parent = nullptr);
 
     VistaCassa* cassa() const { return m_cassa; }
+    Aggiornatore* aggiornatore() const { return m_aggiornatore; }
     VistaVendite* vendite() const { return m_vendite; }
 
 protected:
@@ -35,11 +37,13 @@ private:
     void cambioScheda(int indice);
     void aggiornaStato();
     void sincronizzaPresto();
+    void installaAggiornamento();
 
     ArchivioLocale& m_archivio;
     OperazioniCassa& m_op;
     QString m_fileImpostazioni;
     Sincronizzatore* m_sync = nullptr;
+    Aggiornatore* m_aggiornatore = nullptr;
 
     QTabWidget* m_schede = nullptr;
     VistaCassa* m_cassa = nullptr;
@@ -50,8 +54,10 @@ private:
     QLabel* m_statoTerminale = nullptr;
     QLabel* m_statoCoda = nullptr;
     QLabel* m_statoServer = nullptr;
+    QLabel* m_statoAggiornamento = nullptr;
     QTimer* m_periodico = nullptr;
     QTimer* m_dopoVendita = nullptr;
+    QTimer* m_controlloAggiornamenti = nullptr;
 };
 
 } // namespace mdr

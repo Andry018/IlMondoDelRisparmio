@@ -59,6 +59,30 @@ Pacchetto di installazione per il POS (Windows 10 1809+ o 11, 64 bit; non serve 
 
 Sul POS: estrarre lo zip, doppio clic su `Installa.bat` (istruzioni in `installazione\LEGGIMI.txt`).
 
+### Aggiornamento automatico
+
+Le casse installate controllano GitHub Releases ogni 4 ore, scaricano la versione nuova e la
+installano alla prossima accensione (o subito dopo la chiusura Z, o da Impostazioni). Il pacchetto
+è accettato solo se firmato con la chiave degli aggiornamenti; se la nuova versione non parte,
+`aggiorna.ps1` rimette quella precedente.
+
+Una volta sul PC di sviluppo:
+
+```powershell
+.\scripts\genera_chiavi.ps1          # chiave privata in %USERPROFILE%\.mondodelrisparmio (farne una copia!)
+winget install GitHub.cli ; gh auth login
+```
+
+Per ogni versione: aumentare `VERSION` in `CMakeLists.txt`, poi
+
+```powershell
+.\scripts\pubblica_aggiornamento.ps1 -Note "Cosa cambia"    # -Prova: tutto tranne la pubblicazione
+```
+
+Repository privato: sulle casse va inserito un token GitHub *fine-grained* in sola lettura
+(Contents: Read) in Impostazioni > Aggiornamenti. Chi ha il token può leggere anche il codice:
+in alternativa pubblicare le release in un repository pubblico separato (opzione `-Repository`).
+
 Test del database (avvia un PostgreSQL temporaneo, applica le migrazioni e prova i flussi):
 
 ```powershell

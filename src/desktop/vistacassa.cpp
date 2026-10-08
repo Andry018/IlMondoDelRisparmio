@@ -591,6 +591,7 @@ void VistaCassa::chiusuraGiornaliera()
         log(QStringLiteral("ERRORE salvataggio chiusura: %1").arg(esito.errore));
     messaggio(QStringLiteral("Chiusura Z %1 eseguita").arg(esito.fiscale.numeroAzzeramento));
     emit documentoEmesso();
+    emit chiusuraEseguita();
 }
 
 void VistaCassa::azzeraPagamenti()

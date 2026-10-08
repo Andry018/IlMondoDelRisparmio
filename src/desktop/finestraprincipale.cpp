@@ -1,12 +1,16 @@
 #include "finestraprincipale.h"
 
+#include "installazioneaggiornamento.h"
+#include "locale/aggiornatore.h"
 #include "locale/sincronizzatore.h"
 #include "vistaarticoli.h"
 #include "vistacassa.h"
 #include "vistaimpostazioni.h"
 #include "vistavendite.h"
 
+#include <QApplication>
 #include <QCloseEvent>
+#include <QFileInfo>
 #include <QLabel>
 #include <QMessageBox>
 #include <QShortcut>
@@ -21,6 +25,8 @@ namespace mdr {
 namespace {
 constexpr int intervalloSyncMs = 60 * 1000;
 constexpr int ritardoDopoVenditaMs = 2000;
+constexpr int primoControlloAggiornamentiMs = 60 * 1000;
+constexpr int intervalloAggiornamentiMs = 4 * 60 * 60 * 1000;
 } // namespace
 
 FinestraPrincipale::FinestraPrincipale(ArchivioLocale& archivio, OperazioniCassa& operazioni,
@@ -31,6 +37,8 @@ FinestraPrincipale::FinestraPrincipale(ArchivioLocale& archivio, OperazioniCassa
     , m_op(operazioni)
     , m_fileImpostazioni(std::move(fileImpostazioni))
     , m_sync(new Sincronizzatore(archivio, this))
+    , m_aggiornatore(new Aggiornatore(QCoreApplication::applicationVersion(),
+                                      QFileInfo(m_fileImpostazioni).absolutePath(), this))
 {
     setWindowTitle(QStringLiteral("Mondo del Risparmio — Cassa"));
     resize(1200, 760);
@@ -43,7 +51,8 @@ FinestraPrincipale::FinestraPrincipale(ArchivioLocale& archivio, OperazioniCassa
     m_cassa = new VistaCassa(archivio, operazioni, m_schede);
     m_vendite = new VistaVendite(archivio, operazioni, m_schede);
     m_articoli = new VistaArticoli(archivio, m_schede);
-    m_impostazioni = new VistaImpostazioni(impostazioni, archivio, *m_sync, infoPostazione, m_schede);
+    m_aggiornatore->configura(impostazioni.repositoryAggiornamenti, impostazioni.tokenAggiornamenti);
+    m_impostazioni = new VistaImpostazioni(impostazioni, archivio, *m_sync, *m_aggiornatore, infoPostazione, m_schede);
     m_schede->addTab(m_cassa, QStringLiteral("Cassa"));
     m_schede->addTab(m_vendite, QStringLiteral("Vendite"));
     m_schede->addTab(m_articoli, QStringLiteral("Articoli"));
@@ -59,7 +68,10 @@ FinestraPrincipale::FinestraPrincipale(ArchivioLocale& archivio, OperazioniCassa
     m_statoTerminale = new QLabel(this);
     m_statoCoda = new QLabel(this);
     m_statoServer = new QLabel(this);
+    m_statoAggiornamento = new QLabel(this);
+    m_statoAggiornamento->setStyleSheet(QStringLiteral("color: #1e88e5; font-weight: bold;"));
     statusBar()->addWidget(m_statoServer, 1);
+    statusBar()->addPermanentWidget(m_statoAggiornamento);
     statusBar()->addPermanentWidget(m_statoCoda);
     statusBar()->addPermanentWidget(m_statoTerminale);
 
@@ -101,6 +113,32 @@ FinestraPrincipale::FinestraPrincipale(ArchivioLocale& archivio, OperazioniCassa
             m_vendite->aggiorna();
     });
 
+    // Aggiornamenti: uno già scaricato si ritrova subito; poi controllo periodico su GitHub.
+    m_controlloAggiornamenti = new QTimer(this);
+    m_controlloAggiornamenti->setInterval(intervalloAggiornamentiMs);
+    connect(m_controlloAggiornamenti, &QTimer::timeout, m_aggiornatore, &Aggiornatore::controlla);
+    m_controlloAggiornamenti->start();
+    QTimer::singleShot(primoControlloAggiornamentiMs, m_aggiornatore, [this] {
+        if (m_aggiornatore->configurato())
+            m_aggiornatore->controlla();
+    });
+    connect(m_aggiornatore, &Aggiornatore::statoCambiato, this, [this] {
+        m_statoAggiornamento->setText(m_aggiornatore->stato() == Aggiornatore::Stato::Pronto
+                                          ? QStringLiteral("Aggiornamento %1 pronto").arg(m_aggiornatore->versionePronta())
+                                          : QString());
+    });
+    connect(m_impostazioni, &VistaImpostazioni::installazioneRichiesta, this, &FinestraPrincipale::installaAggiornamento);
+    connect(m_cassa, &VistaCassa::chiusuraEseguita, this, [this] {
+        if (m_aggiornatore->stato() != Aggiornatore::Stato::Pronto)
+            return;
+        if (QMessageBox::question(this, QStringLiteral("Aggiornamento"),
+                                  QStringLiteral("È disponibile la versione %1 della cassa.\n"
+                                                 "Installarla adesso? La cassa si riavvia (circa un minuto).")
+                                      .arg(m_aggiornatore->versionePronta())) == QMessageBox::Yes)
+            installaAggiornamento();
+    });
+    m_aggiornatore->cercaPronto();
+
     applica(impostazioni);
     m_cassa->attiva();
     QTimer::singleShot(0, m_sync, &Sincronizzatore::sincronizza);
@@ -114,6 +152,7 @@ void FinestraPrincipale::applica(const Impostazioni& imp)
     if (imp.refreshToken != m_sync->refreshToken())
         m_sync->impostaRefreshToken(imp.refreshToken);
     m_articoli->impostaSoloLettura(m_sync->configurato());
+    m_aggiornatore->configura(imp.repositoryAggiornamenti, imp.tokenAggiornamenti);
 
     if (!m_sync->configurato())
         m_statoServer->setText(QStringLiteral("Server non configurato: solo locale"));
@@ -150,6 +189,25 @@ void FinestraPrincipale::cambioScheda(int indice)
         m_articoli->aggiorna();
     else if (scheda == m_impostazioni)
         m_impostazioni->aggiorna();
+}
+
+void FinestraPrincipale::installaAggiornamento()
+{
+    if (m_aggiornatore->stato() != Aggiornatore::Stato::Pronto)
+        return;
+    if (m_cassa->scontrinoAperto()) {
+        QMessageBox::information(this, QStringLiteral("Aggiornamento"),
+                                 QStringLiteral("Chiudere prima gli scontrini in corso."));
+        return;
+    }
+    QString errore;
+    if (!avviaInstallazioneAggiornamento(m_aggiornatore->zipPronto(), m_aggiornatore->versionePronta(),
+                                         QFileInfo(m_fileImpostazioni).absolutePath(), &errore)) {
+        QMessageBox::warning(this, QStringLiteral("Aggiornamento"), errore);
+        return;
+    }
+    // aggiorna.ps1 aspetta che il programma sia chiuso, installa e riavvia la cassa.
+    QApplication::quit();
 }
 
 void FinestraPrincipale::closeEvent(QCloseEvent* e)

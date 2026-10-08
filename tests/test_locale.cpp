@@ -1,4 +1,5 @@
 ﻿#include "locale/archiviolocale.h"
+#include "locale/firma.h"
 #include "locale/payloadvendita.h"
 
 #include <QJsonArray>
@@ -196,6 +197,25 @@ private slots:
         QVERIFY(db.codiceUsato("1001"));
         QVERIFY(!db.codiceUsato("1001", a.id));
         QCOMPARE(db.articolo(b.id)->attivo, false);
+    }
+
+    void verifica_firma()
+    {
+        // Coppia di prova generata con: openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
+        //                               openssl dgst -sha256 -sign k.pem dati.txt
+        const auto modulo = QByteArray::fromHex(
+            "DA7B2524D7F1B6BB0CDD69D74226D87D8074F704FC11360351051161FCF79D66099D3F662A9237AE61F2EDBD0F2286DE9F64A9ED73800EF84B908C6705274514A217BB459B2225297F407EABED4C33E59C1668772D2A2D39F7C462D9FAE93DB0870AF82BA0BA3987471F5278E06CCF1BD69230D9FFC75637A4E5E8AFF147C5F70458D12684B57A279327177D93685188CE28BBC7E26B7EFC9F3F3561B764519B230594F5D462E131BC83763B02412989ED554C2B9C578B5A77148700746DFD6B19B3CFB1749BE6EC8C104826D4DDA404DFE1732466E30AE03E51F7DC7407963B101E2928BB0EBEA8D136E47A3511A8EFFCCDB80C86AA85340BB57EFA1BF67BBD");
+        const auto firma = QByteArray::fromHex(
+            "9C79655B5E36927706186682772F68959CBD2DFCE71A35F05E66203871CBCB2C2CF346EA19641CC266ABF9DED540F21AB87DAD4288944325B575E5939EC74AAF2D75918D07C5004E66F78D74888BC4206485F52638490B977C047CEFF9FF7F62D87A6B2B0777AAAF5C35D5C07A5420F1300AA60CA1467922BBD7A4C68A4A5FB9C0091E1C1C4F9624C7C37107CC968D7ACE44F7B98649378DBF017437081DF03FA8038BF321974F9FFD1734AE5C27ADCBE79A39EE98C41E1D803A260B1345CE32234B668BF608C5B889F923F676E45FAF2360921D3E550166246270829B84344D17E96D134C5F2ED582844888D34E81275C3BE2BF8AA1F017A54BC1666E2823D9");
+        const QByteArray dati("Mondo del Risparmio 0.2.0");
+
+        QVERIFY(verificaFirma(dati, firma, modulo));
+        QVERIFY(!verificaFirma("Mondo del Risparmio 0.2.1", firma, modulo));   // dati alterati
+        auto alterata = firma;
+        alterata[10] = char(alterata[10] ^ 0x01);
+        QVERIFY(!verificaFirma(dati, alterata, modulo));                      // firma alterata
+        QVERIFY(!verificaFirma(dati, firma.left(100), modulo));               // firma troncata
+        QVERIFY(!verificaFirmaAggiornamento(dati, firma));                    // chiave diversa
     }
 
     void payload_registra_vendita()

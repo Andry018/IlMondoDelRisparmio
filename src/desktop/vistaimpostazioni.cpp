@@ -1,9 +1,11 @@
 #include "vistaimpostazioni.h"
 
 #include "comune.h"
+#include "locale/aggiornatore.h"
 #include "locale/archiviolocale.h"
 #include "locale/sincronizzatore.h"
 
+#include <QCoreApplication>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -21,11 +23,12 @@
 namespace mdr {
 
 VistaImpostazioni::VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& archivio, Sincronizzatore& sync,
-                                     QString infoPostazione, QWidget* parent)
+                                     Aggiornatore& aggiornatore, QString infoPostazione, QWidget* parent)
     : QWidget(parent)
     , m_imp(std::move(impostazioni))
     , m_archivio(archivio)
     , m_sync(sync)
+    , m_aggiornatore(aggiornatore)
     , m_infoPostazione(std::move(infoPostazione))
 {
     auto* colonne = new QHBoxLayout(this);
@@ -89,7 +92,38 @@ VistaImpostazioni::VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& 
     connect(riduci, &QPushButton::clicked, this, [this] { window()->showMinimized(); });
     connect(esci, &QPushButton::clicked, this, [this] { window()->close(); });
     sinistra->addWidget(gruppoInfo);
+
+    auto* gruppoAgg = new QGroupBox(QStringLiteral("Aggiornamenti (versione installata %1)")
+                                        .arg(QCoreApplication::applicationVersion()), this);
+    auto* formAgg = new QFormLayout(gruppoAgg);
+    m_repository = new QLineEdit(m_imp.repositoryAggiornamenti, gruppoAgg);
+    m_repository->setPlaceholderText(QStringLiteral("proprietario/repository su GitHub"));
+    m_tokenAggiornamenti = new QLineEdit(m_imp.tokenAggiornamenti, gruppoAgg);
+    m_tokenAggiornamenti->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    m_tokenAggiornamenti->setPlaceholderText(QStringLiteral("solo per repository privati (sola lettura)"));
+    m_statoAggiornamenti = new QLabel(gruppoAgg);
+    m_statoAggiornamenti->setWordWrap(true);
+    auto* bottoniAgg = new QHBoxLayout;
+    m_controlla = new QPushButton(QStringLiteral("Controlla ora"), gruppoAgg);
+    m_installa = new QPushButton(QStringLiteral("Installa e riavvia"), gruppoAgg);
+    m_installa->setObjectName("installa_aggiornamento");
+    auto* salvaAgg = new QPushButton(QStringLiteral("Salva"), gruppoAgg);
+    connect(salvaAgg, &QPushButton::clicked, this, &VistaImpostazioni::salva);
+    bottoniAgg->addWidget(salvaAgg);
+    bottoniAgg->addWidget(m_controlla);
+    bottoniAgg->addWidget(m_installa);
+    formAgg->addRow(QStringLiteral("Repository"), m_repository);
+    formAgg->addRow(QStringLiteral("Token"), m_tokenAggiornamenti);
+    formAgg->addRow(m_statoAggiornamenti);
+    formAgg->addRow(bottoniAgg);
+    sinistra->addWidget(gruppoAgg);
     sinistra->addStretch();
+
+    connect(m_controlla, &QPushButton::clicked, this, [this] { m_aggiornatore.controlla(); });
+    connect(m_installa, &QPushButton::clicked, this, &VistaImpostazioni::installazioneRichiesta);
+    connect(&m_aggiornatore, &Aggiornatore::statoCambiato, this, &VistaImpostazioni::aggiornaStatoAggiornamenti);
+    connect(&m_aggiornatore, &Aggiornatore::messaggio, this, &VistaImpostazioni::log);
+    aggiornaStatoAggiornamenti();
 
     // Colonna destra: sincronizzazione e reparti.
     auto* destra = new QVBoxLayout;
@@ -168,6 +202,8 @@ void VistaImpostazioni::salva()
     m_imp.terminale = terminale;
     m_imp.server = server;
     m_imp.apiKey = m_apiKey->text().trimmed();
+    m_imp.repositoryAggiornamenti = m_repository->text().trimmed();
+    m_imp.tokenAggiornamenti = m_tokenAggiornamenti->text().trimmed();
     if (serverCambiato)
         m_imp.refreshToken.clear();   // la sessione vale solo per il server su cui è stata aperta
     m_terminale->setText(terminale);
@@ -193,6 +229,25 @@ void VistaImpostazioni::esci()
 {
     m_sync.esci();
     log(QStringLiteral("Disconnesso dal server"));
+}
+
+void VistaImpostazioni::aggiornaStatoAggiornamenti()
+{
+    using S = Aggiornatore::Stato;
+    const auto stato = m_aggiornatore.stato();
+    QString testo;
+    switch (stato) {
+    case S::Fermo:        testo = m_aggiornatore.ultimoMessaggio(); break;
+    case S::Controllo:    testo = QStringLiteral("Controllo in corso…"); break;
+    case S::Scaricamento: testo = QStringLiteral("Scaricamento… %1%").arg(m_aggiornatore.percentuale()); break;
+    case S::Pronto:       testo = QStringLiteral("<b>Versione %1 pronta</b>: si installa alla prossima accensione "
+                                                 "o subito con «Installa e riavvia».").arg(m_aggiornatore.versionePronta());
+                          break;
+    case S::Errore:       testo = m_aggiornatore.ultimoMessaggio(); break;
+    }
+    m_statoAggiornamenti->setText(testo.isEmpty() ? QStringLiteral("Nessun controllo eseguito") : testo);
+    m_controlla->setEnabled(stato != S::Controllo && stato != S::Scaricamento && m_aggiornatore.configurato());
+    m_installa->setEnabled(stato == S::Pronto);
 }
 
 void VistaImpostazioni::aggiorna()

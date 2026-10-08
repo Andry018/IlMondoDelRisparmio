@@ -46,6 +46,7 @@ public:
 
 signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati
+    void chiusuraEseguita();  // dopo la Z: momento buono per installare un aggiornamento
 
 private:
     void leggiCodice();

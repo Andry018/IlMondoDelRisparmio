@@ -10,6 +10,7 @@ mdr_test(test_core)
 mdr_test(test_locale)
 
 mdr_test(test_sync)
+mdr_test(test_aggiornamento)
 
 # Prova delle viste Qt senza finestre a schermo.
 if(TARGET mdr_desktop)

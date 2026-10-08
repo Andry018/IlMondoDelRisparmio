@@ -18,9 +18,16 @@ Vengono creati:
 Se Windows mostra "Windows ha protetto il PC": "Ulteriori informazioni" > "Esegui comunque".
 
 AGGIORNARE
-Estrarre lo zip della nuova versione e rifare doppio clic su Installa.bat.
+Di solito non serve fare niente: la cassa controlla da sola ogni 4 ore se c'e' una versione
+nuova (serve internet), la scarica e la installa alla prossima accensione. Si puo' anche:
+   - Impostazioni > Aggiornamenti > "Controlla ora" e poi "Installa e riavvia"
+   - rispondere Si' alla domanda che compare dopo la chiusura Z
+Se la nuova versione non parte, torna da sola quella di prima (registro in
+%LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa\aggiornamento.log).
+
+Aggiornamento a mano (senza internet): estrarre lo zip della nuova versione e rifare doppio
+clic su Installa.bat, dopo aver chiuso la cassa (Impostazioni > Esci dal programma).
 Vendite, coda di invio e impostazioni restano come sono.
-Chiudere prima la cassa (Impostazioni > Esci dal programma).
 
 USCIRE DAL PROGRAMMA A SCHERMO INTERO
 Scheda Impostazioni > "Esci dal programma" (oppure Alt+F4 con la tastiera).
