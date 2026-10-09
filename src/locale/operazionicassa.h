@@ -67,9 +67,11 @@ private:
     QUuid m_operatore;
 };
 
-// Parametro p di registra_chiusura: totali del registratore per l'azzeramento chiuso.
-// Il simulatore non li legge dal registratore: si usano quelli del giornale locale.
-QJsonObject payloadRegistraChiusura(const RiepilogoAzzeramento& r, const EsitoFiscale& esito,
+// Totali dal giornale locale, quando il registratore non li fornisce.
+TotaliChiusura totaliDalGiornale(const RiepilogoAzzeramento& r);
+
+// Parametro p di registra_chiusura per l'azzeramento chiuso.
+QJsonObject payloadRegistraChiusura(const TotaliChiusura& t, const EsitoFiscale& esito,
                                     const QString& terminaleId, const QString& matricolaRt,
                                     const QUuid& operatore = {});
 

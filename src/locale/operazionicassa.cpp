@@ -157,7 +157,9 @@ EsitoOperazione OperazioniCassa::chiusura()
         return {false, fiscale.errore};
 
     EsitoOperazione esito{true, {}, true, {}, fiscale};
-    esito.payload = payloadRegistraChiusura(totali, fiscale, m_terminaleId, m_rt.matricola(), m_operatore);
+    // Fanno fede i totali letti dal registratore; quelli del giornale solo se mancano.
+    const auto totaliZ = fiscale.totali.presenti ? fiscale.totali : totaliDalGiornale(totali);
+    esito.payload = payloadRegistraChiusura(totaliZ, fiscale, m_terminaleId, m_rt.matricola(), m_operatore);
     esito.id = QUuid::fromString(esito.payload.value("id").toString());
     if (!m_archivio.registraChiusura(m_rt.matricola(), fiscale.numeroAzzeramento, fiscale.dataOra, totale,
                                      esito.payload)) {
@@ -219,14 +221,29 @@ RiepilogoAzzeramento OperazioniCassa::riepilogo() const
     return r;
 }
 
-QJsonObject payloadRegistraChiusura(const RiepilogoAzzeramento& r, const EsitoFiscale& esito,
+TotaliChiusura totaliDalGiornale(const RiepilogoAzzeramento& r)
+{
+    TotaliChiusura t;
+    t.presenti = true;
+    // Come v_riconciliazione_chiusure: corrispettivi = vendite completate - resi.
+    t.totale = r.netto();
+    t.vendite = r.totaleVendite + r.totaleAnnullate;
+    t.resi = r.totaleResi;
+    t.annulli = r.totaleAnnullate;
+    t.documenti = r.vendite + r.annullate;
+    t.perAliquota = r.perAliquota;
+    t.natura = r.naturaAliquota;
+    return t;
+}
+
+QJsonObject payloadRegistraChiusura(const TotaliChiusura& t, const EsitoFiscale& esito,
                                     const QString& terminaleId, const QString& matricolaRt, const QUuid& operatore)
 {
     QJsonArray aliquote;
-    for (auto it = r.perAliquota.cbegin(); it != r.perAliquota.cend(); ++it) {
+    for (auto it = t.perAliquota.cbegin(); it != t.perAliquota.cend(); ++it) {
         QJsonObject a{{"aliquota_bp", it.key()}, {"totale", qint64(it.value().cents())}};
-        if (r.naturaAliquota.contains(it.key()))
-            a.insert("natura", r.naturaAliquota.value(it.key()));
+        if (t.natura.contains(it.key()))
+            a.insert("natura", t.natura.value(it.key()));
         aliquote.append(a);
     }
     QJsonObject p{
@@ -235,12 +252,11 @@ QJsonObject payloadRegistraChiusura(const RiepilogoAzzeramento& r, const EsitoFi
         {"rt_matricola", matricolaRt},
         {"rt_azzeramento", esito.numeroAzzeramento},
         {"data_ora", esito.dataOra.toUTC().toString(Qt::ISODateWithMs)},
-        // Come v_riconciliazione_chiusure: corrispettivi = vendite completate - resi.
-        {"totale", qint64(r.netto().cents())},
-        {"totale_vendite", qint64((r.totaleVendite + r.totaleAnnullate).cents())},
-        {"totale_resi", qint64(r.totaleResi.cents())},
-        {"totale_annulli", qint64(r.totaleAnnullate.cents())},
-        {"numero_documenti", r.vendite + r.annullate},
+        {"totale", qint64(t.totale.cents())},
+        {"totale_vendite", qint64(t.vendite.cents())},
+        {"totale_resi", qint64(t.resi.cents())},
+        {"totale_annulli", qint64(t.annulli.cents())},
+        {"numero_documenti", t.documenti},
         {"aliquote", aliquote},
     };
     if (!operatore.isNull())

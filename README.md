@@ -60,8 +60,40 @@ girare insieme sullo stesso PC):
 .\build\debug\bin\mdr-gestione.exe --dati C:\prova2
 ```
 
-Schede della gestione: **Articoli** (ricerca, nuovo, modifica, disattiva; in sola lettura se c'è
-un server) e **Impostazioni** (server, accesso, sincronizzazione).
+Schede della gestione (con un server, dopo l'accesso; amministratore e responsabile vedono tutto,
+il magazziniere Magazzino e Articoli, Operatori solo l'amministratore):
+
+- **Articoli** — anagrafica sul server: prezzo, costo, ricarico, giacenza, scorta, barcode, fornitore.
+- **Magazzino** — fatture passive da caricare (righe proposte dal server e abbinate agli articoli),
+  sotto scorta, ultimi carichi, carico a mano, inventario.
+- **Vendite** — incassi, venduto per reparto e IVA, articoli più venduti, per periodo.
+- **Fatture** — fatture elettroniche e note di credito con lo stato SDI, rigenerazione, XML.
+- **Clienti**, **Fornitori**, **Chiusure** (Z contro vendite), **Resi da verificare**,
+  **Operatori** (ruolo, codice, PIN), **Negozio** (dati per le fatture).
+
+Senza server la gestione mostra solo gli articoli dell'archivio locale.
+
+### Server di sviluppo
+
+Un "Supabase" in miniatura su questo PC per provare cassa e gestione senza il server del negozio:
+PostgreSQL con le migrazioni e dati di prova, PostgREST (scaricato la prima volta) e un gateway
+per il login.
+
+```powershell
+.\strumenti\server-sviluppo\avvia.ps1 -Nuovo     # ricrea il database; Invio per fermare (-Sfondo: in background)
+```
+
+Server `http://127.0.0.1:8000`, chiave in `%LOCALAPPDATA%\Mondo del Risparmio\server-sviluppo\chiavi.txt`.
+Utenti con password `prova`: `admin@`, `responsabile@`, `cassiera@`, `magazzino@negozio.lan` e
+l'account del terminale `cassa1@negozio.lan`. Operatori alla cassa: codici 1-4, PIN 1111-4444.
+
+Con il server acceso girano anche i test di integrazione (`test_gestione_server`, `test_cassa_server`):
+
+```powershell
+$env:MDR_SERVER_SVILUPPO = "http://127.0.0.1:8000"
+$env:MDR_CHIAVE_SVILUPPO = "<chiave da chiavi.txt>"
+ctest --preset debug
+```
 
 Pacchetto di installazione con entrambi i programmi (Windows 10 1809+ o 11, 64 bit; non serve installare altro):
 

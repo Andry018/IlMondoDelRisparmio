@@ -148,6 +148,52 @@ private slots:
         QVERIFY(rt.chiusuraGiornaliera().ok);
         QCOMPARE(rt.totaleGiorno().cents(), 0);
     }
+
+    void simulatore_totali_di_chiusura()
+    {
+        Articolo a;
+        a.id = QUuid::createUuid();
+        a.prezzoVendita = Money::fromCents(1000);
+        a.iva = {2200, {}};
+        Articolo esente = a;
+        esente.id = QUuid::createUuid();
+        esente.iva = {0, "N4"};
+
+        StampanteSimulata rt;
+        auto vendi = [&](const Articolo& art) {
+            Carrello c;
+            c.aggiungi(art);
+            c.aggiungiPagamento({TipoPagamento::Carta, c.totale()});
+            return rt.emettiDocumentoCommerciale(c);
+        };
+        vendi(a);                                   // doc 1: 10,00 al 22%
+        const auto doc2 = vendi(esente);            // doc 2: 10,00 esente (poi annullato)
+        vendi(a);                                   // doc 3: 10,00 al 22%
+        QVERIFY(rt.annullo({rt.matricola(), QDate::currentDate(), doc2.numeroAzzeramento, doc2.numeroDocumento}).ok);
+        Carrello reso;
+        reso.aggiungi(a);
+        reso.aggiungiPagamento({TipoPagamento::Contanti, reso.totale()});
+        QVERIFY(rt.reso(reso, {rt.matricola(), QDate::currentDate(), 1, 1}).ok);
+
+        const auto z = rt.chiusuraGiornaliera();
+        QVERIFY(z.totali.presenti);
+        QCOMPARE(z.totali.vendite.cents(), 3000);    // lorde, annullate comprese
+        QCOMPARE(z.totali.annulli.cents(), 1000);
+        QCOMPARE(z.totali.resi.cents(), 1000);
+        QCOMPARE(z.totali.totale.cents(), 1000);     // 30 - 10 annullato - 10 reso
+        QCOMPARE(z.totali.documenti, 3);
+        QCOMPARE(z.totali.perAliquota.value(2200).cents(), 1000);   // 20 - 10 reso
+        QCOMPARE(z.totali.perAliquota.value(0).cents(), 0);         // annullato
+
+        // Riavvio a metà giornata: il simulatore non conosce i documenti già emessi.
+        StampanteSimulata dopo;
+        dopo.riprendi(2, 5, Money::fromCents(500));
+        QVERIFY(!dopo.chiusuraGiornaliera().totali.presenti);
+        // Riavvio a inizio giornata (dopo una Z): i totali tornano disponibili.
+        StampanteSimulata nuovo;
+        nuovo.riprendi(3, 0, {});
+        QVERIFY(nuovo.chiusuraGiornaliera().totali.presenti);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCore)

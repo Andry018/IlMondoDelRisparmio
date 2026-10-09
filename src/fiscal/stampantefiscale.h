@@ -3,9 +3,23 @@
 #include "core/carrello.h"
 
 #include <QDate>
+#include <QMap>
 #include <QString>
 
 namespace mdr {
+
+// Totali della giornata letti dal registratore alla chiusura Z: sono quelli che fanno fede e
+// che il server confronta con le vendite ricevute (registra_chiusura).
+struct TotaliChiusura {
+    bool presenti = false;      // false: il registratore non li ha forniti
+    Money totale;               // corrispettivi: vendite non annullate - resi
+    Money vendite;              // vendite lorde, annullate comprese
+    Money resi;
+    Money annulli;
+    int documenti = 0;          // documenti commerciali di vendita emessi (annullati compresi)
+    QMap<int, Money> perAliquota;     // lordo per aliquota (punti base), annullate escluse, resi in negativo
+    QMap<int, QString> natura;        // natura IVA delle aliquote a 0
+};
 
 struct EsitoFiscale {
     bool ok = false;
@@ -13,6 +27,7 @@ struct EsitoFiscale {
     int numeroAzzeramento = 0;  // Z corrente
     int numeroDocumento = 0;    // progressivo nel giorno
     QDateTime dataOra;
+    TotaliChiusura totali;      // solo dalla chiusura Z
 };
 
 // Riferimento a un documento commerciale già emesso (per resi e annulli).

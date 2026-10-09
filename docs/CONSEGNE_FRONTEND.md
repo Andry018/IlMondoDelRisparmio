@@ -11,20 +11,24 @@ Aggiornato l'8/10/2026, prima del cambio di PC. Branch: `frontend/cassa`.
   il client in due programmi: va **unito** a `frontend/cassa` dalla sessione frontend
   (consegne in `docs/CONSEGNE_DUE_APP.md` di quel branch). Quella sessione non continua.
 
-## Stato di `frontend/cassa`
+## Stato di `frontend/cassa` (9/10/2026)
 
-Commit `0211379` (cassa) e `042c135` (aggiornamento automatico), versione **0.2.0**.
+Il client è diviso in due programmi (struttura della sessione due-app unita qui):
+`src/ui` comune, `src/cassa` (`mdr-cassa`), `src/gestione` (`mdr-gestione`). Il branch backend
+è unito fino ai carichi dalle fatture passive (`24c35f5`).
 
 | Parte | Dove | Stato |
 |---|---|---|
-| Archivio SQLite locale, giornale vendite, coda verso il server | `src/locale/archiviolocale.*` | fatto, testato |
-| Vendita / annullo / reso / chiusura Z sull'RT | `src/locale/operazionicassa.*` | fatto, testato (RT = simulatore) |
-| Sincronizzazione Supabase (login, invio coda, articoli, reparti) | `src/locale/sincronizzatore.*` | testata con finto server, **mai** con Supabase vero |
-| Aggiornamento automatico (GitHub Releases, firma RSA, rollback) | `src/locale/aggiornatore.*`, `firma.*`, `installazione/aggiorna.ps1` | fatto, testato end-to-end in cartelle temporanee |
-| Programma cassa (schede Cassa, Vendite, Articoli, Impostazioni) | `src/desktop/` | fatto |
-| Pacchetto per il POS + installazione | `scripts/crea_pacchetto.ps1`, `installazione/` | fatto, provato senza MSYS2 |
+| Sessione col server (login, rinnovo una volta sola, richieste) | `src/locale/clientserver.*` | fatto, condivisa da sync e schede |
+| Sincronizzazione (coda, articoli e operatori con margine 5 min, rifiutate "da verificare") | `src/locale/sincronizzatore.*` | fatto, provata con server vero |
+| Cassa: operatore con codice e PIN, chiusura Z inviata, controllo orologio/terminale | `src/cassa/*` | fatto, `test_cassa_server` |
+| Totali di chiusura dal registratore (`TotaliChiusura`) | `src/fiscal/stampantefiscale.h` | simulatore li dà; il driver Custom K3F dovrà riempirli dalla Z |
+| Gestione: 11 schede sulle API | `src/gestione/*` | fatto, `test_gestione_server` |
+| Carico da fattura passiva (`proposta_carico`) | `src/gestione/vistamagazzino.cpp` | fatto |
+| Aggiornamento automatico (cassa e gestione) | `src/locale/aggiornatore.*`, `installazione/aggiorna.ps1` | fatto |
+| Server di sviluppo | `strumenti/server-sviluppo/` | PostgreSQL + PostgREST v16.4 + gateway |
 
-Test: `ctest --preset debug` → 5 gruppi (core, locale, sync, aggiornamento, desktop), tutti verdi.
+Test: 8 suite C++ verdi; `test_gestione_server` e `test_cassa_server` con il server di sviluppo acceso.
 
 ## Funzioni della cassa (richieste dall'utente)
 
@@ -52,16 +56,14 @@ due-app è un **Custom K3 F RT** (USB + Ethernet) — manca il driver (serve il 
   Aggiornamenti). Alternativa da proporre: repository pubblico solo per le release.
 - La 0.1.0 non si aggiorna da sola: la **0.2.0 va installata a mano** sul POS una volta.
 
-## Prossimi passi (in ordine)
+## Prossimi passi
 
-1. Unire `worktree-desktop-due-app` in `frontend/cassa`: struttura `src/ui` + `src/cassa` +
-   `src/gestione`, mantenendo aggiornamento automatico (anche per `mdr-gestione`), due scontrini,
-   verifica prezzo, layout 1024×768, opzioni `--schermo-intero`/`--finestra`.
-2. Leggere `docs/API.md` (branch backend) e sviluppare `mdr-gestione` sulle API: articoli sul server,
-   carichi, inventario, fatture elettroniche, report, chiusure RT, operatori.
-3. Allineare la sincronizzazione della cassa alle migrazioni nuove del backend
-   (`sincronizzazione_casse`, `chiusure_rt`, `operatori_terminali`, `controllo_resi`).
-4. Provare la sincronizzazione con un Supabase vero quando il backend lo avvia.
+1. Driver del registratore **Custom K3 F RT** (serve il manuale dei protocolli): implementa
+   `StampanteFiscale`, con `TotaliChiusura` letti dalla Z.
+2. Vista `v_bolli_trimestrali` del backend (bollo per l'F24) nella scheda Fatture, quando è committata.
+3. Prima pubblicazione 0.3.0 con `scripts/pubblica_aggiornamento.ps1` (serve `gh auth login` e il token
+   o il repository pubblico per le release).
+4. Importazione dati da SystemApp (in attesa del tipo di database).
 
 ## Note per lavorare con l'utente
 
