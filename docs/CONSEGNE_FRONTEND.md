@@ -60,6 +60,9 @@ due-app è un **Custom K3 F RT** (USB + Ethernet) — manca il driver (serve il 
 
 1. Driver del registratore **Custom K3 F RT** (serve il manuale dei protocolli): implementa
    `StampanteFiscale`, con `TotaliChiusura` letti dalla Z.
+   Il PDF Custom 057D100M000024 ("Scambio importo") NON è quel manuale: riguarda il POS bancario
+   collegato alla RT (CustomPay, protocollo 17, tasto 909). Conferma che la K3-F RT è di 3ª generazione.
+   Funzione futura possibile: pagamento con carta con l'importo passato in automatico al POS dalla RT.
 2. Vista `v_bolli_trimestrali` del backend (bollo per l'F24) nella scheda Fatture, quando è committata.
 3. Prima pubblicazione 0.3.0 con `scripts/pubblica_aggiornamento.ps1` (serve `gh auth login` e il token
    o il repository pubblico per le release).
