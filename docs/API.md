@@ -4,7 +4,7 @@ Contratto tra il server del negozio e i client (cassa `mdr-cassa`, PC ufficio, p
 Tutto ciò che è descritto qui è **API pubblica**: cambiarlo in modo non compatibile è una
 modifica che rompe i client e va concordata. Va aggiornato insieme a ogni migrazione.
 
-Schema descritto: migrazioni fino a `20261008000500_controllo_resi.sql`.
+Schema descritto: migrazioni fino a `20261009000000_carichi_da_fatture_passive.sql`.
 
 Verificato da `supabase/tests/`: test SQL per ogni funzione, validazione XSD ufficiale delle
 fatture generate, e `test_api_http.py`, che controlla stati HTTP, corpi e filtri descritti qui
@@ -200,6 +200,7 @@ servono un login e un account abilitato. Si interrogano con `GET /rest/v1/<vista
 | [`v_venduto_articoli`](#report) | venduto per giorno e articolo | tutti |
 | [`v_fatture`](#v_fatture) | fatture e note di credito con stato SDI | tutti |
 | [`v_resi_da_verificare`](#v_resi_da_verificare) | resi anomali da controllare | tutti |
+| [`v_fatture_passive_da_caricare`](#carichi-passive) | fatture dei fornitori da caricare in magazzino | tutti |
 
 <a id="v_articoli_cassa"></a>
 ### `v_articoli_cassa`
@@ -357,6 +358,7 @@ niente.
 | [`registra_chiusura(p)`](#registra_chiusura) | amministratore, responsabile, cassiere | uuid chiusura |
 | [`carico_magazzino(p)`](#carico_magazzino) | amministratore, responsabile, magazziniere | uuid documento |
 | [`rettifica_inventario(p_articolo_id, p_quantita_contata, p_note?)`](#rettifica_inventario) | amministratore, responsabile, magazziniere | differenza (millesimi) |
+| [`proposta_carico(p_fattura_passiva_id)`](#carichi-passive) | amministratore, responsabile, magazziniere | righe con articolo abbinato |
 | [`emetti_fattura(p)`](#emetti_fattura) | amministratore, responsabile, cassiere | uuid documento |
 | [`rigenera_fattura_sdi(p_documento_id)`](#rigenera_fattura_sdi) | amministratore, responsabile | niente |
 | [`fattura_xml(p_documento_id)`](#fattura_xml) | amministratore, responsabile, cassiere, magazziniere | XML FatturaPA |
@@ -524,9 +526,10 @@ documento sono calcolati per aliquota (quella del reparto dell'articolo).
 
 | Campo | Tipo | Obbl. | Note |
 |---|---|---|---|
-| `fornitore_id` | uuid | sì | |
-| `numero_esterno` | text | no | numero del DDT/fattura del fornitore |
-| `data_esterna` | date | no | `YYYY-MM-DD` |
+| `fornitore_id` | uuid | sì (no con `fattura_passiva_id`) | con una fattura passiva: default il fornitore della fattura (anche riconosciuto dalla partita IVA) |
+| `fattura_passiva_id` | uuid | no | carico da fattura del fornitore: vedi [Carichi dalle fatture passive](#carichi-passive) |
+| `numero_esterno` | text | no | numero del DDT/fattura del fornitore (default: quello della fattura passiva) |
+| `data_esterna` | date | no | `YYYY-MM-DD` (default: data della fattura passiva) |
 | `data` | date | no | data del carico, default oggi; ne determina l'anno di numerazione |
 | `note` | text | no | |
 | `righe` | array | sì, ≥ 1 | `{ articolo_id, quantita (millesimi > 0), costo_unitario (centesimi netto IVA ≥ 0), codice_fornitore? }` |
@@ -548,7 +551,54 @@ Risposta `200`: uuid del documento creato.
 Errori: `42501`; `P0001` `fornitore_id mancante`, `Carico senza righe`,
 `Riga N: quantità mancante o non positiva`, `Riga N: costo unitario mancante o negativo`,
 `Riga N: articolo <id> inesistente`; `23503` fornitore inesistente; `22P02` valori non validi.
-Un carico rifiutato non consuma numeri.
+Con `fattura_passiva_id` anche: `Fattura passiva <id> inesistente`, `Fattura passiva già caricata
+(carico N/anno)`, `Una nota di credito del fornitore non si carica in magazzino`, `Fornitore della
+fattura non in anagrafica: inserirlo o indicare fornitore_id`. Un carico rifiutato non consuma numeri.
+
+<a id="carichi-passive"></a>
+### Carichi dalle fatture passive
+
+Le fatture dei fornitori arrivano dallo SDI tramite il connettore, che ne scarica anche l'XML;
+il server ne legge le righe (`fatture_passive_righe`). Il carico si prepara così:
+
+1. **Elenco** `GET /rest/v1/v_fatture_passive_da_caricare` (non ancora caricate, note di credito
+   escluse): `id`, `data`, `numero`, `tipo_documento`, `fornitore_id` (null = fornitore non in
+   anagrafica: va inserito, poi lo riconosce dalla partita IVA), `fornitore`, `fornitore_partita_iva`,
+   `imponibile`, `imposta`, `totale`, `righe`, `xml_scaricato`, `xml_errore`, `created_at`.
+2. **Proposta** `POST /rest/v1/rpc/proposta_carico` `{"p_fattura_passiva_id": "…"}` → una riga per
+   riga della fattura:
+
+   | Colonna | Note |
+   |---|---|
+   | `riga`, `descrizione`, `unita` (del fornitore), `aliquota_bp`, `natura` | dalla fattura |
+   | `codici` | tutti i `CodiceArticolo` della riga: `[{"tipo": "EAN", "valore": "800…"}]` |
+   | `codice_fornitore` | il primo codice non EAN (altrimenti il primo): da rimandare nel carico |
+   | `quantita` | millesimi; `1000` se la riga non ha quantità (es. trasporto) |
+   | `costo_unitario` | centesimi netto IVA **sconti compresi** (totale riga / quantità) |
+   | `totale` | centesimi, totale netto della riga |
+   | `articolo_id`, `articolo_codice`, `articolo_descrizione` | articolo abbinato, null se nessuno |
+   | `abbinamento` | `codice_fornitore` (da `articoli_fornitori` di quel fornitore), `barcode` (EAN in `articoli_barcode`), null |
+
+   L'operatore controlla, sceglie l'articolo per le righe non abbinate, toglie quelle che non
+   sono merce (trasporto) e corregge quantità e costo se il fornitore vende a confezioni e il
+   negozio a pezzi (es. 1 cartone da 12 → 12000 millesimi, costo diviso per 12).
+3. **Carico** `carico_magazzino` con `fattura_passiva_id` e le righe confermate, ognuna con il suo
+   `codice_fornitore`: la fattura viene collegata al carico nella stessa transazione e non si
+   carica una seconda volta. Il codice del fornitore finisce in `articoli_fornitori`, quindi
+   dalla fattura successiva quello stesso articolo si abbina da solo.
+
+```bash
+curl -X POST 'http://<ip-server>:8000/rest/v1/rpc/proposta_carico' \
+  -H 'apikey: <ANON_KEY>' -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+  -d '{"p_fattura_passiva_id": "…"}'
+```
+
+Ruoli: amministratore, responsabile, magazziniere. Errori di `proposta_carico`: `42501`; `P0001`
+`Fattura passiva <id> inesistente`, `Righe della fattura non ancora scaricate` (il connettore la
+scarica al ciclo successivo), `XML non leggibile: …`.
+
+Il collegamento fattura-carico si scrive solo con `carico_magazzino`: `fatture_passive` è di sola
+lettura per i client.
 
 <a id="rettifica_inventario"></a>
 ### `rettifica_inventario`
@@ -703,8 +753,7 @@ Scrittura diretta (`POST`/`PATCH`/`DELETE /rest/v1/<tabella>`):
 | `impostazioni`, `terminali`, `aliquote_iva`, `reparti`, `categorie`, `fornitori`, `articoli`, `articoli_barcode`, `articoli_fornitori` | amministratore, responsabile |
 | `clienti` | amministratore, responsabile; il cassiere (anche il terminale) può solo **inserire** |
 | `operatori` | amministratore |
-| `fatture_passive` | amministratore, responsabile: solo la colonna `documento_id` (collegamento al carico) |
-| `vendite*`, `movimenti_magazzino`, `giacenze`, `documenti*`, `numeratori`, `chiusure_rt*`, `fatture_sdi`, `operatori_pin` | nessuno: solo tramite RPC |
+| `vendite*`, `movimenti_magazzino`, `giacenze`, `documenti*`, `numeratori`, `chiusure_rt*`, `fatture_sdi`, `fatture_passive*`, `operatori_pin` | nessuno: solo tramite RPC |
 
 Articoli e operatori **non si cancellano** (errore `Gli articoli non si cancellano: disattivarli
 (attivo = false)`): si mette `attivo = false`.
@@ -817,7 +866,7 @@ client non vedono. Le fatture passive dei fornitori arrivano in `fatture_passive
 | 9 | I resi non verificano la vendita di origine né le quantità già rese | **Gestito**: accettati (sono già fiscali) e segnalati in `v_resi_da_verificare` |
 | 10 | `verifica_pin` senza limite di tentativi | Aperto: la verifica normale è offline in cassa; accesso solo da account abilitati |
 | 11 | Imposta di bollo (2 € su fatture esenti/non imponibili oltre 77,47 €) | **Risolto**: sempre dichiarata; addebito al cliente con `impostazioni.addebita_bollo` (default no) |
-| 12 | Fatture passive: si salvano dati e importi, non l'XML né il collegamento automatico al carico | Aperto |
+| 12 | Fatture passive: XML, righe e carico in magazzino | **Risolto** (9/10/2026): [Carichi dalle fatture passive](#carichi-passive) |
 | 13 | Verifica sul servizio vero | **Fatto in sandbox** (8/10/2026): TD01, privato con bollo/esente e TD04 generate dal database, inviate dal connettore e consegnate (`DELIVERED`). In produzione serve la partita IVA vera |
 
 ---

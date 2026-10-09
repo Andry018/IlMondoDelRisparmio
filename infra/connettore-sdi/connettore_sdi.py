@@ -15,10 +15,13 @@ Configurazione da variabili d'ambiente, vedi README.md.
 """
 
 import argparse
+import base64
+import binascii
 import datetime as dt
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -43,18 +46,46 @@ class ErroreHttp(Exception):
         self.messaggio = messaggio
 
 
-def richiesta(metodo, url, intestazioni, corpo=None):
-    """Esegue la richiesta e restituisce il JSON della risposta (None se vuota)."""
+def richiesta(metodo, url, intestazioni, corpo=None, grezza=False):
+    """Esegue la richiesta e restituisce il JSON della risposta (None se vuota),
+    oppure i byte così come arrivano se grezza=True."""
     req = urllib.request.Request(url, data=corpo, method=metodo, headers=intestazioni)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            testo = r.read().decode("utf-8")
+            dati = r.read()
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", errors="replace")
         raise ErroreHttp(e.code, messaggio_errore(testo) or f"HTTP {e.code}") from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise ErroreHttp(None, f"Errore di rete: {e}") from None
+    if grezza:
+        return dati
+    testo = dati.decode("utf-8")
     return json.loads(testo) if testo.strip() else None
+
+
+def estrai_xml(dati):
+    """Testo dell'XML FatturaPA da ciò che restituisce Openapi: XML semplice, XML in base64
+    o file firmato .p7m (l'XML è contenuto, intero, dentro la busta della firma).
+    Decodifica secondo la codifica dichiarata (spesso windows-1252 nelle fatture dei fornitori)."""
+    if b"<" not in dati[:200]:
+        try:
+            dati = base64.b64decode(dati, validate=False)
+        except (binascii.Error, ValueError):
+            pass
+    inizio = dati.find(b"<?xml")
+    if inizio < 0:
+        inizio = dati.find(b"<")
+    fine = dati.rfind(b"FatturaElettronica>")
+    if inizio < 0 or fine < 0:
+        raise ValueError("XML FatturaPA non trovato nella risposta")
+    xml = dati[inizio:fine + len(b"FatturaElettronica>")]
+    m = re.match(rb'<\?xml[^>]*encoding=["\']([A-Za-z0-9._-]+)["\']', xml)
+    codifica = m.group(1).decode() if m else "utf-8"
+    try:
+        return xml.decode(codifica)
+    except (LookupError, UnicodeDecodeError):
+        return xml.decode("utf-8", errors="replace")
 
 
 def messaggio_errore(testo):
@@ -103,6 +134,13 @@ class Openapi:
     def fattura(self, openapi_id):
         return richiesta("GET", f"{self.url}/IT-invoices/{urllib.parse.quote(openapi_id)}",
                          self._intestazioni())
+
+    def xml_fattura(self, openapi_id):
+        # Openapi restituisce l'XML originale quando la richiesta ha Content-Type application/xml
+        # (con Accept restituisce comunque il JSON: verificato sul sandbox).
+        return richiesta("GET", f"{self.url}/IT-invoices/{urllib.parse.quote(openapi_id)}",
+                         {"Authorization": f"Bearer {self.token}", "Content-Type": "application/xml"},
+                         grezza=True)
 
     def elenco(self, **filtri):
         query = urllib.parse.urlencode({k: v for k, v in filtri.items() if v is not None})
@@ -216,8 +254,26 @@ class Connettore:
             for f in fatture:
                 self.db.rpc("sdi_registra_risposta", {"p": f})
             if len(fatture) < pagina:
-                return
+                break
             salta += pagina
+        self.scarica_xml_passive()
+
+    def scarica_xml_passive(self):
+        """XML delle fatture passive nuove: il database ne legge le righe per i carichi."""
+        for f in self.db.rpc("sdi_passive_senza_xml", {"p_limite": 20}) or []:
+            try:
+                xml = estrai_xml(self.oa.xml_fattura(f["openapi_id"]))
+            except (ErroreHttp, ValueError) as e:
+                messaggio = e.messaggio if isinstance(e, ErroreHttp) else str(e)
+                log.warning("XML della fattura passiva %s non scaricato: %s", f["openapi_id"], messaggio)
+                self.db.rpc("sdi_registra_xml_passiva",
+                            {"p_openapi_id": f["openapi_id"], "p_xml": None, "p_errore": messaggio})
+                continue
+            righe = self.db.rpc("sdi_registra_xml_passiva", {"p_openapi_id": f["openapi_id"], "p_xml": xml})
+            if righe < 0:
+                log.warning("Fattura passiva %s: XML non leggibile", f["openapi_id"])
+            else:
+                log.info("Fattura passiva %s: %s righe", f["openapi_id"], righe)
 
 
 def da_ambiente():

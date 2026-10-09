@@ -8,6 +8,7 @@ XML rifiutato, rete che cade durante l'invio, esito SDI che arriva dopo, fatture
     python -I infra/connettore-sdi/test_connettore_sdi.py   (con il database di prova attivo)
 """
 
+import base64
 import http.server
 import json
 import logging
@@ -31,8 +32,10 @@ PIVA = "01234567890"
 def psql(sql, ruolo=None):
     if ruolo:
         sql = f"set role {ruolo}; {sql}"
-    r = subprocess.run(["psql", "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-d", DB, "-c", sql],
-                       capture_output=True, text=True, encoding="utf-8",
+    # SQL da standard input in UTF-8: con -c, su Windows, psql riceverebbe il testo nella
+    # codifica ANSI e le lettere accentate arriverebbero sbagliate.
+    r = subprocess.run(["psql", "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-d", DB, "-f", "-"],
+                       input=sql, capture_output=True, text=True, encoding="utf-8",
                        env={**os.environ, "PGCLIENTENCODING": "UTF8", "PGOPTIONS": "-c client_min_messages=warning"})
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip())
@@ -97,6 +100,17 @@ class StatoOpenapi:
         self.richieste_passive = []
 
 
+XML_PASSIVA = (
+    '<?xml version="1.0" encoding="windows-1252"?>'
+    '<ns2:FatturaElettronica xmlns:ns2="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" versione="FPR12">'
+    '<FatturaElettronicaHeader/><FatturaElettronicaBody><DatiBeniServizi>'
+    '<DettaglioLinee><NumeroLinea>1</NumeroLinea><CodiceArticolo><CodiceTipo>EAN</CodiceTipo>'
+    '<CodiceValore>8001234567895</CodiceValore></CodiceArticolo><Descrizione>Caffè macinato</Descrizione>'
+    '<Quantita>10.00</Quantita><PrezzoUnitario>10.00</PrezzoUnitario><PrezzoTotale>100.00</PrezzoTotale>'
+    '<AliquotaIVA>22.00</AliquotaIVA></DettaglioLinee>'
+    '</DatiBeniServizi></FatturaElettronicaBody></ns2:FatturaElettronica>')
+
+
 def numero_da_xml(xml):
     return re.search(r"<Numero>([^<]+)</Numero>", xml).group(1)
 
@@ -144,6 +158,15 @@ def finto_openapi(stato):
             url = urllib.parse.urlparse(self.path)
             q = dict(urllib.parse.parse_qsl(url.query))
             m = re.fullmatch(r"/IT-invoices/([\w-]+)", url.path)
+            if m and self.headers.get("Content-Type") == "application/xml":
+                # XML originale della fattura passiva, come lo manda il fornitore (windows-1252)
+                dati = XML_PASSIVA.encode("cp1252")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/xml")
+                self.send_header("Content-Length", str(len(dati)))
+                self.end_headers()
+                self.wfile.write(dati)
+                return
             if m:
                 oid = m.group(1)
                 stato.letture[oid] = stato.letture.get(oid, 0) + 1
@@ -235,6 +258,10 @@ class TestConnettore(unittest.TestCase):
         self.assertEqual(oa.richieste_passive[0]["fiscal_id"], PIVA)
         self.assertIn("issue_date[after]", oa.richieste_passive[0])
         self.assertEqual(psql("select totale from fatture_passive where openapi_id = 'oa-passiva-1'"), "12200")
+        # XML scaricato e righe lette, con la lettera accentata decodificata da windows-1252
+        self.assertEqual(psql("select r.descrizione || ' ' || r.quantita || ' ' || r.prezzo_totale "
+                              "from fatture_passive_righe r join fatture_passive f on f.id = r.fattura_passiva_id "
+                              "where f.openapi_id = 'oa-passiva-1'"), "Caffè macinato 10000 10000")
 
         # Secondo ciclo: la fattura "rete" viene ritrovata su Openapi, non reinviata;
         # la buona riceve l'esito definitivo.
@@ -264,6 +291,16 @@ class TestConnettore(unittest.TestCase):
         # rimette le fatture come appena emesse per gli altri test
         psql(f"update fatture_sdi set prossimo_tentativo_at = null, tentativi = 0, ultimo_errore = null "
              f"where documento_id in ({documenti})")
+
+    def test_estrai_xml(self):
+        xml = XML_PASSIVA.encode("cp1252")
+        self.assertEqual(cs.estrai_xml(xml), XML_PASSIVA)
+        # busta .p7m: l'XML sta intero dentro byte binari della firma
+        p7m = b"\x30\x82\x1a\x2b\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x07\x02\xa0\x82" + xml + b"\xa0\x82\x05\x00\x30\x82"
+        self.assertEqual(cs.estrai_xml(p7m), XML_PASSIVA)
+        self.assertEqual(cs.estrai_xml(base64.b64encode(p7m)), XML_PASSIVA)
+        with self.assertRaises(ValueError):
+            cs.estrai_xml(b"<html>errore</html>")
 
     def test_token_sbagliato(self):
         oa = cs.Openapi(self.connettore.oa.url, "sbagliato")

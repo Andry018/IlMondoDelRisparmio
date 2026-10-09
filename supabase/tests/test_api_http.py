@@ -218,6 +218,34 @@ class TestApiHttp(unittest.TestCase):
         self.assertEqual(stato, 200)
         self.assertIn("H-A1", [r["codice"] for r in righe])
 
+    # Carico da fattura passiva -------------------------------------------------------------
+    def test_carico_da_fattura_passiva(self):
+        psql("""
+            insert into fatture_passive (id, openapi_id, fornitore_id, numero, data, tipo_documento, risposta, xml)
+            values ('00000000-0000-0000-0007-0000000000d9', 'oa-http-1', '00000000-0000-0000-0007-0000000000f1',
+                    'H/1', '2026-10-09', 'TD01', '{}', '<x/>');
+            insert into fatture_passive_righe (fattura_passiva_id, riga, codici, descrizione, quantita, prezzo_totale, aliquota_bp)
+            values ('00000000-0000-0000-0007-0000000000d9', 1, '[{"tipo": "EAN", "valore": "7000000000017"}]',
+                    'Articolo H dal fornitore', 6000, 540, 2200);
+        """)
+        fattura = "00000000-0000-0000-0007-0000000000d9"
+        stato, elenco = chiama("GET", f"/v_fatture_passive_da_caricare?id=eq.{fattura}", utente=MAGAZZINO)
+        self.assertEqual((stato, elenco[0]["numero"], elenco[0]["righe"]), (200, "H/1", 1))
+
+        stato, proposta = rpc("proposta_carico", {"p_fattura_passiva_id": fattura}, MAGAZZINO)
+        self.assertEqual(stato, 200, proposta)
+        self.assertEqual((proposta[0]["articolo_id"], proposta[0]["abbinamento"], proposta[0]["quantita"],
+                          proposta[0]["costo_unitario"]), (ARTICOLO, "barcode", 6000, 90))
+
+        righe = [{"articolo_id": r["articolo_id"], "quantita": r["quantita"], "costo_unitario": r["costo_unitario"],
+                  "codice_fornitore": r["codice_fornitore"]} for r in proposta]
+        stato, carico = rpc("carico_magazzino", {"p": {"fattura_passiva_id": fattura, "righe": righe}}, MAGAZZINO)
+        self.assertEqual(stato, 200, carico)
+        stato, e = rpc("carico_magazzino", {"p": {"fattura_passiva_id": fattura, "righe": righe}}, MAGAZZINO)
+        self.assertEqual((stato, e["code"]), (400, "P0001"))
+        self.assertIn("già caricata", e["message"])
+        self.assertEqual(chiama("GET", f"/v_fatture_passive_da_caricare?id=eq.{fattura}", utente=MAGAZZINO), (200, []))
+
     # Magazzino ---------------------------------------------------------------------
     def test_carico_e_inventario(self):
         stato, doc = rpc("carico_magazzino", {"p": {"fornitore_id": "00000000-0000-0000-0007-0000000000f1",
