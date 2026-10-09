@@ -14,13 +14,14 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261008000400_fatture_elettroniche` | FatturaPA nel database, coda SDI, bollo virtuale, fatture passive, funzioni `sdi_*` per il connettore | `test_fatture.sql` + XSD ufficiale |
 | `20261008000500_controllo_resi` | `v_resi_da_verificare` | `test_resi.sql` |
 | `20261009000000_carichi_da_fatture_passive` | XML e righe delle fatture passive, `proposta_carico`, `carico_magazzino` con `fattura_passiva_id`, `v_fatture_passive_da_caricare`; tabelle in sola lettura senza privilegi di scrittura | `test_carichi_passive.sql`, `test_api_http.py` |
+| `20261009000100_report_bolli` | `v_bolli_trimestrali` (bollo da versare per trimestre, codice tributo F24) | `test_bolli.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),
 `docs/API.md` (contratto completo), `docs/COSA_SERVE.md` (cosa serve dall'utente).
 
-**Stato test** (9/10/2026): `.\supabase\tests\esegui_test.ps1` passa tutto (9 file SQL, XSD di
-8 fatture, 5 test connettore, 13 test HTTP con `$env:POSTGREST` = postgrest.exe v14.18).
+**Stato test** (9/10/2026): `.\supabase\tests\esegui_test.ps1` passa tutto (10 file SQL, XSD di
+12 fatture, 5 test connettore, 14 test HTTP con `$env:POSTGREST` = postgrest.exe v14.18).
 
 **Prova vera su sandbox Openapi (8/10/2026)**: 3 fatture generate dal database (TD01, privato
 con bollo/esente, TD04) validate e inviate dal connettore vero a `test.invoice.openapi.com`,

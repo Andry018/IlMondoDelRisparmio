@@ -4,7 +4,7 @@ Contratto tra il server del negozio e i client (cassa `mdr-cassa`, PC ufficio, p
 Tutto ciò che è descritto qui è **API pubblica**: cambiarlo in modo non compatibile è una
 modifica che rompe i client e va concordata. Va aggiornato insieme a ogni migrazione.
 
-Schema descritto: migrazioni fino a `20261009000000_carichi_da_fatture_passive.sql`.
+Schema descritto: migrazioni fino a `20261009000100_report_bolli.sql`.
 
 Verificato da `supabase/tests/`: test SQL per ogni funzione, validazione XSD ufficiale delle
 fatture generate, e `test_api_http.py`, che controlla stati HTTP, corpi e filtri descritti qui
@@ -201,6 +201,7 @@ servono un login e un account abilitato. Si interrogano con `GET /rest/v1/<vista
 | [`v_fatture`](#v_fatture) | fatture e note di credito con stato SDI | tutti |
 | [`v_resi_da_verificare`](#v_resi_da_verificare) | resi anomali da controllare | tutti |
 | [`v_fatture_passive_da_caricare`](#carichi-passive) | fatture dei fornitori da caricare in magazzino | tutti |
+| [`v_bolli_trimestrali`](#v_bolli_trimestrali) | imposta di bollo da versare per trimestre | tutti |
 
 <a id="v_articoli_cassa"></a>
 ### `v_articoli_cassa`
@@ -322,6 +323,18 @@ Fatture e note di credito con lo stato dell'invio allo SDI: `id`, `tipo`, `anno`
 `ultimo_errore`, `tentativi`, `updated_at`.
 
 Da mostrare in evidenza: `stato in (errore, scartata)` (vanno corrette e rigenerate).
+
+<a id="v_bolli_trimestrali"></a>
+### `v_bolli_trimestrali`
+
+Imposta di bollo delle fatture elettroniche da versare con F24, per trimestre (data del
+documento): `anno`, `trimestre`, `codice_tributo` (`2521`…`2524`), `numero_documenti`,
+`importo` (centesimi), `non_consegnate` (documenti non ancora consegnati dallo SDI: da
+controllare prima del versamento). Le scadenze le indica il commercialista.
+
+```bash
+curl 'http://<ip-server>:8000/rest/v1/v_bolli_trimestrali?anno=eq.2026&order=trimestre'   -H 'apikey: <ANON_KEY>' -H 'Authorization: Bearer <token>'
+```
 
 <a id="v_resi_da_verificare"></a>
 ### `v_resi_da_verificare`
@@ -758,6 +771,20 @@ Scrittura diretta (`POST`/`PATCH`/`DELETE /rest/v1/<tabella>`):
 Articoli e operatori **non si cancellano** (errore `Gli articoli non si cancellano: disattivarli
 (attivo = false)`): si mette `attivo = false`.
 
+**Tabelle collegate (embedding) con più relazioni.** `articoli` è legata a `fornitori` in due modi:
+`fornitore_abituale_id` e la tabella `articoli_fornitori`. Un `select=*,fornitori(*)` risponde
+`300 PGRST201` (relazione ambigua): va indicata quella voluta.
+
+```
+GET /rest/v1/articoli?select=codice,fornitori!fornitore_abituale_id(ragione_sociale)    # fornitore abituale
+GET /rest/v1/articoli?select=codice,articoli_fornitori(codice_fornitore,costo,fornitori(ragione_sociale))
+```
+
+Lo stesso vale per `documenti` → `documenti` (`documento_origine_id`) e per `vendite` → `vendite`
+(`vendita_origine_id`): per incorporare la tabella stessa servono alias e colonna, per esempio
+`/documenti?select=numero,origine:documenti!documento_origine_id(numero)`.
+Esempi verificati in `test_api_http.py::test_embedding_ambiguo`.
+
 **Le scritture negate da RLS non sempre danno errore**: un `PATCH` o `DELETE` su righe che
 l'account non può modificare risponde 2xx con zero righe toccate. Il client deve usare
 `Prefer: return=representation` e controllare che la risposta contenga le righe attese.
@@ -880,21 +907,24 @@ scritte da `src/locale/payloadvendita.cpp` e `sincronizzatore.cpp`. **Compatibil
 rinnovo del token, `registra_vendita` (vendita, reso, reinvio dalla coda), `annulla_vendita`,
 reparti con l'aliquota incorporata, articoli a pagine.
 
-Da sistemare nella cassa, in ordine di importanza:
+Punti segnalati e **risolti** nel commit `8f03380` di `frontend/cassa` (controllati nel codice il 9/10/2026):
 
-1. **Chiusura Z non inviata**: la cassa non chiama `registra_chiusura`, quindi il server non
-   può riconciliare. Va inviata dalla coda dopo le vendite della giornata.
-2. **Articoli: marcatore senza margine** (`updated_at=gt.<ultimo>`): una modifica lenta può
-   andare persa per sempre. Usare `gte` sul marcatore meno 5 minuti e ignorare le righe uguali.
-3. **Errori 4xx ritentati**: un'operazione rifiutata per i dati resta in coda e si riprova a
-   ogni sincronizzazione. Va spostata tra quelle "da verificare" e mostrata al responsabile
-   (vale anche per `già registrata con dati diversi`).
-4. **Operatore**: oggi la cassa si collega con l'account dell'operatore e non manda
-   `operatore_id`, quindi le vendite in coda vanno a chi è collegato al momento dell'invio.
-   Con l'account del terminale + PIN (`v_operatori_cassa`) va mandato `operatore_id`, che
-   diventa obbligatorio.
-5. Il caso speciale `già annullata` in `sincronizzatore.cpp` non serve più: `annulla_vendita`
-   ora risponde 204 anche al secondo invio. Si può togliere, ma è innocuo.
+| # | Punto | Stato |
+|---|---|---|
+| 1 | Chiusura Z non inviata | **Risolto**: `registra_chiusura` dalla coda dopo la Z, con totali, documenti e aliquote |
+| 2 | Articoli: marcatore senza margine | **Risolto**: `updated_at=gte.<marcatore − 5 minuti>` (anche per gli operatori) |
+| 3 | Errori 4xx ritentati | **Risolto**: le operazioni rifiutate (tranne 401/403) vanno "da verificare" e la coda prosegue |
+| 4 | Operatore delle vendite in coda | **Risolto**: account del terminale + codice/PIN su `v_operatori_cassa`, `operatore_id` in vendite, annulli e chiusure |
+| 5 | Caso speciale `già annullata` | **Tolto** |
+
+In più la cassa avvisa se l'orologio differisce da `ora_server` di oltre 60 secondi e se
+`terminale_corrente` non è il terminale configurato.
+
+Totali della chiusura (commit `c0b4287`): l'esito della Z contiene `TotaliChiusura`, cioè totale,
+vendite, resi, annulli, documenti e importi per aliquota/natura **letti dal registratore**, con le
+stesse definizioni di `v_riconciliazione_chiusure`. La cassa ricalcola dal proprio archivio solo
+se il registratore non li fornisce. Il simulatore già li produce; il driver Custom K3F RT dovrà
+riempirli dalla Z letta dal registratore (serve il manuale del protocollo).
 
 Cose che il client deve fare perché il contratto funzioni. Il backend non tocca `src/`.
 
