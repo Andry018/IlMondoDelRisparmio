@@ -22,6 +22,7 @@ public:
     void notaDiCredito();
     void rigenera();
     void mostraXml();
+    void bolloTrimestrale();   // riepilogo per l'F24 del commercialista (v_bolli_trimestrali)
 
 private:
     void aggiornaPulsanti();

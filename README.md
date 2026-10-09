@@ -87,7 +87,8 @@ Server `http://127.0.0.1:8000`, chiave in `%LOCALAPPDATA%\Mondo del Risparmio\se
 Utenti con password `prova`: `admin@`, `responsabile@`, `cassiera@`, `magazzino@negozio.lan` e
 l'account del terminale `cassa1@negozio.lan`. Operatori alla cassa: codici 1-4, PIN 1111-4444.
 
-Con il server acceso girano anche i test di integrazione (`test_gestione_server`, `test_cassa_server`):
+Con il server acceso girano anche i test di integrazione (`test_gestione_server`, `test_cassa_server`),
+su un database appena creato con `-Nuovo` (la fattura passiva di prova si carica una volta sola):
 
 ```powershell
 $env:MDR_SERVER_SVILUPPO = "http://127.0.0.1:8000"

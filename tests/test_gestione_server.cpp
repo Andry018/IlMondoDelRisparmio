@@ -13,6 +13,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
+#include <QLabel>
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QRadioButton>
@@ -114,9 +115,15 @@ private slots:
 
         vai(QStringLiteral("Chiusure"));
         auto* chiusure = m_finestra->findChild<TabellaServer*>("chiusure");
-        QTRY_COMPARE_WITH_TIMEOUT(chiusure->righe().size(), 1, 5000);
-        QCOMPARE(chiusure->righe().first().toObject().value("quadra").toBool(), false);
-        chiusure->tabella()->selectRow(0);
+        // Altri test (test_cassa_server) aggiungono chiusure: si cerca quella dei dati di prova.
+        QTRY_VERIFY_WITH_TIMEOUT(!chiusure->righe().isEmpty(), 5000);
+        int prova = -1;
+        for (int i = 0; i < chiusure->righe().size(); ++i)
+            if (chiusure->righe()[i].toObject().value("rt_azzeramento").toInt() == 1)
+                prova = i;
+        QVERIFY(prova >= 0);
+        QCOMPARE(chiusure->righe()[prova].toObject().value("quadra").toBool(), false);
+        chiusure->tabella()->selectRow(prova);
         QTest::qWait(800);
         foto(QStringLiteral("chiusure"));
 
@@ -139,6 +146,19 @@ private slots:
         if (riga < 0)
             QSKIP("Fattura di prova già caricata o migrazione del backend assente: ricreare il server con -Nuovo");
         passive->tabella()->selectRow(riga);
+
+        // Giacenza del detersivo prima del carico (altri test possono averne venduto).
+        qint64 prima = -1;
+        {
+            bool fatto = false;
+            m_finestra->findChild<ClientServer*>()->leggi(
+                "giacenze?select=quantita&articolo_id=eq.00000000-0000-0000-00de-000000000a01",
+                [&](const RispostaServer& r) {
+                    prima = r.json().array().first().toObject().value("quantita").toInteger();
+                    fatto = true;
+                });
+            QTRY_VERIFY_WITH_TIMEOUT(fatto, 5000);
+        }
 
         bool fatto = false;
         QTimer::singleShot(0, this, [&fatto] {
@@ -178,7 +198,7 @@ private slots:
         for (const auto& v : articoli->righe()) {
             const auto a = v.toObject();
             if (a.value("codice").toString() == "1001")
-                QCOMPARE(valoreCampo(a, "giacenze.quantita").toInteger(), 23000 + 24000);
+                QCOMPARE(valoreCampo(a, "giacenze.quantita").toInteger(), prima + 24000);
         }
         foto(QStringLiteral("articoli"));
     }
@@ -216,6 +236,21 @@ private slots:
         const auto f = fatture->righe().first().toObject();
         QCOMPARE(f.value("cliente").toString(), QStringLiteral("Bar Centrale Snc"));
         QCOMPARE(f.value("stato").toString(), QStringLiteral("da_inviare"));
+
+        // Bollo trimestrale: la vista risponde (nessuna fattura esente oltre 77,47 nei dati di prova).
+        bool bollo = false;
+        QTimer::singleShot(0, this, [&bollo] {
+            auto* d = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            QVERIFY(d);
+            auto* t = d->findChild<TabellaServer*>("bolli");
+            QVERIFY(t);
+            QTest::qWait(1000);
+            QVERIFY(!t->findChildren<QLabel*>().last()->text().startsWith("Errore"));
+            d->reject();
+            bollo = true;
+        });
+        m_finestra->findChild<QPushButton*>("bollo")->click();
+        QVERIFY(bollo);
         fatture->tabella()->selectRow(0);
         foto(QStringLiteral("fatture"));
     }

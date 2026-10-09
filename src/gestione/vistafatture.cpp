@@ -22,6 +22,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QTableWidget>
 #include <QUuid>
@@ -268,8 +269,10 @@ VistaFatture::VistaFatture(ClientServer& client, QWidget* parent)
     m_nota = new QPushButton(QStringLiteral("Nota di credito…"), this);
     m_rigenera = new QPushButton(QStringLiteral("Rigenera e reinvia"), this);
     m_xml = new QPushButton(QStringLiteral("Vedi XML"), this);
+    auto* bollo = new QPushButton(QStringLiteral("Bollo trimestrale…"), this);
+    bollo->setObjectName("bollo");
     auto* aggiorna = new QPushButton(QStringLiteral("Aggiorna"), this);
-    for (auto* b : {nuova, m_nota, m_rigenera, m_xml, aggiorna})
+    for (auto* b : {nuova, m_nota, m_rigenera, m_xml, bollo, aggiorna})
         barra->addWidget(b);
     layout->addLayout(barra);
 
@@ -305,6 +308,7 @@ VistaFatture::VistaFatture(ClientServer& client, QWidget* parent)
     connect(m_rigenera, &QPushButton::clicked, this, &VistaFatture::rigenera);
     connect(m_xml, &QPushButton::clicked, this, &VistaFatture::mostraXml);
     connect(aggiorna, &QPushButton::clicked, this, &VistaFatture::aggiorna);
+    connect(bollo, &QPushButton::clicked, this, &VistaFatture::bolloTrimestrale);
     connect(m_tabella, &TabellaServer::selezioneCambiata, this, &VistaFatture::aggiornaPulsanti);
     connect(m_tabella, &TabellaServer::attivata, this, &VistaFatture::mostraXml);
     aggiornaPulsanti();
@@ -325,6 +329,47 @@ void VistaFatture::aggiorna()
     if (!filtro.isEmpty())
         risorsa += QLatin1Char('&') + filtro;
     m_tabella->carica(m_client, risorsa, [this](const QJsonArray&) { aggiornaPulsanti(); });
+}
+
+void VistaFatture::bolloTrimestrale()
+{
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Imposta di bollo per trimestre"));
+    d.resize(720, 360);
+    auto* l = new QVBoxLayout(&d);
+    auto* barra = new QHBoxLayout;
+    barra->addWidget(new QLabel(QStringLiteral("Anno"), &d));
+    auto* anno = new QSpinBox(&d);
+    anno->setRange(2020, 2100);
+    anno->setValue(QDate::currentDate().year());
+    barra->addWidget(anno);
+    barra->addStretch();
+    l->addLayout(barra);
+    auto* tabella = new TabellaServer({
+        {"trimestre", QStringLiteral("Trimestre"), ColonnaServer::Testo,
+         [](const QJsonObject& r) { return QStringLiteral("%1° trimestre").arg(r.value("trimestre").toInt()); }},
+        {"codice_tributo", QStringLiteral("Codice tributo F24")},
+        {"numero_documenti", QStringLiteral("Fatture"), ColonnaServer::Intero},
+        {"importo", QStringLiteral("Da versare €"), ColonnaServer::Euro},
+        {"non_consegnate", QStringLiteral("Non ancora consegnate"), ColonnaServer::Intero},
+    }, &d);
+    tabella->setObjectName("bolli");
+    tabella->testoVuoto = QStringLiteral("Nessuna fattura con bollo nell'anno");
+    tabella->evidenzia = [](const QJsonObject& r) { return r.value("non_consegnate").toInt() > 0; };
+    l->addWidget(tabella, 1);
+    auto* nota = new QLabel(QStringLiteral("Righe in rosso: fatture con bollo non ancora consegnate dallo SDI, da "
+                                           "controllare prima del versamento. Le scadenze le indica il commercialista."), &d);
+    nota->setWordWrap(true);
+    l->addWidget(nota);
+    auto* chiudi = new QDialogButtonBox(QDialogButtonBox::Close, &d);
+    l->addWidget(chiudi);
+    connect(chiudi, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    auto carica = [this, tabella, anno] {
+        tabella->carica(m_client, QStringLiteral("v_bolli_trimestrali?anno=eq.%1&order=trimestre").arg(anno->value()));
+    };
+    connect(anno, &QSpinBox::valueChanged, &d, carica);
+    carica();
+    d.exec();
 }
 
 void VistaFatture::nuovaFattura()
