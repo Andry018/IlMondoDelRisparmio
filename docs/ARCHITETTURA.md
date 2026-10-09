@@ -54,6 +54,8 @@ vendita. Ognuno ha il suo archivio SQLite e il suo file di impostazioni in
 | `supabase/migrations` | Schema del database, sicurezza (RLS) e funzioni di business |
 | `supabase/tests` | Test dello schema su un PostgreSQL temporaneo |
 | `infra/supabase` | Istruzioni di installazione del server |
+| `infra/connettore-sdi` | Connettore che invia le fatture allo SDI tramite Openapi (Python, sul server) |
+| `docs/API.md` | Contratto con i client: viste, RPC, payload, errori, sincronizzazione della cassa |
 
 ## Scelte principali
 
@@ -87,6 +89,25 @@ titolare può usare l'uno o l'altro, quella di riserva usa la rete, senza sposta
 Le vendite rimaste in coda sul PC guasto partono quando torna acceso (l'UUID evita doppioni);
 la barra di stato della cassa mostra in rosso le operazioni non ancora inviate.
 
+**Accesso delle casse.** Ogni cassa ha un proprio account (collegato a `terminali`) e
+resta collegata tutto il giorno con i permessi del cassiere. Chi batte lo scontrino si
+identifica con codice + PIN, verificati dalla cassa anche offline su una copia locale
+degli operatori; ogni vendita porta l'operatore. PC ufficio e palmari usano il login
+personale dell'operatore, con il suo ruolo.
+
+**Chiusura giornaliera.** Dopo la chiusura Z la cassa invia i totali letti dal
+registratore (`registra_chiusura`); il server li confronta con le vendite ricevute con la
+stessa matricola e lo stesso azzeramento (`v_riconciliazione_chiusure`).
+
+**Fatture elettroniche.** `emetti_fattura` numera la fattura, scorpora l'IVA dai prezzi
+IVA inclusa (il totale resta quello dello scontrino) e genera l'XML FatturaPA nel database.
+Un connettore sul server (`infra/connettore-sdi`) lo invia allo SDI tramite Openapi e
+riporta lo stato; il server non è esposto a Internet, quindi il connettore interroga
+Openapi invece di ricevere webhook. Il token Openapi sta solo sul server. Lo stesso
+connettore scarica le fatture passive dei fornitori.
+
+Il contratto completo con i client (viste, RPC, payload, errori) è in [`API.md`](API.md).
+
 **Palmare.** Usa le stesse API: in Capacitor con `supabase-js`, in Android nativo con
 `supabase-kt` o semplici chiamate REST. Nessun lavoro lato server in più.
 
@@ -96,17 +117,21 @@ la barra di stato della cassa mostra in rosso le operazioni non ancora inviate.
 |---|---|
 | amministratore | tutto, compresa la gestione operatori |
 | responsabile | anagrafiche, prezzi, vendite, carichi, inventario |
-| cassiere | vendere, annullare, registrare nuovi clienti |
+| cassiere | vendere, annullare, chiusura Z, fatturare, registrare nuovi clienti |
 | magazziniere | carichi e inventario |
+
+L'account di un terminale (cassa) lavora con i permessi del cassiere.
 
 ## Da decidere / da fare
 
-- Driver del Custom K3 F RT: serve il manuale dei protocolli (XML Web Services in rete, protocollo
-  CUSTOM sulla COM virtuale USB) da Custom o dal rivenditore. Le impostazioni del collegamento
-  ci sono già; finché manca il driver si emette sul simulatore.
+- Driver del **Custom K3 F RT**: serve il manuale dei protocolli (XML Web Services in rete,
+  protocollo CUSTOM sulla COM virtuale USB) da Custom o dal rivenditore (vedi `COSA_SERVE.md`).
+  Le impostazioni del collegamento ci sono già; finché manca il driver si emette sul simulatore.
 - Un registratore deve essere usato da una cassa alla volta: blocco/assegnazione sul server
   quando una cassa di riserva prende il registratore di un'altra.
 - Accesso per ruolo all'avvio: `mdr-gestione` solo per responsabile e amministratore.
-- Invio delle fatture elettroniche allo SDI (intermediario).
+- ~~Invio delle fatture elettroniche allo SDI~~: Openapi (`infra/connettore-sdi`); manca la
+  prova in sandbox con le credenziali del negozio.
+- Imposta di bollo: dichiarata sempre; addebitarla ai clienti? (`impostazioni.addebita_bollo`, ora no).
 - Importazione dati da SystemApp (in attesa del tipo di database).
 - Gestione: fatture, carichi, inventario, report in `mdr-gestione`.

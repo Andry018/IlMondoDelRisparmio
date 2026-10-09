@@ -1,0 +1,14 @@
+[Unit]
+Description=Mondo del Risparmio - invio fatture allo SDI tramite Openapi (un ciclo)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/mdr/connettore-sdi.env
+ExecStart=/usr/bin/python3 /opt/mdr/connettore_sdi.py
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

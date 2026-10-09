@@ -159,4 +159,31 @@ do $$ begin
     assert (select updated_at from articoli where codice = 'A2') > '2001-01-01', 'updated_at da barcode';
 end $$;
 
+-- Contratto con i client (docs/API.md) ----------------------------------------
+-- Colonne di v_articoli_cassa: cambiarle rompe la sincronizzazione delle casse.
+do $$ begin
+    assert (select string_agg(column_name, ',' order by ordinal_position)
+              from information_schema.columns where table_name = 'v_articoli_cassa')
+         = 'id,codice,descrizione,descrizione_scontrino,unita,prezzo_vendita,numero_reparto,'
+           'aliquota_bp,natura,attivo,updated_at,barcode', 'colonne v_articoli_cassa';
+end $$;
+
+-- Operatore disattivato: nessun ruolo, nessuna riga, RPC negate.
+update operatori set attivo = false where id = '00000000-0000-0000-0000-00000000000b';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false) \gset
+do $$ begin
+    assert ruolo_corrente() is null, 'ruolo operatore disattivato';
+    assert (select count(*) from v_articoli_cassa) = 0, 'operatore disattivato legge articoli';
+    perform registra_vendita('{"id": "00000000-0000-0000-0000-000000000509", "terminale_id": "CASSA1",
+        "data_ora": "2026-10-06T12:00:00+02:00", "totale": 150,
+        "righe": [{"articolo_id": "00000000-0000-0000-0000-0000000000a1", "descrizione": "Detersivo",
+                   "quantita": 1000, "prezzo_unitario": 150, "totale": 150, "aliquota_bp": 2200, "numero_reparto": 1}],
+        "pagamenti": [{"tipo": "contanti", "importo": 150}]}');
+    raise exception 'FALLITO: operatore disattivato ha registrato una vendita';
+exception when insufficient_privilege then null;
+end $$;
+reset role;
+update operatori set attivo = true where id = '00000000-0000-0000-0000-00000000000b';
+
 \echo 'TUTTI I TEST SUPERATI'
