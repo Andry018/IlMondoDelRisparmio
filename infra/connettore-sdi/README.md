@@ -36,6 +36,10 @@ circa ogni 60 secondi, quindi non serve andare più veloci.
    `DONE` → `consegnata`, `ERROR` → `scartata` (motivo in `sdi_messaggio`).
 4. **Passive**: `GET /IT-invoices?direction=incoming` degli ultimi `PASSIVE_GIORNI` giorni →
    tabella `fatture_passive` (salvate una sola volta, collegate al fornitore per partita IVA).
+   Per ogni fattura nuova scarica l'XML (`GET /IT-invoices/{id}` con `Content-Type:
+   application/xml`, anche se firmato `.p7m` o in base64) e il database ne legge le righe in
+   `fatture_passive_righe`, da cui il gestionale prepara il carico di magazzino
+   (`proposta_carico`). Se il download fallisce riprova al ciclo dopo, al massimo 5 volte.
 
 ## Prima configurazione su Openapi
 

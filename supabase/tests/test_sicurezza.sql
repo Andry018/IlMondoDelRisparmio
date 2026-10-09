@@ -43,6 +43,21 @@ begin
        and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%');
     assert v_elenco is null, 'security definer senza search_path: ' || v_elenco;
 
+    -- Tabelle senza policy di scrittura: i client non hanno nemmeno il privilegio
+    -- (altrimenti un UPDATE risponde "0 righe" invece di un errore chiaro).
+    -- Escluse le tabelle della migrazione iniziale, scritte solo dalle RPC ma con il grant
+    -- generico a authenticated: la loro protezione è la RLS.
+    select string_agg(c.relname, ', ') into v_elenco
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and c.relname not in ('vendite', 'vendite_righe', 'vendite_pagamenti', 'numeratori', 'documenti',
+                             'documenti_righe', 'movimenti_magazzino', 'giacenze')
+       and not exists (select 1 from pg_policy p where p.polrelid = c.oid and p.polcmd <> 'r')
+       and (has_table_privilege('authenticated', c.oid, 'insert')
+            or has_table_privilege('authenticated', c.oid, 'update')
+            or has_table_privilege('authenticated', c.oid, 'delete'));
+    assert v_elenco is null, 'tabelle di sola lettura scrivibili dai client: ' || v_elenco;
+
     -- Le viste rispettano la RLS di chi le interroga
     select string_agg(c.relname, ', ') into v_elenco
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
