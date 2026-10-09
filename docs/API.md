@@ -824,6 +824,29 @@ client non vedono. Le fatture passive dei fornitori arrivano in `fatture_passive
 
 ## Richieste al frontend
 
+### Verifica del codice della cassa (branch `frontend/cassa`, commit `bd6fd0a`, 9/10/2026)
+
+`test_api_http.py::test_richieste_della_cassa` ripete contro un PostgREST vero le richieste
+scritte da `src/locale/payloadvendita.cpp` e `sincronizzatore.cpp`. **Compatibili**: login,
+rinnovo del token, `registra_vendita` (vendita, reso, reinvio dalla coda), `annulla_vendita`,
+reparti con l'aliquota incorporata, articoli a pagine.
+
+Da sistemare nella cassa, in ordine di importanza:
+
+1. **Chiusura Z non inviata**: la cassa non chiama `registra_chiusura`, quindi il server non
+   può riconciliare. Va inviata dalla coda dopo le vendite della giornata.
+2. **Articoli: marcatore senza margine** (`updated_at=gt.<ultimo>`): una modifica lenta può
+   andare persa per sempre. Usare `gte` sul marcatore meno 5 minuti e ignorare le righe uguali.
+3. **Errori 4xx ritentati**: un'operazione rifiutata per i dati resta in coda e si riprova a
+   ogni sincronizzazione. Va spostata tra quelle "da verificare" e mostrata al responsabile
+   (vale anche per `già registrata con dati diversi`).
+4. **Operatore**: oggi la cassa si collega con l'account dell'operatore e non manda
+   `operatore_id`, quindi le vendite in coda vanno a chi è collegato al momento dell'invio.
+   Con l'account del terminale + PIN (`v_operatori_cassa`) va mandato `operatore_id`, che
+   diventa obbligatorio.
+5. Il caso speciale `già annullata` in `sincronizzatore.cpp` non serve più: `annulla_vendita`
+   ora risponde 204 anche al secondo invio. Si può togliere, ma è innocuo.
+
 Cose che il client deve fare perché il contratto funzioni. Il backend non tocca `src/`.
 
 1. Totale di riga con la stessa formula del server (vedi [Convenzioni](#convenzioni)).

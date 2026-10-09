@@ -176,6 +176,48 @@ class TestApiHttp(unittest.TestCase):
                        CASSA)
         self.assertEqual((stato, e["code"]), (403, "42501"))
 
+    # Cassa reale (branch frontend/cassa) ------------------------------------------------
+    # Richieste identiche a quelle di src/locale/payloadvendita.cpp e sincronizzatore.cpp:
+    # login personale dell'operatore, nessun operatore_id, "sconto" e "natura" sempre presenti
+    # (natura null), data_ora in UTC con millisecondi, payload avvolto in {"p": ...}.
+    def test_richieste_della_cassa(self):
+        def payload(id_, tipo="vendita", origine=None):
+            p = {"id": id_, "tipo": tipo, "terminale_id": "CASSA-H1",
+                 "data_ora": "2026-10-09T08:15:30.123Z", "totale": 435,
+                 "rt_matricola": "99SIM000001", "rt_azzeramento": 3, "rt_numero": 17 if tipo == "vendita" else 18,
+                 "righe": [{"articolo_id": ARTICOLO, "descrizione": "Articolo H", "quantita": 1000,
+                            "prezzo_unitario": 330, "sconto": 0, "totale": 330, "aliquota_bp": 2200,
+                            "natura": None, "numero_reparto": 1},
+                           {"articolo_id": None, "descrizione": "Mele", "quantita": 350, "prezzo_unitario": 299,
+                            "sconto": 0, "totale": 105, "aliquota_bp": 1000, "natura": None, "numero_reparto": 2}],
+                 "pagamenti": [{"tipo": "contanti", "importo": 500}]}
+            if origine:
+                p["vendita_origine_id"] = origine
+            return {"p": p}
+
+        vendita_id = "00000000-0000-0000-0007-000000000701"
+        self.assertEqual(rpc("registra_vendita", payload(vendita_id), CASSIERA), (200, vendita_id))
+        self.assertEqual(rpc("registra_vendita", payload(vendita_id), CASSIERA), (200, vendita_id), "reinvio dalla coda")
+        self.assertEqual(psql(f"select operatore_id || ' ' || resto || ' ' || rt_numero from vendite where id = '{vendita_id}'"),
+                         f"{CASSIERA} 65 17")
+        reso_id = "00000000-0000-0000-0007-000000000702"
+        self.assertEqual(rpc("registra_vendita", payload(reso_id, "reso", vendita_id), CASSIERA), (200, reso_id))
+        self.assertEqual(rpc("annulla_vendita", {"p_vendita_id": vendita_id}, CASSIERA), (204, None))
+
+        # Reparti con l'aliquota incorporata
+        stato, reparti = chiama("GET", "/reparti?select=numero_rt,descrizione,aliquote_iva(basis_points,natura)",
+                                utente=CASSIERA)
+        self.assertEqual(stato, 200)
+        self.assertIn({"basis_points": 2200, "natura": None},
+                      [r["aliquote_iva"] for r in reparti if r["numero_rt"] == 1])
+
+        # Articoli a pagine come la cassa (gt sul marcatore percent-encoded, offset)
+        marcatore = urllib.parse.quote("2000-01-01T00:00:00.000+00:00", safe="")
+        stato, righe = chiama("GET", "/v_articoli_cassa?select=*&order=updated_at.asc,id.asc&limit=1000&offset=0"
+                                     f"&updated_at=gt.{marcatore}", utente=CASSIERA)
+        self.assertEqual(stato, 200)
+        self.assertIn("H-A1", [r["codice"] for r in righe])
+
     # Magazzino ---------------------------------------------------------------------
     def test_carico_e_inventario(self):
         stato, doc = rpc("carico_magazzino", {"p": {"fornitore_id": "00000000-0000-0000-0007-0000000000f1",
