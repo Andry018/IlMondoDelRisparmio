@@ -218,6 +218,21 @@ class TestApiHttp(unittest.TestCase):
         self.assertEqual(stato, 200)
         self.assertIn("H-A1", [r["codice"] for r in righe])
 
+    # Embedding con più relazioni (docs/API.md, "Tabelle collegate") ---------------------------
+    def test_embedding_ambiguo(self):
+        stato, e = chiama("GET", "/articoli?select=codice,fornitori(ragione_sociale)&codice=eq.H-A1", utente=ADMIN)
+        self.assertEqual((stato, e["code"]), (300, "PGRST201"))
+        stato, righe = chiama("GET", "/articoli?select=codice,fornitori!fornitore_abituale_id(ragione_sociale)"
+                                     "&codice=eq.H-A1", utente=ADMIN)
+        self.assertEqual((stato, righe[0]["codice"]), (200, "H-A1"))
+        stato, righe = chiama("GET", "/articoli?select=codice,articoli_fornitori(codice_fornitore,costo,"
+                                     "fornitori(ragione_sociale))&codice=eq.H-A1", utente=ADMIN)
+        self.assertEqual(stato, 200, righe)
+        for percorso in ("/documenti?select=numero,origine:documenti!documento_origine_id(numero)&limit=1",
+                         "/vendite?select=id,origine:vendite!vendita_origine_id(id)&limit=1"):
+            stato, righe = chiama("GET", percorso, utente=ADMIN)
+            self.assertEqual(stato, 200, (percorso, righe))
+
     # Carico da fattura passiva -------------------------------------------------------------
     def test_carico_da_fattura_passiva(self):
         psql("""
