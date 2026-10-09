@@ -1,24 +1,29 @@
-CASSA MONDO DEL RISPARMIO - INSTALLAZIONE
-==========================================
+MONDO DEL RISPARMIO - CASSA E GESTIONE - INSTALLAZIONE
+======================================================
 
 Requisiti: Windows 10 (versione 1809 o successiva) o Windows 11, 64 bit.
 Non serve installare altro: tutto il necessario e' nella cartella "app".
+
+Il pacchetto contiene due programmi e li installa ENTRAMBI su ogni PC:
+   - Cassa      vendita al banco con il registratore telematico
+   - Gestione   anagrafiche e amministrazione (ufficio)
+Cosi', se un PC si guasta, si apre lo stesso programma su un altro PC.
 
 INSTALLARE
 1. Estrarre TUTTO lo zip (tasto destro > Estrai tutto...). Non avviare da dentro lo zip.
 2. Doppio clic su  Installa.bat
 3. Rispondere alle domande:
-   - avvio automatico all'accensione del PC (consigliato sul POS: S)
+   - avvio automatico della cassa all'accensione del PC (S sul POS, N sul PC ufficio)
    - avviare subito la cassa
 
 Vengono creati:
-   - sul desktop: "Cassa Mondo del Risparmio" (a schermo intero)
-   - nel menu Start, cartella "Mondo del Risparmio": Cassa, Cassa (in finestra), Disinstalla cassa
+   - sul desktop: "Cassa Mondo del Risparmio" (a schermo intero) e "Gestione Mondo del Risparmio"
+   - nel menu Start, cartella "Mondo del Risparmio": Cassa, Cassa (in finestra), Gestione, Disinstalla
 
 Se Windows mostra "Windows ha protetto il PC": "Ulteriori informazioni" > "Esegui comunque".
 
 AGGIORNARE
-Di solito non serve fare niente: la cassa controlla da sola ogni 4 ore se c'e' una versione
+Di solito non serve fare niente: cassa e gestione controllano da sole ogni 4 ore se c'e' una versione
 nuova (serve internet), la scarica e la installa alla prossima accensione. Si puo' anche:
    - Impostazioni > Aggiornamenti > "Controlla ora" e poi "Installa e riavvia"
    - rispondere Si' alla domanda che compare dopo la chiusura Z
@@ -26,18 +31,27 @@ Se la nuova versione non parte, torna da sola quella di prima (registro in
 %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa\aggiornamento.log).
 
 Aggiornamento a mano (senza internet): estrarre lo zip della nuova versione e rifare doppio
-clic su Installa.bat, dopo aver chiuso la cassa (Impostazioni > Esci dal programma).
+clic su Installa.bat, dopo aver chiuso cassa e gestione (Impostazioni > Esci dal programma).
 Vendite, coda di invio e impostazioni restano come sono.
 
 USCIRE DAL PROGRAMMA A SCHERMO INTERO
 Scheda Impostazioni > "Esci dal programma" (oppure Alt+F4 con la tastiera).
 
+SE UNA CASSA SI GUASTA
+Su un altro PC aprire "Cassa (in finestra)" dal menu Start, scheda Impostazioni:
+   - Terminale: il codice della cassa guasta (es. CASSA1)
+   - Registratore: "Rete" e l'indirizzo IP del registratore
+Salvare e vendere. Una cassa alla volta per registratore.
+
 DOVE SONO I DATI
 %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa
-   cassa.sqlite     archivio: articoli, vendite, coda verso il server
-   mdr-cassa.ini    impostazioni: terminale, server, accesso
-Fare una copia di questa cartella prima di cambiare PC.
+   cassa.sqlite        archivio: articoli, vendite, coda verso il server
+   mdr-cassa.ini       impostazioni: terminale, registratore, server, accesso
+%LOCALAPPDATA%\Mondo del Risparmio\mdr-gestione
+   gestione.sqlite     archivio della gestione
+   mdr-gestione.ini    impostazioni: server, accesso
+Fare una copia di queste cartelle prima di cambiare PC.
 
 DISINSTALLARE
-Menu Start > Mondo del Risparmio > Disinstalla cassa.
-Il programma viene rimosso, i dati restano (vedi sopra).
+Menu Start > Mondo del Risparmio > Disinstalla.
+I programmi vengono rimossi, i dati restano (vedi sopra).

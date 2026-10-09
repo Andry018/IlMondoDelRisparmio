@@ -1,9 +1,10 @@
-# Installa (o aggiorna) la cassa per l'utente corrente. Non servono permessi di amministratore.
-# I dati (archivio vendite e impostazioni) stanno in %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa
-# e non vengono toccati da installazione, aggiornamento o disinstallazione.
+# Installa (o aggiorna) cassa e gestione per l'utente corrente. Non servono permessi di amministratore.
+# Si installano entrambi i programmi su ogni PC: se una postazione si guasta se ne usa un'altra.
+# I dati stanno in %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa e ...\mdr-gestione e non vengono
+# toccati da installazione, aggiornamento o disinstallazione.
 # (file in solo ASCII: PowerShell 5.1 legge i .ps1 senza BOM come ANSI)
 param(
-    [string]$Cartella = (Join-Path $env:LOCALAPPDATA "Programs\MondoDelRisparmio\Cassa"),
+    [string]$Cartella = (Join-Path $env:LOCALAPPDATA "Programs\MondoDelRisparmio"),
     [switch]$NessunCollegamento,   # per le prove: niente desktop, menu Start, esecuzione automatica
     [switch]$AvvioAutomatico,
     [switch]$Silenzioso            # nessuna domanda
@@ -18,7 +19,7 @@ function Errore([string]$testo) {
     exit 1
 }
 
-Write-Host "Cassa Mondo del Risparmio - installazione"
+Write-Host "Mondo del Risparmio (cassa e gestione) - installazione"
 Write-Host ""
 
 # Qt 6 richiede Windows 10 versione 1809 (build 17763) o successiva, a 64 bit.
@@ -29,21 +30,23 @@ if ($os.Major -lt 10 -or $os.Build -lt 17763) {
 if (-not [Environment]::Is64BitOperatingSystem) {
     Errore "serve Windows a 64 bit."
 }
-if (-not (Test-Path (Join-Path $origine "mdr-cassa.exe"))) {
+if (-not (Test-Path (Join-Path $origine "mdr-cassa.exe")) -or -not (Test-Path (Join-Path $origine "mdr-gestione.exe"))) {
     Errore "cartella 'app' non trovata accanto a Installa.bat: estrarre tutto lo zip prima di installare."
 }
-if (Get-Process mdr-cassa -ErrorAction SilentlyContinue) {
-    Errore "la cassa e' aperta: chiuderla (Impostazioni > Esci dal programma) e rilanciare l'installazione."
+if (Get-Process mdr-cassa, mdr-gestione -ErrorAction SilentlyContinue) {
+    Errore "cassa o gestione aperta: chiuderle (Impostazioni > Esci dal programma) e rilanciare l'installazione."
 }
 
-# Copia: sostituisce la versione precedente del programma.
-$aggiornamento = Test-Path (Join-Path $Cartella "mdr-cassa.exe")
+# Copia: sostituisce la versione precedente. Le versioni vecchie installavano solo la cassa in
+# ...\MondoDelRisparmio\Cassa, che sta dentro questa cartella e viene tolta insieme.
+$aggiornamento = (Test-Path (Join-Path $Cartella "mdr-cassa.exe")) -or (Test-Path (Join-Path $Cartella "Cassa\mdr-cassa.exe"))
 if (Test-Path $Cartella) { Remove-Item -Recurse -Force $Cartella }
 New-Item -ItemType Directory -Force $Cartella | Out-Null
 Copy-Item -Recurse -Force (Join-Path $origine "*") $Cartella
 Copy-Item -Force (Join-Path $PSScriptRoot "disinstalla.ps1"), (Join-Path $PSScriptRoot "Disinstalla.bat"), (Join-Path $PSScriptRoot "aggiorna.ps1") $Cartella
 $exe = Join-Path $Cartella "mdr-cassa.exe"
-Write-Host "Programma copiato in $Cartella"
+$exeGestione = Join-Path $Cartella "mdr-gestione.exe"
+Write-Host "Programmi copiati in $Cartella"
 
 function Collegamento([string]$percorso, [string]$destinazione, [string]$argomenti, [string]$descrizione) {
     $shell = New-Object -ComObject WScript.Shell
@@ -52,23 +55,26 @@ function Collegamento([string]$percorso, [string]$destinazione, [string]$argomen
     $l.Arguments = $argomenti
     $l.WorkingDirectory = $Cartella
     $l.Description = $descrizione
-    $l.IconLocation = "$exe,0"
+    $l.IconLocation = "$destinazione,0"
     $l.Save()
 }
 
 if (-not $NessunCollegamento) {
     $desktop = [Environment]::GetFolderPath("Desktop")
     Collegamento (Join-Path $desktop "Cassa Mondo del Risparmio.lnk") $exe "--schermo-intero" "Cassa a schermo intero"
+    Collegamento (Join-Path $desktop "Gestione Mondo del Risparmio.lnk") $exeGestione "" "Anagrafiche e amministrazione"
 
     $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "Mondo del Risparmio"
+    if (Test-Path $menu) { Remove-Item -Recurse -Force $menu }   # toglie anche i collegamenti delle versioni vecchie
     New-Item -ItemType Directory -Force $menu | Out-Null
     Collegamento (Join-Path $menu "Cassa.lnk") $exe "--schermo-intero" "Cassa a schermo intero"
     Collegamento (Join-Path $menu "Cassa (in finestra).lnk") $exe "" "Cassa in una finestra"
-    Collegamento (Join-Path $menu "Disinstalla cassa.lnk") (Join-Path $Cartella "Disinstalla.bat") "" "Rimuove il programma (i dati restano)"
+    Collegamento (Join-Path $menu "Gestione.lnk") $exeGestione "" "Anagrafiche e amministrazione"
+    Collegamento (Join-Path $menu "Disinstalla.lnk") (Join-Path $Cartella "Disinstalla.bat") "" "Rimuove cassa e gestione (i dati restano)"
     Write-Host "Collegamenti creati sul desktop e nel menu Start"
 
     if (-not $Silenzioso -and -not $AvvioAutomatico) {
-        $risposta = Read-Host "Avviare la cassa automaticamente all'accensione del PC? (S/N)"
+        $risposta = Read-Host "Avviare la cassa automaticamente all'accensione del PC? (S sul POS, N sul PC ufficio)"
         $AvvioAutomatico = $risposta -match '^[sS]'
     }
     $esecuzione = Join-Path ([Environment]::GetFolderPath("Startup")) "Cassa Mondo del Risparmio.lnk"

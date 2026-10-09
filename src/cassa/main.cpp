@@ -1,9 +1,8 @@
 #include "dimostrativi.h"
-#include "finestraprincipale.h"
+#include "finestracassa.h"
 #include "fiscal/simulatore.h"
 #include "impostazioni.h"
 #include "installazioneaggiornamento.h"
-#include "locale/aggiornatore.h"
 #include "locale/archiviolocale.h"
 #include "locale/operazionicassa.h"
 
@@ -50,13 +49,8 @@ int main(int argc, char* argv[])
 
     // Aggiornamento già scaricato e verificato: si installa adesso, prima di aprire la cassa.
     // aggiorna.ps1 la riavvia con la nuova versione (o con questa, se la nuova non parte).
-    if (!opzioni.isSet(confermaAvvio)) {
-        mdr::Aggiornatore controllo(QApplication::applicationVersion(), dati.absolutePath());
-        if (controllo.cercaPronto()
-            && mdr::avviaInstallazioneAggiornamento(controllo.zipPronto(), controllo.versionePronta(),
-                                                    dati.absolutePath()))
-            return 0;
-    }
+    if (!opzioni.isSet(confermaAvvio) && mdr::installaSePronto(dati.absolutePath()))
+        return 0;
 
     auto impostazioni = mdr::Impostazioni::carica(fileImpostazioni);
     if (opzioni.isSet(terminale))
@@ -74,18 +68,22 @@ int main(int argc, char* argv[])
             archivio.salvaArticolo(a);
     }
 
-    // Finché non ci sono driver per RT reali si lavora col simulatore, che riprende la
-    // numerazione salvata nell'archivio.
+    // Finché non c'è il driver del Custom K3 F RT si lavora col simulatore, che riprende la
+    // numerazione salvata nell'archivio. Il collegamento scelto (USB o rete) è già nelle impostazioni.
     mdr::StampanteSimulata rt;
     const auto stato = archivio.statoRt(rt.matricola());
     rt.riprendi(stato.azzeramento, stato.documento, stato.totaleGiorno);
 
     mdr::OperazioniCassa operazioni(archivio, rt, impostazioni.terminale);
-    const QString info = QStringLiteral("Archivio: %1<br>Impostazioni: %2<br>Registratore: %3 (%4)")
+    QString registratore = QStringLiteral("%1 (%2)").arg(rt.nome(), rt.matricola());
+    if (impostazioni.rtConnessione != mdr::ConnessioneRt::Simulatore)
+        registratore += QStringLiteral(" — configurato: %1, driver non ancora disponibile")
+                            .arg(impostazioni.descrizioneRt());
+    const QString info = QStringLiteral("Archivio: %1<br>Impostazioni: %2<br>Registratore: %3")
                              .arg(QDir::toNativeSeparators(fileArchivio), QDir::toNativeSeparators(fileImpostazioni),
-                                  rt.nome(), rt.matricola());
+                                  registratore);
 
-    mdr::FinestraPrincipale principale(archivio, operazioni, impostazioni, fileImpostazioni, info);
+    mdr::FinestraCassa principale(archivio, operazioni, impostazioni, fileImpostazioni, info);
     const auto dimensione = opzioni.value(finestra).split(QLatin1Char('x'));
     if (dimensione.size() == 2 && dimensione[0].toInt() > 0 && dimensione[1].toInt() > 0) {
         principale.resize(dimensione[0].toInt(), dimensione[1].toInt());

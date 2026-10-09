@@ -1,11 +1,12 @@
 #include "dialogocontanti.h"
 #include "dimostrativi.h"
-#include "finestraprincipale.h"
+#include "finestracassa.h"
 #include "fiscal/simulatore.h"
 #include "locale/payloadvendita.h"
-#include "vistaarticoli.h"
 #include "vistacassa.h"
 #include "vistavendite.h"
+
+#include <QComboBox>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -18,14 +19,14 @@
 using namespace mdr;
 
 // Prova le viste come le usa il cassiere: tasti, campo barcode, tabelle.
-class TestDesktop : public QObject {
+class TestCassa : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_dir;
     std::unique_ptr<ArchivioLocale> m_archivio;
     std::unique_ptr<StampanteSimulata> m_rt;
     std::unique_ptr<OperazioniCassa> m_op;
-    std::unique_ptr<FinestraPrincipale> m_finestra;
+    std::unique_ptr<FinestraCassa> m_finestra;
 
     VistaCassa* cassa() { return m_finestra->cassa(); }
 
@@ -52,7 +53,7 @@ private slots:
             QVERIFY(m_archivio->salvaArticolo(a));
         m_rt = std::make_unique<StampanteSimulata>();
         m_op = std::make_unique<OperazioniCassa>(*m_archivio, *m_rt, QStringLiteral("CASSA1"));
-        m_finestra = std::make_unique<FinestraPrincipale>(*m_archivio, *m_op, Impostazioni{},
+        m_finestra = std::make_unique<FinestraCassa>(*m_archivio, *m_op, Impostazioni{},
                                                           m_dir.filePath("mdr-cassa.ini"), QStringLiteral("test"));
         m_finestra->show();
     }
@@ -371,6 +372,7 @@ private slots:
 
     void articoli_nuovo_e_vendibile()
     {
+        // L'anagrafica sta in mdr-gestione; la cassa vende quello che trova nell'archivio.
         Articolo a;
         a.id = QUuid::createUuid();
         a.codice = "9001";
@@ -379,13 +381,45 @@ private slots:
         a.prezzoVendita = Money::fromCents(1234);
         QVERIFY(m_archivio->salvaArticolo(a));
 
-        auto* schede = m_finestra->findChild<QTabWidget*>();
-        schede->setCurrentIndex(2);   // Articoli: la tabella si aggiorna
-        schede->setCurrentIndex(0);
         cassa()->leggi("9001");
         QCOMPARE(cassa()->carrello().totale().cents(), 1234);
     }
+
+    void solo_schede_di_cassa()
+    {
+        auto* schede = m_finestra->findChild<QTabWidget*>();
+        QStringList titoli;
+        for (int i = 0; i < schede->count(); ++i)
+            titoli << schede->tabText(i);
+        QCOMPARE(titoli, (QStringList{"Cassa", "Vendite", "Impostazioni"}));
+    }
+
+    void registratore_in_rete_salvato()
+    {
+        auto* connessione = m_finestra->findChild<QComboBox*>("rt_connessione");
+        auto* indirizzo = m_finestra->findChild<QLineEdit*>("rt_indirizzo");
+        auto* porta = m_finestra->findChild<QLineEdit*>("rt_porta");
+        QVERIFY(connessione && indirizzo && porta);
+
+        connessione->setCurrentIndex(connessione->findData(static_cast<int>(ConnessioneRt::Rete)));
+        QVERIFY(indirizzo->isEnabled());
+        QVERIFY(!porta->isEnabled());
+        indirizzo->setText("192.168.1.50");
+        clic("salva_impostazioni");
+
+        const auto letto = Impostazioni::carica(m_dir.filePath("mdr-cassa.ini"));
+        QCOMPARE(letto.rtConnessione, ConnessioneRt::Rete);
+        QCOMPARE(letto.rtIndirizzo, QStringLiteral("192.168.1.50"));
+        QCOMPARE(letto.descrizioneRt(), QStringLiteral("Rete 192.168.1.50"));
+
+        connessione->setCurrentIndex(connessione->findData(static_cast<int>(ConnessioneRt::Usb)));
+        porta->setText("com3");
+        clic("salva_impostazioni");
+        const auto usb = Impostazioni::carica(m_dir.filePath("mdr-cassa.ini"));
+        QCOMPARE(usb.rtConnessione, ConnessioneRt::Usb);
+        QCOMPARE(usb.rtPorta, QStringLiteral("COM3"));
+    }
 };
 
-QTEST_MAIN(TestDesktop)
-#include "test_desktop.moc"
+QTEST_MAIN(TestCassa)
+#include "test_cassa.moc"

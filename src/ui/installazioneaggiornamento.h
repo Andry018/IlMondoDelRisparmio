@@ -15,4 +15,12 @@ bool avviaInstallazioneAggiornamento(const QString& zip, const QString& versione
 // l'avvio è riuscito (file <dati>/avvio_ok), altrimenti lo script ripristina la precedente.
 void confermaAvvioRiuscito(const QString& cartellaDati);
 
+// L'altro programma (mdr-gestione per la cassa e viceversa) è aperto su questo PC: l'aggiornamento
+// sostituisce entrambi, quindi va chiuso prima. nome: il nome da mostrare.
+bool altroProgrammaAperto(QString* nome = nullptr);
+
+// All'avvio: se c'è un aggiornamento scaricato e verificato e l'altro programma è chiuso, lo
+// installa. true = il programma deve uscire subito (aggiorna.ps1 lo riavvia).
+bool installaSePronto(const QString& cartellaDati);
+
 } // namespace mdr

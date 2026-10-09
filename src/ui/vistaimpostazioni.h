@@ -4,6 +4,7 @@
 
 #include <QWidget>
 
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
@@ -21,8 +22,9 @@ class VistaImpostazioni : public QWidget {
     Q_OBJECT
 
 public:
-    VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& archivio, Sincronizzatore& sync,
-                      Aggiornatore& aggiornatore, QString infoPostazione, QWidget* parent = nullptr);
+    VistaImpostazioni(Postazione postazione, Impostazioni impostazioni, ArchivioLocale& archivio,
+                      Sincronizzatore& sync, Aggiornatore& aggiornatore, QString infoPostazione,
+                      QWidget* parent = nullptr);
 
     const Impostazioni& impostazioni() const { return m_imp; }
     void aggiorna();
@@ -36,13 +38,18 @@ private:
     void salva();
     void accedi();
     void esci();
+    void aggiornaCampiRt();
 
+    Postazione m_postazione;
     Impostazioni m_imp;
     ArchivioLocale& m_archivio;
     Sincronizzatore& m_sync;
     Aggiornatore& m_aggiornatore;
 
-    QLineEdit* m_terminale = nullptr;
+    QLineEdit* m_terminale = nullptr;     // solo cassa
+    QComboBox* m_rtConnessione = nullptr; // solo cassa
+    QLineEdit* m_rtPorta = nullptr;
+    QLineEdit* m_rtIndirizzo = nullptr;
     QLineEdit* m_server = nullptr;
     QLineEdit* m_apiKey = nullptr;
     QLineEdit* m_email = nullptr;

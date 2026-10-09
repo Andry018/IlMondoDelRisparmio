@@ -5,11 +5,13 @@
 #include "locale/archiviolocale.h"
 #include "locale/sincronizzatore.h"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QHostAddress>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -22,9 +24,11 @@
 
 namespace mdr {
 
-VistaImpostazioni::VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& archivio, Sincronizzatore& sync,
-                                     Aggiornatore& aggiornatore, QString infoPostazione, QWidget* parent)
+VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni impostazioni, ArchivioLocale& archivio,
+                                     Sincronizzatore& sync, Aggiornatore& aggiornatore, QString infoPostazione,
+                                     QWidget* parent)
     : QWidget(parent)
+    , m_postazione(postazione)
     , m_imp(std::move(impostazioni))
     , m_archivio(archivio)
     , m_sync(sync)
@@ -38,19 +42,53 @@ VistaImpostazioni::VistaImpostazioni(Impostazioni impostazioni, ArchivioLocale& 
     // Postazione e server.
     auto* gruppoServer = new QGroupBox(QStringLiteral("Postazione e server"), this);
     auto* formServer = new QFormLayout(gruppoServer);
-    m_terminale = new QLineEdit(m_imp.terminale, gruppoServer);
-    m_terminale->setPlaceholderText(QStringLiteral("es. CASSA1 (deve esistere nella tabella terminali)"));
     m_server = new QLineEdit(m_imp.server, gruppoServer);
     m_server->setPlaceholderText(QStringLiteral("es. http://192.168.1.10:8000 — vuoto = solo locale"));
     m_apiKey = new QLineEdit(m_imp.apiKey, gruppoServer);
     m_apiKey->setEchoMode(QLineEdit::PasswordEchoOnEdit);
     m_apiKey->setPlaceholderText(QStringLiteral("ANON_KEY di Supabase"));
     auto* salva = new QPushButton(QStringLiteral("Salva"), gruppoServer);
-    formServer->addRow(QStringLiteral("Terminale"), m_terminale);
+    salva->setObjectName("salva_impostazioni");
+    if (m_postazione == Postazione::Cassa) {
+        m_terminale = new QLineEdit(m_imp.terminale, gruppoServer);
+        m_terminale->setPlaceholderText(QStringLiteral("es. CASSA1 (deve esistere nella tabella terminali)"));
+        formServer->addRow(QStringLiteral("Terminale"), m_terminale);
+    }
     formServer->addRow(QStringLiteral("Server"), m_server);
     formServer->addRow(QStringLiteral("Chiave API"), m_apiKey);
-    formServer->addRow(QString(), salva);
     sinistra->addWidget(gruppoServer);
+
+    // Registratore telematico: solo la cassa emette scontrini. Una cassa di riserva usa la rete,
+    // così può prendere il registratore di una cassa guasta senza spostare cavi.
+    if (m_postazione == Postazione::Cassa) {
+        auto* gruppoRt = new QGroupBox(QStringLiteral("Registratore telematico"), this);
+        auto* formRt = new QFormLayout(gruppoRt);
+        m_rtConnessione = new QComboBox(gruppoRt);
+        m_rtConnessione->setObjectName("rt_connessione");
+        for (auto c : {ConnessioneRt::Simulatore, ConnessioneRt::Usb, ConnessioneRt::Rete})
+            m_rtConnessione->addItem(nomeConnessione(c), static_cast<int>(c));
+        m_rtConnessione->setCurrentIndex(m_rtConnessione->findData(static_cast<int>(m_imp.rtConnessione)));
+        m_rtPorta = new QLineEdit(m_imp.rtPorta, gruppoRt);
+        m_rtPorta->setObjectName("rt_porta");
+        m_rtPorta->setPlaceholderText(QStringLiteral("porta COM virtuale del driver Custom, es. COM3"));
+        m_rtIndirizzo = new QLineEdit(m_imp.rtIndirizzo, gruppoRt);
+        m_rtIndirizzo->setObjectName("rt_indirizzo");
+        m_rtIndirizzo->setPlaceholderText(QStringLiteral("es. 192.168.1.50"));
+        auto* nota = new QLabel(QStringLiteral("Il driver del Custom K3 F RT non è ancora disponibile: "
+                                               "finché manca si emette sul simulatore."), gruppoRt);
+        nota->setWordWrap(true);
+        formRt->addRow(QStringLiteral("Collegamento"), m_rtConnessione);
+        formRt->addRow(QStringLiteral("Porta USB"), m_rtPorta);
+        formRt->addRow(QStringLiteral("Indirizzo IP"), m_rtIndirizzo);
+        formRt->addRow(nota);
+        sinistra->addWidget(gruppoRt);
+        connect(m_rtConnessione, &QComboBox::currentIndexChanged, this, &VistaImpostazioni::aggiornaCampiRt);
+        aggiornaCampiRt();
+    }
+    auto* rigaSalva = new QHBoxLayout;
+    rigaSalva->addStretch();
+    rigaSalva->addWidget(salva);
+    sinistra->addLayout(rigaSalva);
 
     // Accesso operatore.
     auto* gruppoAccesso = new QGroupBox(QStringLiteral("Accesso al server"), this);
@@ -184,7 +222,7 @@ void VistaImpostazioni::log(const QString& riga)
 
 void VistaImpostazioni::salva()
 {
-    const auto terminale = m_terminale->text().trimmed().toUpper();
+    const auto terminale = m_terminale ? m_terminale->text().trimmed().toUpper() : m_imp.terminale;
     if (terminale.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("Impostazioni"), QStringLiteral("Il terminale è obbligatorio."));
         return;
@@ -198,18 +236,50 @@ void VistaImpostazioni::salva()
             return;
         }
     }
+    auto connessione = m_imp.rtConnessione;
+    QString porta = m_imp.rtPorta;
+    QString indirizzo = m_imp.rtIndirizzo;
+    if (m_rtConnessione) {
+        connessione = static_cast<ConnessioneRt>(m_rtConnessione->currentData().toInt());
+        porta = m_rtPorta->text().trimmed().toUpper();
+        indirizzo = m_rtIndirizzo->text().trimmed();
+        if (connessione == ConnessioneRt::Usb && porta.isEmpty()) {
+            QMessageBox::warning(this, QStringLiteral("Impostazioni"),
+                                 QStringLiteral("Indicare la porta COM del registratore, es. COM3."));
+            return;
+        }
+        if (connessione == ConnessioneRt::Rete
+            && QHostAddress(indirizzo).protocol() != QAbstractSocket::IPv4Protocol) {
+            QMessageBox::warning(this, QStringLiteral("Impostazioni"),
+                                 QStringLiteral("Indirizzo IP del registratore non valido, es. 192.168.1.50."));
+            return;
+        }
+    }
     const bool serverCambiato = server != m_imp.server;
     m_imp.terminale = terminale;
     m_imp.server = server;
     m_imp.apiKey = m_apiKey->text().trimmed();
     m_imp.repositoryAggiornamenti = m_repository->text().trimmed();
     m_imp.tokenAggiornamenti = m_tokenAggiornamenti->text().trimmed();
+    m_imp.rtConnessione = connessione;
+    m_imp.rtPorta = porta;
+    m_imp.rtIndirizzo = indirizzo;
     if (serverCambiato)
         m_imp.refreshToken.clear();   // la sessione vale solo per il server su cui è stata aperta
-    m_terminale->setText(terminale);
+    if (m_terminale)
+        m_terminale->setText(terminale);
+    if (m_rtPorta)
+        m_rtPorta->setText(porta);
     emit impostazioniCambiate(m_imp);
     log(QStringLiteral("Impostazioni salvate"));
     aggiorna();
+}
+
+void VistaImpostazioni::aggiornaCampiRt()
+{
+    const auto c = static_cast<ConnessioneRt>(m_rtConnessione->currentData().toInt());
+    m_rtPorta->setEnabled(c == ConnessioneRt::Usb);
+    m_rtIndirizzo->setEnabled(c == ConnessioneRt::Rete);
 }
 
 void VistaImpostazioni::accedi()
@@ -257,9 +327,12 @@ void VistaImpostazioni::aggiorna()
     m_accedi->setEnabled(configurato);
     m_esci->setEnabled(autenticato);
     m_sincronizza->setEnabled(configurato && autenticato);
-    m_statoAccesso->setText(!configurato   ? QStringLiteral("Nessun server: la cassa lavora solo in locale.")
+    const bool cassa = m_postazione == Postazione::Cassa;
+    m_statoAccesso->setText(!configurato   ? (cassa ? QStringLiteral("Nessun server: la cassa lavora solo in locale.")
+                                                    : QStringLiteral("Nessun server: si lavora sull'archivio locale."))
                             : autenticato ? QStringLiteral("Collegato come %1.").arg(m_imp.email)
-                                          : QStringLiteral("Non collegato: le vendite restano in coda."));
+                                          : (cassa ? QStringLiteral("Non collegato: le vendite restano in coda.")
+                                                   : QStringLiteral("Non collegato.")));
 
     m_info->setText(QStringLiteral("%1<br>Articoli in archivio: %2<br>Operazioni da inviare: %3<br>"
                                    "Ultimo aggiornamento articoli: %4")

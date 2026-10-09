@@ -49,7 +49,7 @@ if (-not $Prova) {
 # 3. Pacchetto e firma.
 & (Join-Path $PSScriptRoot "crea_pacchetto.ps1") -Msys $Msys
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { Ferma "creazione del pacchetto non riuscita" }
-$zip = Join-Path $radice "dist\MondoDelRisparmio-Cassa-$versione.zip"
+$zip = Join-Path $radice "dist\MondoDelRisparmio-$versione.zip"
 if (-not (Test-Path $zip)) { Ferma "pacchetto non trovato: $zip" }
 
 & $openssl dgst -sha256 -sign $Privata -out "$zip.sig" $zip
@@ -67,7 +67,7 @@ if ($Prova) {
 }
 
 # 4. Pubblicazione: diventa la "latest" che le casse controllano.
-if (-not $Note) { $Note = "Cassa $versione" }
-& gh release create $tag $zip "$zip.sig" --repo $Repository --title "Cassa $versione" --notes $Note
+if (-not $Note) { $Note = "Mondo del Risparmio $versione (cassa e gestione)" }
+& gh release create $tag $zip "$zip.sig" --repo $Repository --title "Mondo del Risparmio $versione" --notes $Note
 if ($LASTEXITCODE -ne 0) { Ferma "gh release create non riuscito" }
 Write-Host "Pubblicata $tag. Le casse la scaricano entro 4 ore (o subito con Impostazioni > Controlla ora)." -ForegroundColor Green

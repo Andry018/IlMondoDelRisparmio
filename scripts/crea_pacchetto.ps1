@@ -1,6 +1,7 @@
-# Crea il pacchetto di installazione della cassa: dist\MondoDelRisparmio-Cassa-<versione>.zip
-# Dentro: la cassa in release con tutte le DLL e i plugin Qt, Installa.bat, Disinstalla.bat.
-# Sul POS non serve installare altro (niente MSYS2, niente Qt).
+# Crea il pacchetto di installazione: dist\MondoDelRisparmio-<versione>.zip
+# Dentro: mdr-cassa e mdr-gestione in release con tutte le DLL e i plugin Qt, Installa.bat,
+# Disinstalla.bat. Si installano entrambi su ogni PC, cosi' qualsiasi postazione puo' sostituire
+# una cassa o il PC ufficio guasti. Non serve installare altro (niente MSYS2, niente Qt).
 #
 # Uso (PowerShell, dalla cartella del progetto):  .\scripts\crea_pacchetto.ps1
 # (file in solo ASCII: PowerShell 5.1 legge i .ps1 senza BOM come ANSI)
@@ -15,6 +16,7 @@ $ErrorActionPreference = "Continue"
 $radice = Split-Path -Parent $PSScriptRoot
 if (-not $Uscita) { $Uscita = Join-Path $radice "dist" }
 $env:PATH = "$Msys\ucrt64\bin;$env:PATH"
+$programmi = @("mdr-cassa.exe", "mdr-gestione.exe")
 
 function Verifica([string]$cosa) {
     if ($LASTEXITCODE -ne 0) { throw "Errore: $cosa (codice $LASTEXITCODE)" }
@@ -25,7 +27,7 @@ Push-Location $radice
 try {
     & cmake --preset msys2-release -DMDR_BUILD_TESTS=OFF -DMDR_BUILD_DESKTOP=ON | Out-Null
     Verifica "configurazione cmake"
-    & cmake --build --preset release --target mdr-cassa
+    & cmake --build --preset release --target mdr-cassa mdr-gestione
     Verifica "compilazione"
 } finally {
     Pop-Location
@@ -33,23 +35,24 @@ try {
 
 $versione = "0.0.0"
 if ((Get-Content (Join-Path $radice "CMakeLists.txt") -Raw) -match 'VERSION\s+(\d+\.\d+\.\d+)') { $versione = $matches[1] }
-$nome = "MondoDelRisparmio-Cassa-$versione"
+$nome = "MondoDelRisparmio-$versione"
 $pacchetto = Join-Path $Uscita $nome
 $app = Join-Path $pacchetto "app"
 
 if (Test-Path $pacchetto) { Remove-Item -Recurse -Force $pacchetto }
 New-Item -ItemType Directory -Force $app | Out-Null
-Copy-Item (Join-Path $radice "build\release\bin\mdr-cassa.exe") $app
+foreach ($p in $programmi) { Copy-Item (Join-Path $radice "build\release\bin\$p") $app }
 
 # 2. Plugin Qt (piattaforma Windows, SQLite, stili, immagini, rete, TLS).
 #    Dei driver SQL serve solo SQLite: gli altri si portano dietro librerie inutili (MySQL, PostgreSQL...).
+#    I due programmi stanno nella stessa cartella e usano le stesse DLL.
 & "$Msys\ucrt64\bin\windeployqt6.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw `
     --exclude-plugins qsqlibase,qsqlmysql,qsqlodbc,qsqlpsql,qsqlmimer,qsqloci,qglib `
-    --dir $app (Join-Path $app "mdr-cassa.exe") | Out-Null
+    --dir $app ($programmi | ForEach-Object { Join-Path $app $_ }) | Out-Null
 Verifica "windeployqt6"
 
 # 3. DLL di MinGW e dipendenze delle librerie Qt (ICU, zstd, harfbuzz, ...): si ripete ldd su
-#    tutto il pacchetto finche' non manca piu' niente. Vanno accanto all'eseguibile.
+#    tutto il pacchetto finche' non manca piu' niente. Vanno accanto agli eseguibili.
 $ldd = "$Msys\usr\bin\ldd.exe"
 do {
     $nuove = 0
@@ -69,7 +72,7 @@ do {
 
 # 4. Installazione, disinstallazione, istruzioni, crediti delle immagini.
 Copy-Item (Join-Path $radice "installazione\*") $pacchetto
-Copy-Item (Join-Path $radice "src\desktop\risorse\euro\CREDITI.txt") (Join-Path $app "CREDITI-immagini.txt")
+Copy-Item (Join-Path $radice "src\cassa\risorse\euro\CREDITI.txt") (Join-Path $app "CREDITI-immagini.txt")
 
 $zip = Join-Path $Uscita "$nome.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }

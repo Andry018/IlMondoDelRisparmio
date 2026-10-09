@@ -1,9 +1,9 @@
-# Installa un aggiornamento gia' scaricato e verificato dalla cassa (firma controllata dal programma).
-# Lo lancia la cassa, da una copia in TEMP, subito prima di chiudersi:
-#   1. aspetta che la cassa sia chiusa
+# Installa un aggiornamento gia' scaricato e verificato (firma controllata dal programma).
+# Lo lancia mdr-cassa o mdr-gestione, da una copia in TEMP, subito prima di chiudersi:
+#   1. aspetta che il programma (e l'altro, se aperto) sia chiuso: il pacchetto li sostituisce entrambi
 #   2. estrae lo zip in <Cartella>.nuova
 #   3. sposta la versione attuale in <Cartella>.precedente e mette la nuova al suo posto
-#   4. avvia la nuova versione e aspetta che confermi l'avvio (file <Dati>\avvio_ok)
+#   4. riavvia lo stesso programma e aspetta che confermi l'avvio (file <Dati>\avvio_ok)
 #   5. se non conferma: rimette la versione precedente, la riavvia e segna la versione come fallita
 # Vendite e impostazioni stanno in <Dati> e non vengono toccate.
 # (file in solo ASCII: PowerShell 5.1 legge i .ps1 senza BOM come ANSI)
@@ -12,7 +12,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Cartella,
     [Parameter(Mandatory = $true)][string]$Dati,
     [string]$Versione = "",
-    [int]$IdCassa = 0,
+    [int]$IdCassa = 0,                # processo che ha lanciato l'aggiornamento
+    [string]$Programma = "mdr-cassa.exe",   # da riavviare (mdr-cassa.exe o mdr-gestione.exe)
     [string]$Argomenti = "--schermo-intero",
     [string]$ArgomentiB64 = "",    # dalla cassa: base64 UTF-8 (un valore che inizia con "--" confonde PowerShell)
     [int]$AttesaAvvio = 90
@@ -33,7 +34,7 @@ function Scrivi([string]$testo) {
 }
 
 function Avvia([string]$cartellaProgramma, [string]$argomenti) {
-    $exe = Join-Path $cartellaProgramma "mdr-cassa.exe"
+    $exe = Join-Path $cartellaProgramma $Programma
     if ($argomenti) {
         return Start-Process -FilePath $exe -ArgumentList $argomenti -WorkingDirectory $cartellaProgramma -PassThru
     }
@@ -47,17 +48,28 @@ Scrivi "Aggiornamento $Versione da $Zip"
 if ($IdCassa -gt 0) {
     try { Wait-Process -Id $IdCassa -Timeout 60 -ErrorAction Stop } catch {}
     if (Get-Process -Id $IdCassa -ErrorAction SilentlyContinue) {
-        Scrivi "ERRORE: la cassa non si e' chiusa, aggiornamento rimandato"
+        Scrivi "ERRORE: il programma non si e' chiuso, aggiornamento rimandato"
         exit 1
     }
+}
+# Nessun programma della cartella deve restare aperto (i file sarebbero bloccati).
+for ($i = 0; $i -lt 60; $i++) {
+    $aperti = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith("$Cartella\", [StringComparison]::OrdinalIgnoreCase) })
+    if ($aperti.Count -eq 0) { break }
+    Start-Sleep -Seconds 1
+}
+if ($aperti.Count -gt 0) {
+    Scrivi "ERRORE: $($aperti[0].ProcessName) ancora aperto, aggiornamento rimandato"
+    Avvia $Cartella $Argomenti | Out-Null
+    exit 1
 }
 
 # 2. Estrazione.
 try {
     if (Test-Path $nuova) { Remove-Item -Recurse -Force $nuova }
     Expand-Archive -Path $Zip -DestinationPath $nuova -Force
-    $exeNuovo = Get-ChildItem $nuova -Recurse -Filter "mdr-cassa.exe" | Where-Object { $_.Directory.Name -eq "app" } | Select-Object -First 1
-    if (-not $exeNuovo) { throw "pacchetto senza app\mdr-cassa.exe" }
+    $exeNuovo = Get-ChildItem $nuova -Recurse -Filter $Programma | Where-Object { $_.Directory.Name -eq "app" } | Select-Object -First 1
+    if (-not $exeNuovo) { throw "pacchetto senza app\$Programma" }
     $appNuova = $exeNuovo.Directory.FullName
     $radiceNuova = $exeNuovo.Directory.Parent.FullName
 } catch {
@@ -79,7 +91,7 @@ try {
     }
 } catch {
     Scrivi "ERRORE nello scambio delle cartelle: $($_.Exception.Message). Ripristino."
-    if (-not (Test-Path (Join-Path $Cartella "mdr-cassa.exe")) -and (Test-Path $precedente)) {
+    if (-not (Test-Path (Join-Path $Cartella $Programma)) -and (Test-Path $precedente)) {
         if (Test-Path $Cartella) { Remove-Item -Recurse -Force $Cartella }
         Move-Item $precedente $Cartella
     }

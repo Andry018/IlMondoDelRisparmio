@@ -205,7 +205,7 @@ void Aggiornatore::controlla()
         for (const auto& v : assets) {
             const auto a = v.toObject();
             const auto nome = a.value("name").toString();
-            if (nome.startsWith(QLatin1String("MondoDelRisparmio-Cassa")) && nome.endsWith(QLatin1String(".zip")))
+            if (nome.startsWith(QLatin1String("MondoDelRisparmio-")) && nome.endsWith(QLatin1String(".zip")))
                 zip = a;
         }
         for (const auto& v : assets) {

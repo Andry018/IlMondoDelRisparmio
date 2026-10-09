@@ -4,7 +4,8 @@ Cassa, magazzino, anagrafiche e fatturazione per un punto vendita con più casse
 Sostituisce SystemApp Cash e Terminal. Architettura in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
 
 - **Server:** Supabase self-hosted nella rete del negozio ([infra/supabase](infra/supabase/README.md))
-- **Casse e PC:** applicazione Windows in C++ / Qt 6
+- **Casse e PC:** due programmi Windows in C++ / Qt 6, installati entrambi su ogni PC:
+  `mdr-cassa` (vendita al banco) e `mdr-gestione` (anagrafiche e amministrazione)
 - **Palmare:** futuro, sulle stesse API
 
 ## Sviluppo (Windows)
@@ -34,7 +35,7 @@ codici 1001–1003, 2001–2002, 3001–3002):
 .\build\debug\bin\mdr-cassa.exe --finestra 1024x768  # prova della risoluzione del POS su un PC
 ```
 
-Schede (Alt+1…4):
+Schede della cassa (Alt+1…3):
 
 - **Cassa** — barcode o codice + Invio (`3*1001` = 3 pezzi). Articolo che manca in archivio:
   prezzo sul tastierino + tasto reparto (`250` = 2,50; `2,50` va bene uguale; `3 X 120` = 3 pezzi
@@ -45,19 +46,30 @@ Schede (Alt+1…4):
   mentre si serve un altro cliente; chiuso il secondo si torna al primo. F12 *Verifica prezzo*:
   mostra il prezzo dell'articolo letto senza aggiungerlo.
 - **Vendite** — giornale per giorno, dettaglio, *Annulla vendita* e *Reso* (quantità per riga).
-- **Articoli** — ricerca, nuovo, modifica, disattiva (in sola lettura se c'è un server).
-- **Impostazioni** — terminale, server Supabase e chiave, accesso, sincronizzazione, reparti.
+- **Impostazioni** — terminale, registratore (simulatore, USB con porta COM, rete con indirizzo IP),
+  server Supabase e chiave, accesso, sincronizzazione, reparti.
 
 Senza server la cassa lavora in locale: vendite, resi e annulli restano in coda e partono
 alla prima sincronizzazione riuscita.
 
-Pacchetto di installazione per il POS (Windows 10 1809+ o 11, 64 bit; non serve installare altro):
+Lanciare la gestione (dati propri, separati da quelli della cassa: i due programmi possono
+girare insieme sullo stesso PC):
 
 ```powershell
-.\scripts\crea_pacchetto.ps1    # -> dist\MondoDelRisparmio-Cassa-<versione>.zip
+.\build\debug\bin\mdr-gestione.exe                  # dati in %LOCALAPPDATA%\Mondo del Risparmio\mdr-gestione
+.\build\debug\bin\mdr-gestione.exe --dati C:\prova2
 ```
 
-Sul POS: estrarre lo zip, doppio clic su `Installa.bat` (istruzioni in `installazione\LEGGIMI.txt`).
+Schede della gestione: **Articoli** (ricerca, nuovo, modifica, disattiva; in sola lettura se c'è
+un server) e **Impostazioni** (server, accesso, sincronizzazione).
+
+Pacchetto di installazione con entrambi i programmi (Windows 10 1809+ o 11, 64 bit; non serve installare altro):
+
+```powershell
+.\scripts\crea_pacchetto.ps1    # -> dist\MondoDelRisparmio-<versione>.zip
+```
+
+Su ogni PC (POS e ufficio): estrarre lo zip, doppio clic su `Installa.bat` (istruzioni in `installazione\LEGGIMI.txt`).
 
 ### Aggiornamento automatico
 
