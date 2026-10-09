@@ -11,6 +11,7 @@ class QTimer;
 namespace mdr {
 
 class Aggiornatore;
+class ClientServer;
 class ArchivioLocale;
 class Sincronizzatore;
 class VistaImpostazioni;
@@ -48,6 +49,7 @@ protected:
 
     ArchivioLocale& archivio() const { return m_archivio; }
     Sincronizzatore& sync() const { return *m_sync; }
+    ClientServer& client() const;   // sessione col server, condivisa con la sincronizzazione
     VistaImpostazioni* vistaImpostazioni() const { return m_impostazioni; }
     QTabWidget* schede() const { return m_schede; }
 

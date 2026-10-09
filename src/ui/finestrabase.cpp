@@ -31,7 +31,7 @@ FinestraBase::FinestraBase(Postazione postazione, ArchivioLocale& archivio, Impo
     , m_archivio(archivio)
     , m_impIniziali(impostazioni)
     , m_fileImpostazioni(std::move(fileImpostazioni))
-    , m_sync(new Sincronizzatore(archivio, this))
+    , m_sync(new Sincronizzatore(archivio, nullptr, this))
 {
     resize(1200, 760);
 
@@ -61,6 +61,11 @@ FinestraBase::FinestraBase(Postazione postazione, ArchivioLocale& archivio, Impo
     m_presto->setInterval(ritardoSyncPrestoMs);
     connect(m_periodico, &QTimer::timeout, m_sync, &Sincronizzatore::sincronizza);
     connect(m_presto, &QTimer::timeout, m_sync, &Sincronizzatore::sincronizza);
+}
+
+ClientServer& FinestraBase::client() const
+{
+    return m_sync->client();
 }
 
 void FinestraBase::aggiungiScheda(QWidget* vista, const QString& titolo)

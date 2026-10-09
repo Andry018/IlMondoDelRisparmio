@@ -2,12 +2,29 @@
 
 #include "finestrabase.h"
 
+class QLabel;
+class QStackedWidget;
+
 namespace mdr {
 
 class VistaArticoli;
+class VistaArticoliServer;
+class VistaClienti;
+class VistaFatture;
+class VistaFornitori;
+class VistaNegozio;
+class VistaOperatori;
+class VistaChiusure;
+class VistaMagazzino;
+class VistaReport;
+class VistaResi;
+class VistaServer;
 
 // Finestra di mdr-gestione: anagrafiche e amministrazione. Non emette scontrini e non usa il
 // registratore, quindi può girare su qualsiasi PC accanto a mdr-cassa.
+//
+// Le schede che lavorano sul server si abilitano solo con un accesso valido e un ruolo adatto
+// (ruolo_corrente): amministratore e responsabile tutto, magazziniere solo il magazzino.
 class FinestraGestione : public FinestraBase {
     Q_OBJECT
 
@@ -16,6 +33,13 @@ public:
                      QString infoPostazione, QWidget* parent = nullptr);
 
     VistaArticoli* articoli() const { return m_articoli; }
+    QString ruolo() const { return m_ruolo; }
+
+    // Ricontrolla login e ruolo sul server e abilita le schede (anche per i test).
+    void verificaAccesso();
+
+signals:
+    void accessoVerificato(const QString& ruolo);
 
 protected:
     void impostazioniApplicate(const Impostazioni& imp) override;
@@ -23,7 +47,24 @@ protected:
     void schedaAttivata(QWidget* scheda) override;
 
 private:
-    VistaArticoli* m_articoli = nullptr;
+    void abilita(const QString& ruolo, const QString& messaggio);
+
+    VistaArticoli* m_articoli = nullptr;               // senza server: archivio locale
+    VistaArticoliServer* m_articoliServer = nullptr;   // con server
+    QStackedWidget* m_paginaArticoli = nullptr;
+    VistaFatture* m_fatture = nullptr;
+    VistaClienti* m_clienti = nullptr;
+    VistaFornitori* m_fornitori = nullptr;
+    VistaOperatori* m_operatori = nullptr;   // solo amministratore
+    VistaNegozio* m_negozio = nullptr;
+    VistaMagazzino* m_magazzino = nullptr;
+    VistaReport* m_report = nullptr;
+    VistaChiusure* m_chiusure = nullptr;
+    VistaResi* m_resi = nullptr;
+    QList<VistaServer*> m_vistaServer;
+    QLabel* m_statoAccesso = nullptr;
+    QString m_ruolo;
+    QString m_email;
 };
 
 } // namespace mdr

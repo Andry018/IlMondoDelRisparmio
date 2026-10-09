@@ -44,7 +44,20 @@ private slots:
         QStringList titoli;
         for (int i = 0; i < schede->count(); ++i)
             titoli << schede->tabText(i);
-        QCOMPARE(titoli, (QStringList{"Articoli", "Impostazioni"}));
+        QCOMPARE(titoli, (QStringList{"Articoli", "Magazzino", "Vendite", "Fatture", "Clienti", "Fornitori",
+                                      "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Impostazioni"}));
+    }
+
+    void senza_server_schede_del_server_spente()
+    {
+        // Nessun server configurato: si lavora solo sugli articoli locali e sulle impostazioni.
+        m_finestra->verificaAccesso();
+        auto* schede = m_finestra->findChild<QTabWidget*>();
+        for (int i = 0; i < schede->count(); ++i) {
+            const auto t = schede->tabText(i);
+            QCOMPARE(schede->isTabEnabled(i), t == "Articoli" || t == "Impostazioni");
+        }
+        QVERIFY(m_finestra->ruolo().isEmpty());
     }
 
     void niente_registratore_ne_terminale()
