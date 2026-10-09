@@ -22,6 +22,7 @@ endfunction()
 
 if(TARGET mdr_cassa)
     mdr_test_vista(test_cassa mdr_cassa)
+    mdr_test_vista(test_cassa_server mdr_cassa)   # contro il server di sviluppo, se acceso
 endif()
 if(TARGET mdr_gestione)
     mdr_test_vista(test_gestione mdr_gestione)

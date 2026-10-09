@@ -172,6 +172,18 @@ VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni imposta
     m_log = new QPlainTextEdit(gruppoSync);
     m_log->setReadOnly(true);
     layoutSync->addWidget(m_sincronizza);
+    auto* rimetti = new QPushButton(QStringLiteral("Rimetti in coda le operazioni rifiutate"), gruppoSync);
+    rimetti->setObjectName("rimetti_in_coda");
+    rimetti->setToolTip(QStringLiteral("Dopo aver corretto il problema sul server: le operazioni rifiutate "
+                                       "vengono reinviate alla prossima sincronizzazione"));
+    layoutSync->addWidget(rimetti);
+    connect(rimetti, &QPushButton::clicked, this, [this] {
+        const int n = m_archivio.rimettiInCoda();
+        log(QStringLiteral("%1 operazioni rimesse in coda").arg(n));
+        aggiorna();
+        if (n > 0)
+            m_sync.sincronizza();
+    });
     layoutSync->addWidget(m_log, 1);
     destra->addWidget(gruppoSync, 2);
 
@@ -334,12 +346,13 @@ void VistaImpostazioni::aggiorna()
                                           : (cassa ? QStringLiteral("Non collegato: le vendite restano in coda.")
                                                    : QStringLiteral("Non collegato.")));
 
-    m_info->setText(QStringLiteral("%1<br>Articoli in archivio: %2<br>Operazioni da inviare: %3<br>"
+    m_info->setText(QStringLiteral("%1<br>Articoli in archivio: %2<br>Operazioni da inviare: %3 (rifiutate: %5)<br>"
                                    "Ultimo aggiornamento articoli: %4")
                         .arg(m_infoPostazione)
                         .arg(m_archivio.contaArticoli())
                         .arg(m_archivio.contaDaInviare())
-                        .arg(m_archivio.ultimoSync().isEmpty() ? QStringLiteral("mai") : m_archivio.ultimoSync()));
+                        .arg(m_archivio.ultimoSync().isEmpty() ? QStringLiteral("mai") : m_archivio.ultimoSync())
+                        .arg(m_archivio.contaDaVerificare()));
 
     const auto reparti = m_archivio.reparti();
     m_reparti->setRowCount(reparti.size());

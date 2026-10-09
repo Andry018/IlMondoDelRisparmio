@@ -40,6 +40,8 @@ public:
     const Carrello& carrello(int indice) const { return m_carrelli[indice]; }
     int scontrinoAttivo() const { return m_attivo; }
     void cambiaScontrino(int indice);
+    // Chiede codice e PIN del nuovo operatore (tasto Operatore, F1).
+    void cambiaOperatore();
     // Mostra il prezzo senza aggiungere l'articolo. Senza codice: il prossimo articolo letto
     // viene solo mostrato.
     void verificaPrezzo(const QString& codice = {});
@@ -47,6 +49,7 @@ public:
 signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati
     void chiusuraEseguita();  // dopo la Z: momento buono per installare un aggiornamento
+    void operatoreCambiato();
 
 private:
     void leggiCodice();

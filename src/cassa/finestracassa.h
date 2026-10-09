@@ -37,6 +37,10 @@ private:
 
     QLabel* m_statoTerminale = nullptr;
     QLabel* m_statoCoda = nullptr;
+    QLabel* m_statoOperatore = nullptr;
+    QLabel* m_avviso = nullptr;   // orologio sbagliato, account di un altro terminale
+    QString m_terminale;
+    void controllaServer();
 };
 
 } // namespace mdr

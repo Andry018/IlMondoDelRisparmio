@@ -23,9 +23,11 @@ struct RiepilogoAzzeramento {
     int resi = 0;
     int annullate = 0;
     Money totaleVendite;        // vendite non annullate
+    Money totaleAnnullate;
     Money totaleResi;
     QMap<TipoPagamento, Money> perPagamento;   // incassato netto (contanti al netto del resto)
     QMap<int, Money> perAliquota;              // lordo per punti base IVA, resi in negativo
+    QMap<int, QString> naturaAliquota;         // natura IVA delle aliquote a 0 (es. N4)
     Money netto() const { return totaleVendite - totaleResi; }
 };
 
@@ -36,6 +38,9 @@ public:
     OperazioniCassa(ArchivioLocale& archivio, StampanteFiscale& rt, QString terminaleId);
 
     void impostaTerminale(const QString& id) { m_terminaleId = id; }
+    // Operatore identificato con codice e PIN: va in vendite, resi, annulli e chiusure.
+    void impostaOperatore(const QUuid& id) { m_operatore = id; }
+    QUuid operatore() const { return m_operatore; }
     QString terminale() const { return m_terminaleId; }
     StampanteFiscale& rt() { return m_rt; }
 
@@ -59,6 +64,13 @@ private:
     ArchivioLocale& m_archivio;
     StampanteFiscale& m_rt;
     QString m_terminaleId;
+    QUuid m_operatore;
 };
+
+// Parametro p di registra_chiusura: totali del registratore per l'azzeramento chiuso.
+// Il simulatore non li legge dal registratore: si usano quelli del giornale locale.
+QJsonObject payloadRegistraChiusura(const RiepilogoAzzeramento& r, const EsitoFiscale& esito,
+                                    const QString& terminaleId, const QString& matricolaRt,
+                                    const QUuid& operatore = {});
 
 } // namespace mdr

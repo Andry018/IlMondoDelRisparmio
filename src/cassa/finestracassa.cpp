@@ -1,12 +1,16 @@
 #include "finestracassa.h"
 
 #include "locale/archiviolocale.h"
+#include "locale/clientserver.h"
+#include "locale/sincronizzatore.h"
 #include "vistacassa.h"
 #include "vistavendite.h"
 
 #include <QCloseEvent>
 #include <QLabel>
+#include <QDateTime>
 #include <QMessageBox>
+#include <QPointer>
 #include <QStatusBar>
 #include <QTabWidget>
 
@@ -20,6 +24,7 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
 {
     setWindowTitle(QStringLiteral("Mondo del Risparmio — Cassa"));
     m_op.impostaTerminale(impostazioni.terminale);
+    m_terminale = impostazioni.terminale;
 
     m_cassa = new VistaCassa(archivio, operazioni, schede());
     m_vendite = new VistaVendite(archivio, operazioni, schede());
@@ -28,9 +33,15 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
 
     m_statoTerminale = new QLabel(this);
     m_statoCoda = new QLabel(this);
+    m_statoOperatore = new QLabel(this);
+    m_avviso = new QLabel(this);
+    m_avviso->setStyleSheet(QStringLiteral("color: #c62828; font-weight: bold;"));
+    statusBar()->addPermanentWidget(m_avviso);
+    statusBar()->addPermanentWidget(m_statoOperatore);
     statusBar()->addPermanentWidget(m_statoCoda);
     statusBar()->addPermanentWidget(m_statoTerminale);
 
+    connect(m_cassa, &VistaCassa::operatoreCambiato, this, &FinestraCassa::aggiornaStato);
     connect(m_cassa, &VistaCassa::documentoEmesso, this, [this] {
         aggiornaStato();
         sincronizzaPresto();
@@ -51,10 +62,13 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
 void FinestraCassa::impostazioniApplicate(const Impostazioni& imp)
 {
     m_op.impostaTerminale(imp.terminale);
+    m_terminale = imp.terminale;
 }
 
 void FinestraCassa::sincronizzazioneTerminata(bool ok, int inviate, int /*articoli*/)
 {
+    if (ok)
+        controllaServer();
     if (ok)
         m_cassa->aggiornaReparti();
     if (inviate > 0)
@@ -66,10 +80,18 @@ void FinestraCassa::aggiornaStato()
     m_statoTerminale->setText(QStringLiteral("Terminale %1 · RT %2 (%3)")
                                   .arg(m_op.terminale(), m_op.rt().nome(), m_op.rt().matricola()));
     const int coda = archivio().contaDaInviare();
-    m_statoCoda->setText(coda == 0 ? QStringLiteral("Nessuna operazione in coda")
-                                   : QStringLiteral("%1 operazioni da inviare").arg(coda));
+    const int rifiutate = archivio().contaDaVerificare();
+    QString testo = coda == 0 ? QStringLiteral("Nessuna operazione in coda")
+                              : QStringLiteral("%1 operazioni da inviare").arg(coda);
+    if (rifiutate > 0)
+        testo += QStringLiteral(" · %1 RIFIUTATE dal server (vedi Vendite)").arg(rifiutate);
+    m_statoCoda->setText(testo);
     // Le vendite non ancora sul server restano solo su questo PC: si devono vedere.
-    m_statoCoda->setStyleSheet(coda == 0 ? QString() : QStringLiteral("color: #c62828; font-weight: bold;"));
+    m_statoCoda->setStyleSheet(coda == 0 && rifiutate == 0 ? QString() : QStringLiteral("color: #c62828; font-weight: bold;"));
+    const auto operatore = archivio().operatorePerId(m_op.operatore());
+    m_statoOperatore->setText(operatore ? QStringLiteral("Operatore: %1").arg(operatore->nome)
+                              : archivio().contaOperatori() > 0 ? QStringLiteral("Nessun operatore (F1)")
+                                                                : QString());
     FinestraBase::aggiornaStato();
 }
 
@@ -80,6 +102,35 @@ bool FinestraCassa::puoInstallareAggiornamento(QString* motivo)
     if (motivo)
         *motivo = QStringLiteral("Chiudere prima gli scontrini in corso.");
     return false;
+}
+
+void FinestraCassa::controllaServer()
+{
+    QPointer<FinestraCassa> io(this);
+    // Gli scontrini prendono l'ora della cassa: oltre un minuto di differenza va corretta.
+    client().rpc(QStringLiteral("ora_server"), {}, [io](const RispostaServer& r) {
+        if (!io || !r.ok())
+            return;
+        QString testo = QString::fromUtf8(r.corpo).trimmed();
+        testo.remove(QLatin1Char('"'));
+        const auto server = Sincronizzatore::leggiMarcatore(testo);
+        if (!server.isValid())
+            return;
+        const qint64 scarto = server.secsTo(QDateTime::currentDateTimeUtc());
+        io->m_avviso->setText(std::abs(scarto) > 60
+                                  ? QStringLiteral("OROLOGIO DELLA CASSA SBAGLIATO di %1 minuti")
+                                        .arg(std::abs(scarto) / 60.0, 0, 'f', 1)
+                                  : QString());
+    });
+    // Con l'account di un terminale, deve essere quello configurato qui.
+    client().rpc(QStringLiteral("terminale_corrente"), {}, [io](const RispostaServer& r) {
+        if (!io || !r.ok())
+            return;
+        QString t = QString::fromUtf8(r.corpo).trimmed();
+        t.remove(QLatin1Char('"'));
+        if (t != QLatin1String("null") && !t.isEmpty() && t != io->m_terminale)
+            io->m_avviso->setText(QStringLiteral("Collegato come terminale %1 ma configurato come %2").arg(t, io->m_terminale));
+    });
 }
 
 void FinestraCassa::schedaAttivata(QWidget* scheda)

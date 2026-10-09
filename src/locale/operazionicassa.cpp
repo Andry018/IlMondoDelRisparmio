@@ -2,6 +2,8 @@
 
 #include "payloadvendita.h"
 
+#include <QJsonArray>
+
 namespace mdr {
 
 namespace {
@@ -51,7 +53,8 @@ EsitoOperazione OperazioniCassa::registra(const Carrello& carrello, const EsitoF
     esito.ok = true;
     esito.fiscale = fiscale;
     esito.id = QUuid::createUuid();
-    esito.payload = payloadRegistraVendita(carrello, esito.id, m_terminaleId, m_rt.matricola(), fiscale, origine);
+    esito.payload = payloadRegistraVendita(carrello, esito.id, m_terminaleId, m_rt.matricola(), fiscale, origine,
+                                           m_operatore);
     salvaStato(fiscale);
     if (!m_archivio.registraVendita(esito.payload)) {
         esito.salvata = false;
@@ -92,7 +95,7 @@ EsitoOperazione OperazioniCassa::annulla(const QUuid& venditaId)
     salvaStato(fiscale);
 
     EsitoOperazione esito{true, {}, true, venditaId, fiscale};
-    if (!m_archivio.registraAnnullo(venditaId)) {
+    if (!m_archivio.registraAnnullo(venditaId, m_operatore)) {
         esito.salvata = false;
         esito.errore = m_archivio.ultimoErrore();
     }
@@ -148,12 +151,16 @@ EsitoOperazione OperazioniCassa::reso(const QUuid& venditaId, const Carrello& ri
 EsitoOperazione OperazioniCassa::chiusura()
 {
     const auto totale = m_archivio.statoRt(m_rt.matricola()).totaleGiorno;
+    const auto totali = riepilogo();   // prima della chiusura: poi l'azzeramento cambia
     const auto fiscale = m_rt.chiusuraGiornaliera();
     if (!fiscale.ok)
         return {false, fiscale.errore};
 
     EsitoOperazione esito{true, {}, true, {}, fiscale};
-    if (!m_archivio.registraChiusura(m_rt.matricola(), fiscale.numeroAzzeramento, fiscale.dataOra, totale)) {
+    esito.payload = payloadRegistraChiusura(totali, fiscale, m_terminaleId, m_rt.matricola(), m_operatore);
+    esito.id = QUuid::fromString(esito.payload.value("id").toString());
+    if (!m_archivio.registraChiusura(m_rt.matricola(), fiscale.numeroAzzeramento, fiscale.dataOra, totale,
+                                     esito.payload)) {
         esito.salvata = false;
         esito.errore = m_archivio.ultimoErrore();
     }
@@ -169,6 +176,7 @@ RiepilogoAzzeramento OperazioniCassa::riepilogo() const
         const bool reso = v.tipo == QLatin1String("reso");
         if (!reso && v.stato != QLatin1String("completata")) {
             ++r.annullate;
+            r.totaleAnnullate += v.totale;
             continue;
         }
 
@@ -204,8 +212,40 @@ RiepilogoAzzeramento OperazioniCassa::riepilogo() const
         const auto iva = c.riepilogoIva();
         for (auto it = iva.cbegin(); it != iva.cend(); ++it)
             r.perAliquota[it.key()] += conSegno(it.value().lordo);
+        for (const auto& riga : c.righe())
+            if (!riga.iva.natura.isEmpty())
+                r.naturaAliquota[riga.iva.basisPoints] = riga.iva.natura;
     }
     return r;
+}
+
+QJsonObject payloadRegistraChiusura(const RiepilogoAzzeramento& r, const EsitoFiscale& esito,
+                                    const QString& terminaleId, const QString& matricolaRt, const QUuid& operatore)
+{
+    QJsonArray aliquote;
+    for (auto it = r.perAliquota.cbegin(); it != r.perAliquota.cend(); ++it) {
+        QJsonObject a{{"aliquota_bp", it.key()}, {"totale", qint64(it.value().cents())}};
+        if (r.naturaAliquota.contains(it.key()))
+            a.insert("natura", r.naturaAliquota.value(it.key()));
+        aliquote.append(a);
+    }
+    QJsonObject p{
+        {"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {"terminale_id", terminaleId},
+        {"rt_matricola", matricolaRt},
+        {"rt_azzeramento", esito.numeroAzzeramento},
+        {"data_ora", esito.dataOra.toUTC().toString(Qt::ISODateWithMs)},
+        // Come v_riconciliazione_chiusure: corrispettivi = vendite completate - resi.
+        {"totale", qint64(r.netto().cents())},
+        {"totale_vendite", qint64((r.totaleVendite + r.totaleAnnullate).cents())},
+        {"totale_resi", qint64(r.totaleResi.cents())},
+        {"totale_annulli", qint64(r.totaleAnnullate.cents())},
+        {"numero_documenti", r.vendite + r.annullate},
+        {"aliquote", aliquote},
+    };
+    if (!operatore.isNull())
+        p.insert("operatore_id", operatore.toString(QUuid::WithoutBraces));
+    return p;
 }
 
 } // namespace mdr

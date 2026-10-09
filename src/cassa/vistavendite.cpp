@@ -1,6 +1,7 @@
 #include "vistavendite.h"
 
 #include "comune.h"
+#include "dialogooperatore.h"
 #include "locale/payloadvendita.h"
 
 #include <QComboBox>
@@ -215,10 +216,16 @@ void VistaVendite::aggiorna()
         m_tabella->setItem(i, 3, cella((reso ? QStringLiteral("-") : QString()) + v.totale.toString(), true));
         m_tabella->setItem(i, 4, cella(pagamenti.join(QStringLiteral(", "))));
         m_tabella->setItem(i, 5, cella(annullata ? QStringLiteral("ANNULLATA") : QStringLiteral("Completata")));
-        m_tabella->setItem(i, 6, cella(v.inviata ? QStringLiteral("Inviata") : QStringLiteral("In coda")));
+        auto* server = cella(v.inviata ? QStringLiteral("Inviata")
+                             : v.daVerificare ? QStringLiteral("RIFIUTATA") : QStringLiteral("In coda"));
+        if (v.daVerificare) {
+            server->setToolTip(v.erroreServer);
+            server->setForeground(QColor(0xc6, 0x28, 0x28));
+        }
+        m_tabella->setItem(i, 6, server);
         if (annullata || reso) {
             const QBrush colore = annullata ? QBrush(Qt::gray) : QBrush(QColor(0xc6, 0x28, 0x28));
-            for (int c = 0; c < m_tabella->columnCount(); ++c)
+            for (int c = 0; c < m_tabella->columnCount() - 1; ++c)
                 m_tabella->item(i, c)->setForeground(colore);
         }
         if (selezione && selezione->id == v.id)
@@ -286,6 +293,8 @@ void VistaVendite::annulla()
                                              "La merce torna in giacenza.")
                                   .arg(numeroDocumento(*v), euro(v->totale))) != QMessageBox::Yes)
         return;
+    if (!assicuraOperatore(this, m_archivio, m_op))
+        return;
 
     const auto esito = m_op.annulla(v->id);
     if (!esito.ok) {
@@ -303,6 +312,8 @@ void VistaVendite::reso()
 {
     const auto v = selezionata();
     if (!v)
+        return;
+    if (!assicuraOperatore(this, m_archivio, m_op))
         return;
     const auto rendibili = m_op.quantitaRendibili(v->id);
     if (std::all_of(rendibili.cbegin(), rendibili.cend(), [](Quantita q) { return q <= Quantita(); })) {

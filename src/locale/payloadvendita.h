@@ -17,7 +17,8 @@ std::optional<UnitaMisura> unitaDaCodice(const QString& codice);   // "PZ", "KG"
 // Con `origine` valorizzata è un reso di quella vendita.
 QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
                                    const QString& terminaleId, const QString& matricolaRt,
-                                   const EsitoFiscale& esito, const QUuid& origine = {});
+                                   const EsitoFiscale& esito, const QUuid& origine = {},
+                                   const QUuid& operatore = {});
 
 // Righe di un payload come righe di carrello (per resi e dettaglio vendite).
 QList<RigaCarrello> righeDaPayload(const QJsonObject& payload);

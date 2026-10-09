@@ -4,6 +4,7 @@
 
 #include "fintoserver.h"
 
+#include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
@@ -43,6 +44,9 @@ private slots:
 
         const auto idArticolo = QUuid::createUuid().toString(QUuid::WithoutBraces);
         int scarichiArticoli = 0;
+        int scarichiOperatori = 0;
+        const auto idOperatore = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const auto hashPin = QCryptographicHash::hash("sale1234", QCryptographicHash::Sha256).toHex();
         FintoSupabase server;
         server.gestore = [&](const FintoSupabase::Richiesta& r) -> FintoSupabase::Risposta {
             if (r.percorso.startsWith("/auth/v1/token?grant_type=password")) {
@@ -53,8 +57,17 @@ private slots:
             }
             if (r.percorso == "/rest/v1/rpc/registra_vendita")
                 return {200, '"' + v1.toString(QUuid::WithoutBraces).toUtf8() + '"'};
-            if (r.percorso == "/rest/v1/rpc/annulla_vendita")   // risposta del primo invio persa
-                return {400, R"({"message":"Vendita x inesistente o già annullata"})"};
+            if (r.percorso == "/rest/v1/rpc/annulla_vendita")   // idempotente: 204 anche al reinvio
+                return {204, {}};
+            if (r.percorso.startsWith("/rest/v1/v_operatori_cassa")) {
+                if (scarichiOperatori++ > 0)
+                    return {200, "[]"};
+                const QJsonArray righe{QJsonObject{
+                    {"id", idOperatore}, {"codice", "7"}, {"nome", "Sara"}, {"ruolo", "cassiere"}, {"attivo", true},
+                    {"pin_sale", "sale"}, {"pin_hash", QString::fromLatin1(hashPin)},
+                    {"updated_at", "2026-10-08T11:00:00+00:00"}}};
+                return {200, QJsonDocument(righe).toJson()};
+            }
             if (r.percorso.startsWith("/rest/v1/reparti"))
                 return {200, R"([{"numero_rt":1,"descrizione":"Casalinghi","aliquote_iva":{"basis_points":2200,"natura":null}}])"};
             if (r.percorso.startsWith("/rest/v1/v_articoli_cassa")) {
@@ -94,8 +107,17 @@ private slots:
         QCOMPARE(terminata.first()[1].toInt(), 2);   // vendita + annullo
         QCOMPARE(terminata.first()[2].toInt(), 1);   // un articolo
 
-        // Coda svuotata, anche l'annullo "già annullata".
+        // Coda svuotata.
         QCOMPARE(db.contaDaInviare(), 0);
+        QCOMPARE(db.contaDaVerificare(), 0);
+        // Operatore con PIN copiato in locale: si verifica anche offline.
+        const auto sara = db.operatore("7");
+        QVERIFY(sara);
+        QCOMPARE(sara->id.toString(QUuid::WithoutBraces), idOperatore);
+        QVERIFY(ArchivioLocale::verificaPin(*sara, "1234"));
+        QVERIFY(!ArchivioLocale::verificaPin(*sara, "1235"));
+        QCOMPARE(sync.operatoriAggiornati(), 1);
+        QCOMPARE(db.marcatore("articoli"), QStringLiteral("2026-10-08T10:00:00.5+00:00"));
         QVERIFY(db.vendita(v1)->inviata);
         // Articolo e reparto scaricati.
         const auto a = db.cerca("8001234567895");
@@ -113,12 +135,64 @@ private slots:
         QCOMPARE(corpo["p"].toObject()["id"].toString(), v1.toString(QUuid::WithoutBraces));
         QCOMPARE(corpo["p"].toObject()["totale"].toInteger(), 178);
 
-        // Seconda sincronizzazione: solo gli articoli cambiati dopo l'ultimo updated_at.
+        // Seconda sincronizzazione: dal marcatore meno 5 minuti (modifiche lente non si perdono).
         sync.sincronizza();
         QVERIFY(terminata.wait(5000));
-        const auto ultimo = server.richieste.last();
-        QVERIFY2(ultimo.percorso.contains("updated_at=gt.2026-10-08T10%3A00%3A00.5%2B00%3A00"),
-                 qPrintable(ultimo.percorso));
+        auto ultima = [&](const char* vista) {
+            QString percorso;
+            for (const auto& r : server.richieste)
+                if (r.percorso.contains(QLatin1String(vista)))
+                    percorso = r.percorso;
+            return percorso;
+        };
+        QVERIFY2(ultima("v_articoli_cassa").contains("updated_at=gte.2026-10-08T09%3A55%3A00.500Z"),
+                 qPrintable(ultima("v_articoli_cassa")));
+        QVERIFY2(ultima("v_operatori_cassa").contains("updated_at=gte.2026-10-08T10%3A55%3A00.000Z"),
+                 qPrintable(ultima("v_operatori_cassa")));
+        // Le righe ripetute dal margine non contano come aggiornate.
+        QCOMPARE(terminata.last()[2].toInt(), 0);
+    }
+
+    void rifiutata_va_da_verificare_e_non_blocca()
+    {
+        ArchivioLocale db(":memory:");
+        QVERIFY(db.apri());
+        const auto sbagliata = QUuid::createUuid();
+        const auto buona = QUuid::createUuid();
+        for (const auto& id : {sbagliata, buona})
+            QVERIFY(db.registraVendita(payloadRegistraVendita(carrello(), id, "CASSA1", "RT1",
+                                                              {true, {}, 1, id == buona ? 2 : 1, QDateTime::currentDateTime()})));
+        FintoSupabase server;
+        server.gestore = [&](const FintoSupabase::Richiesta& r) -> FintoSupabase::Risposta {
+            if (r.percorso.startsWith("/auth/v1/token"))
+                return {200, R"({"access_token":"A","refresh_token":"R","expires_in":3600})"};
+            if (r.percorso == "/rest/v1/rpc/registra_vendita") {
+                const auto id = QJsonDocument::fromJson(r.corpo).object()["p"].toObject()["id"].toString();
+                if (id == sbagliata.toString(QUuid::WithoutBraces))
+                    return {400, R"({"code":"P0001","message":"Vendita x già registrata con dati diversi"})"};
+                return {200, R"("ok")"};
+            }
+            return {200, "[]"};
+        };
+        Sincronizzatore sync(db);
+        sync.configura(server.url(), "K");
+        sync.impostaRefreshToken("R");
+        QSignalSpy terminata(&sync, &Sincronizzatore::terminata);
+        sync.sincronizza();
+        QVERIFY(terminata.wait(5000));
+        QCOMPARE(terminata.first()[0].toBool(), true);
+        QCOMPARE(terminata.first()[1].toInt(), 1);        // la buona è passata
+        QCOMPARE(sync.rifiutate(), 1);
+        QCOMPARE(db.contaDaInviare(), 0);                 // la coda non è bloccata
+        QCOMPARE(db.contaDaVerificare(), 1);
+        QVERIFY(db.vendita(sbagliata)->daVerificare);
+        QVERIFY(db.vendita(sbagliata)->erroreServer.contains("dati diversi"));
+        QVERIFY(db.vendita(buona)->inviata);
+
+        // Il responsabile corregge e la rimette in coda.
+        QCOMPARE(db.rimettiInCoda(), 1);
+        QCOMPARE(db.contaDaInviare(), 1);
+        QCOMPARE(db.contaDaVerificare(), 0);
     }
 
     void server_irraggiungibile_lascia_in_coda()

@@ -1,5 +1,6 @@
 ﻿#include "locale/archiviolocale.h"
 #include "locale/firma.h"
+#include "locale/sincronizzatore.h"
 #include "locale/payloadvendita.h"
 
 #include <QJsonArray>
@@ -93,6 +94,13 @@ private slots:
         QCOMPARE(a->id, id);
         QCOMPARE(a->unita, UnitaMisura::Kg);
         QCOMPARE(a->reparto, QStringLiteral("3"));
+        // La stessa riga di nuovo (margine della sincronizzazione): niente di cambiato.
+        bool cambiato = true;
+        QVERIFY(db.applicaRigaSync(riga, &cambiato));
+        QVERIFY(!cambiato);
+        // Il marcatore lo salva il sincronizzatore a scaricamento completo.
+        QVERIFY(db.ultimoSync().isEmpty());
+        QVERIFY(db.salvaMarcatore("articoli", "2026-10-08T09:00:00.123456+00:00"));
         QCOMPARE(db.ultimoSync(), QStringLiteral("2026-10-08T09:00:00.123456+00:00"));
 
         QVERIFY(!db.applicaRigaSync(QJsonObject{{"id", "non-un-uuid"}, {"unita", "PZ"}}));
@@ -216,6 +224,26 @@ private slots:
         QVERIFY(!verificaFirma(dati, alterata, modulo));                      // firma alterata
         QVERIFY(!verificaFirma(dati, firma.left(100), modulo));               // firma troncata
         QVERIFY(!verificaFirmaAggiornamento(dati, firma));                    // chiave diversa
+    }
+
+    void chiusura_accodata_per_il_server()
+    {
+        ArchivioLocale db(QStringLiteral(":memory:"));
+        QVERIFY(db.apri());
+        QJsonObject corpo{{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)}, {"totale", 500}};
+        QVERIFY(db.registraChiusura("RT1", 4, QDateTime::currentDateTime(), Money::fromCents(500), corpo));
+        const auto coda = db.codaDaInviare();
+        QCOMPARE(coda.size(), 1);
+        QCOMPARE(coda[0].rpc, QStringLiteral("registra_chiusura"));
+        QCOMPARE(coda[0].corpo["p"].toObject()["totale"].toInt(), 500);
+        QCOMPARE(db.statoRt("RT1").azzeramento, 5);
+    }
+
+    void marcatore_con_margine()
+    {
+        QCOMPARE(Sincronizzatore::filtroDalMarcatore("2026-10-08T10:00:00.123456+02:00"),
+                 QStringLiteral("&updated_at=gte.2026-10-08T07%3A55%3A00.123Z"));
+        QVERIFY(Sincronizzatore::filtroDalMarcatore({}).isEmpty());
     }
 
     void payload_registra_vendita()

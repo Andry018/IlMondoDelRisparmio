@@ -2,6 +2,7 @@
 
 #include "comune.h"
 #include "dialogocontanti.h"
+#include "dialogooperatore.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -124,11 +125,13 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     auto* bRimuovi  = pulsanteComando(QStringLiteral("Storna riga"),    Qt::Key_F4, this);
     auto* bAnnulla  = pulsanteComando(QStringLiteral("Annulla scontrino"), Qt::Key_F8, this);
     auto* bZ        = pulsanteComando(QStringLiteral("Chiusura Z"),     Qt::Key_F10, this);
+    auto* bOperatore = pulsanteComando(QStringLiteral("Operatore"),     Qt::Key_F1, this);
+    bOperatore->setObjectName("operatore");
     bContanti->setStyleSheet("QPushButton { background: #2e7d32; color: white; font-weight: bold;"
                              " border: 1px solid #1b5e20; border-radius: 4px; }"
                              "QPushButton:pressed { background: #1b5e20; }");
     const QList<QPushButton*> comandi = {bContanti, bCarta, bBancomat, bAltro, bReparto,
-                                         bQuantita, bSconto, bRimuovi, bAnnulla, bZ};
+                                         bQuantita, bSconto, bRimuovi, bAnnulla, bZ, bOperatore};
     for (int i = 0; i < comandi.size(); ++i) {
         comandi[i]->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         griglia->addWidget(comandi[i], i, 0);
@@ -184,6 +187,7 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     connect(bRimuovi,  &QPushButton::clicked, this, &VistaCassa::rimuoviRiga);
     connect(bAnnulla,  &QPushButton::clicked, this, &VistaCassa::annullaScontrino);
     connect(bZ,        &QPushButton::clicked, this, &VistaCassa::chiusuraGiornaliera);
+    connect(bOperatore, &QPushButton::clicked, this, &VistaCassa::cambiaOperatore);
 
     const auto stato = m_op.rt().stato();
     log(stato.ok ? QStringLiteral("RT %1 pronto — azzeramento %2, ultimo documento %3")
@@ -240,6 +244,12 @@ void VistaCassa::leggi(const QString& input)
         verificaPrezzo(testo);
         return;
     }
+    // Con gli operatori sincronizzati dal server, si vende solo dopo codice e PIN.
+    if (!assicuraOperatore(this, m_archivio, m_op)) {
+        messaggio(QStringLiteral("Identificarsi con codice e PIN (tasto Operatore)"), true);
+        return;
+    }
+    emit operatoreCambiato();
 
     if (!quantita && articolo->unita != UnitaMisura::Pezzo) {
         bool ok = false;
@@ -323,6 +333,11 @@ bool VistaCassa::vendiReparto(int numero, std::optional<Money> prezzo, const QSt
     const auto r = m_archivio.reparto(numero);
     if (!r)
         return false;
+    if (!assicuraOperatore(this, m_archivio, m_op)) {
+        messaggio(QStringLiteral("Identificarsi con codice e PIN (tasto Operatore)"), true);
+        return false;
+    }
+    emit operatoreCambiato();
 
     // "2*150" + reparto = 2 pezzi da 1,50.
     Quantita quantita = Quantita::pezzi(1);
@@ -653,6 +668,21 @@ void VistaCassa::cambiaScontrino(int indice)
                   ? QStringLiteral("Scontrino %1").arg(indice + 1)
                   : QStringLiteral("Scontrino %1 — lo scontrino %2 resta in attesa (%3)")
                         .arg(indice + 1).arg(2 - indice).arg(euro(altro.totale())));
+}
+
+void VistaCassa::cambiaOperatore()
+{
+    if (m_archivio.contaOperatori() == 0) {
+        messaggio(QStringLiteral("Nessun operatore: si configurano sul server (gestione > Operatori)"), true);
+        return;
+    }
+    DialogoOperatore d(m_archivio, this);
+    if (d.exec() == QDialog::Accepted && d.operatore()) {
+        m_op.impostaOperatore(d.operatore()->id);
+        messaggio(QStringLiteral("Operatore: %1").arg(d.operatore()->nome));
+        emit operatoreCambiato();
+    }
+    m_codice->setFocus();
 }
 
 void VistaCassa::verificaPrezzo(const QString& codice)

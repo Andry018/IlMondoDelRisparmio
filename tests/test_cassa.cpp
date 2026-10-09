@@ -1,4 +1,5 @@
 #include "dialogocontanti.h"
+#include "dialogooperatore.h"
 #include "dimostrativi.h"
 #include "finestracassa.h"
 #include "fiscal/simulatore.h"
@@ -8,6 +9,7 @@
 
 #include <QComboBox>
 
+#include <QCryptographicHash>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -286,6 +288,45 @@ private slots:
         QVERIFY(testo("messaggio").contains("1,35"));
         cassa()->leggi("3001");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
+    }
+
+    void operatore_richiesto_se_configurato()
+    {
+        // Operatori arrivati dal server (v_operatori_cassa): da qui si vende solo con codice e PIN.
+        const auto hash = QString::fromLatin1(QCryptographicHash::hash("s3333", QCryptographicHash::Sha256).toHex());
+        QVERIFY(m_archivio->applicaOperatoreSync(QJsonObject{
+            {"id", "00000000-0000-0000-0000-0000000000a3"}, {"codice", "3"}, {"nome", "Sara"}, {"ruolo", "cassiere"},
+            {"attivo", true}, {"pin_sale", "s"}, {"pin_hash", hash}, {"updated_at", "2026-10-09T10:00:00+00:00"}}));
+        QVERIFY(m_archivio->applicaOperatoreSync(QJsonObject{
+            {"id", "00000000-0000-0000-0000-0000000000a9"}, {"codice", "9"}, {"nome", "Ex"}, {"ruolo", "cassiere"},
+            {"attivo", false}, {"pin_sale", "s"}, {"pin_hash", hash}, {"updated_at", "2026-10-09T10:00:00+00:00"}}));
+        QCOMPARE(m_archivio->contaOperatori(), 1);
+
+        // Annullata la richiesta: niente riga.
+        QTimer::singleShot(0, this, [] {
+            auto* d = qobject_cast<DialogoOperatore*>(QApplication::activeModalWidget());
+            QVERIFY(d);
+            QVERIFY(!d->prova("9", "3333"));   // operatore disattivato
+            d->reject();
+        });
+        cassa()->leggi("1001");
+        QVERIFY(cassa()->carrello().vuoto());
+        QVERIFY(testo("messaggio").contains("codice e PIN"));
+
+        // Codice e PIN giusti: si vende e lo scontrino porta l'operatore.
+        QTimer::singleShot(0, this, [] {
+            auto* d = qobject_cast<DialogoOperatore*>(QApplication::activeModalWidget());
+            QVERIFY(d);
+            QVERIFY(d->prova("3", "3333"));
+            d->accept();
+        });
+        cassa()->leggi("1001");
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        cassa()->leggi("1002");   // stesso operatore: non chiede più
+        QCOMPARE(cassa()->carrello().righe().size(), 2);
+        cassa()->paga(TipoPagamento::Carta);
+        const auto v = m_archivio->vendite(QDate::currentDate()).first();
+        QCOMPARE(v.payload.value("operatore_id").toString(), QStringLiteral("00000000-0000-0000-0000-0000000000a3"));
     }
 
     void prezzo_da_tastierino()

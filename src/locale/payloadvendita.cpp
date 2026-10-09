@@ -27,7 +27,8 @@ std::optional<UnitaMisura> unitaDaCodice(const QString& codice)
 
 QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
                                    const QString& terminaleId, const QString& matricolaRt,
-                                   const EsitoFiscale& esito, const QUuid& origine)
+                                   const EsitoFiscale& esito, const QUuid& origine,
+                                   const QUuid& operatore)
 {
     QJsonArray righe;
     for (const auto& r : carrello.righe()) {
@@ -62,6 +63,9 @@ QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
     };
     if (!origine.isNull())
         p.insert("vendita_origine_id", origine.toString(QUuid::WithoutBraces));
+    // Obbligatorio quando la cassa usa l'account del terminale (docs/API.md).
+    if (!operatore.isNull())
+        p.insert("operatore_id", operatore.toString(QUuid::WithoutBraces));
     return p;
 }
 

@@ -1,12 +1,15 @@
 #include "sincronizzatore.h"
 
+#include <QDateTime>
 #include <QJsonArray>
+#include <QRegularExpression>
 
 namespace mdr {
 
 namespace {
 
 constexpr int pagina = 1000;
+constexpr int margineSecondi = 5 * 60;
 
 QByteArray corpoJson(const QJsonObject& o)
 {
@@ -14,6 +17,29 @@ QByteArray corpoJson(const QJsonObject& o)
 }
 
 } // namespace
+
+QDateTime Sincronizzatore::leggiMarcatore(const QString& testo)
+{
+    // PostgREST manda i microsecondi ("…:00.123456+02:00"): Qt ne legge al massimo tre.
+    static const QRegularExpression forma(QStringLiteral("^(.+T\\d\\d:\\d\\d:\\d\\d)(?:\\.(\\d+))?(Z|[+-]\\d\\d:?\\d\\d)?$"));
+    const auto m = forma.match(testo.trimmed());
+    if (!m.hasMatch())
+        return {};
+    const QString millesimi = (m.captured(2) + QStringLiteral("000")).left(3);
+    return QDateTime::fromString(m.captured(1) + QLatin1Char('.') + millesimi + (m.captured(3).isEmpty() ? QStringLiteral("Z") : m.captured(3)),
+                                 Qt::ISODateWithMs);
+}
+
+QString Sincronizzatore::filtroDalMarcatore(const QString& marcatore)
+{
+    // updated_at è l'inizio della transazione sul server: una modifica lenta può comparire con
+    // un updated_at già passato. Si riparte 5 minuti prima e si scartano le righe già uguali.
+    const auto quando = leggiMarcatore(marcatore);
+    if (!quando.isValid())
+        return {};
+    return QStringLiteral("&updated_at=gte.")
+           + ClientServer::valoreFiltro(quando.addSecs(-margineSecondi).toUTC().toString(Qt::ISODateWithMs));
+}
 
 Sincronizzatore::Sincronizzatore(ArchivioLocale& archivio, ClientServer* client, QObject* parent)
     : QObject(parent)
@@ -30,49 +56,50 @@ void Sincronizzatore::sincronizza()
     if (m_inCorso || !configurato() || !autenticato())
         return;
     m_inCorso = true;
-    inviaCoda(m_archivio.codaDaInviare(), 0);
+    m_inviate = 0;
+    m_articoli = 0;
+    m_operatori = 0;
+    m_rifiutate = 0;
+    inviaCoda(m_archivio.codaDaInviare());
 }
 
-void Sincronizzatore::inviaCoda(QList<OperazioneInCoda> coda, int inviate)
+void Sincronizzatore::inviaCoda(QList<OperazioneInCoda> coda)
 {
     if (coda.isEmpty()) {
-        scaricaReparti(inviate);
+        scaricaReparti();
         return;
     }
     const auto op = coda.takeFirst();
     m_client->richiesta("POST", QStringLiteral("/rest/v1/rpc/") + op.rpc, corpoJson(op.corpo),
-                        [this, op, coda, inviate](const RispostaServer& r) {
-        // annulla_vendita era non idempotente: un reinvio dopo una risposta persa rispondeva
-        // "già annullata", che per la cassa è un successo. Ora il server risponde 204.
-        const bool giaFatto = op.rpc == QLatin1String("annulla_vendita")
-                           && r.errore.contains(QStringLiteral("già annullata"));
-        if (r.ok() || giaFatto) {
+                        [this, op, coda](const RispostaServer& r) {
+        if (r.ok()) {
             m_archivio.segnaInviata(op.id);
-            inviaCoda(coda, inviate + 1);
+            ++m_inviate;
+            inviaCoda(coda);
             return;
         }
-
-        m_archivio.segnaErrore(op.id, r.errore);
         if (r.ritentabile() || r.stato == 403) {
-            // Rete, server o permessi: inutile proseguire, si riprova dopo.
-            if (r.stato == 401 && r.codice == QLatin1String("sessione"))
-                emit messaggio(r.errore);
-            else
-                emit messaggio(QStringLiteral("Invio interrotto (%1): %2").arg(r.stato).arg(r.errore));
-            fine(false, inviate, 0);
+            // Rete, server, sessione o permessi: si riprova alla prossima sincronizzazione.
+            m_archivio.segnaErrore(op.id, r.errore);
+            emit messaggio(r.codice == QLatin1String("sessione")
+                               ? r.errore
+                               : QStringLiteral("Invio interrotto (%1): %2").arg(r.stato).arg(r.errore));
+            fine(false);
             return;
         }
-        // Errore sui dati di questa operazione: resta in coda, si passa alle altre.
-        emit messaggio(QStringLiteral("Rifiutata dal server %1 %2: %3")
-                           .arg(op.rpc, op.id.toString(QUuid::WithoutBraces), r.errore));
-        inviaCoda(coda, inviate);
+        // Errore sui dati (4xx): ritentare bloccherebbe la coda. Va controllata dal responsabile.
+        // "già registrata con dati diversi" indica un UUID riusato: un errore della cassa.
+        m_archivio.segnaDaVerificare(op.id, r.errore);
+        ++m_rifiutate;
+        emit messaggio(QStringLiteral("Rifiutata dal server, da verificare: %1 — %2").arg(op.rpc, r.errore));
+        inviaCoda(coda);
     });
 }
 
-void Sincronizzatore::scaricaReparti(int inviate)
+void Sincronizzatore::scaricaReparti()
 {
     m_client->leggi(QStringLiteral("reparti?select=numero_rt,descrizione,aliquote_iva(basis_points,natura)"),
-                    [this, inviate](const RispostaServer& r) {
+                    [this](const RispostaServer& r) {
         if (r.stato == 200) {
             for (const auto& v : r.json().array()) {
                 const auto o = v.toObject();
@@ -83,42 +110,59 @@ void Sincronizzatore::scaricaReparti(int inviate)
         } else {
             emit messaggio(QStringLiteral("Reparti non scaricati: %1").arg(r.errore));
         }
-        scaricaArticoli(inviate, m_archivio.ultimoSync(), 0, 0);
+        scarica(QStringLiteral("articoli"), QStringLiteral("v_articoli_cassa"), 0, m_archivio.marcatore(QStringLiteral("articoli")));
     });
 }
 
-void Sincronizzatore::scaricaArticoli(int inviate, const QString& dal, int offset, int articoli)
+void Sincronizzatore::scarica(const QString& nome, const QString& vista, int offset, const QString& massimo)
 {
-    QString risorsa = QStringLiteral("v_articoli_cassa?select=*&order=updated_at.asc,id.asc&limit=%1&offset=%2")
-                          .arg(pagina).arg(offset);
-    if (!dal.isEmpty())
-        risorsa += QStringLiteral("&updated_at=gt.") + ClientServer::valoreFiltro(dal);
-
-    m_client->leggi(risorsa, [this, inviate, dal, offset, articoli](const RispostaServer& r) {
+    const QString filtro = filtroDalMarcatore(m_archivio.marcatore(nome));
+    const QString risorsa = QStringLiteral("%1?select=*&order=updated_at.asc,id.asc&limit=%2&offset=%3%4")
+                                .arg(vista).arg(pagina).arg(offset).arg(filtro);
+    m_client->leggi(risorsa, [this, nome, vista, offset, massimo](const RispostaServer& r) {
+        const bool articoli = nome == QLatin1String("articoli");
         if (r.stato != 200) {
-            emit messaggio(QStringLiteral("Articoli non scaricati: %1").arg(r.errore));
-            fine(false, inviate, articoli);
+            emit messaggio(QStringLiteral("%1 non scaricati: %2").arg(articoli ? QStringLiteral("Articoli") : QStringLiteral("Operatori"),
+                                                                     r.errore));
+            fine(false);
             return;
         }
         const auto righe = r.json().array();
-        int salvati = 0;
-        for (const auto& riga : righe) {
-            if (m_archivio.applicaRigaSync(riga.toObject()))
-                ++salvati;
-            else
+        QString max = massimo;
+        for (const auto& v : righe) {
+            const auto riga = v.toObject();
+            bool cambiato = false;
+            const bool ok = articoli ? m_archivio.applicaRigaSync(riga, &cambiato)
+                                     : m_archivio.applicaOperatoreSync(riga, &cambiato);
+            if (!ok) {
                 emit messaggio(m_archivio.ultimoErrore());
+                continue;
+            }
+            if (cambiato)
+                ++(articoli ? m_articoli : m_operatori);
+            const auto u = riga.value("updated_at").toString();
+            if (max.isEmpty() || leggiMarcatore(u) > leggiMarcatore(max))
+                max = u;
         }
-        if (righe.size() == pagina)
-            scaricaArticoli(inviate, dal, offset + pagina, articoli + salvati);
+        if (righe.size() == pagina) {
+            scarica(nome, vista, offset + pagina, max);
+            return;
+        }
+        // Marcatore salvato solo a scaricamento completo: se si interrompe, si riparte da prima.
+        if (!max.isEmpty() && max != m_archivio.marcatore(nome))
+            m_archivio.salvaMarcatore(nome, max);
+        if (articoli)
+            scarica(QStringLiteral("operatori"), QStringLiteral("v_operatori_cassa"), 0,
+                    m_archivio.marcatore(QStringLiteral("operatori")));
         else
-            fine(true, inviate, articoli + salvati);
+            fine(true);
     });
 }
 
-void Sincronizzatore::fine(bool ok, int inviate, int articoli)
+void Sincronizzatore::fine(bool ok)
 {
     m_inCorso = false;
-    emit terminata(ok, inviate, articoli);
+    emit terminata(ok, m_inviate, m_articoli);
 }
 
 } // namespace mdr

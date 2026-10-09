@@ -3,15 +3,17 @@
 #include "archiviolocale.h"
 #include "clientserver.h"
 
+#include <QDateTime>
 #include <QObject>
 #include <QUrl>
 
 namespace mdr {
 
-// Sincronizza la postazione con Supabase:
-//   - invia la coda (POST /rest/v1/rpc/<rpc>) nell'ordine in cui è stata creata;
-//   - scarica gli articoli cambiati (GET /rest/v1/v_articoli_cassa?updated_at=gt.<ultimo>)
-//     e i reparti.
+// Sincronizza la postazione con Supabase (docs/API.md, "Cassa offline"):
+//   - invia la coda (POST /rest/v1/rpc/<rpc>) nell'ordine in cui è stata creata; le operazioni
+//     rifiutate per i dati (4xx) passano tra quelle da verificare, le altre si ritentano;
+//   - scarica reparti, articoli (v_articoli_cassa) e operatori con PIN (v_operatori_cassa) cambiati
+//     dall'ultimo marcatore, con 5 minuti di margine.
 // Sessione e richieste passano da ClientServer (uno per programma, condiviso con le schede).
 class Sincronizzatore : public QObject {
     Q_OBJECT
@@ -34,6 +36,14 @@ public:
     bool inCorso() const { return m_inCorso; }
     void sincronizza();
 
+    // Dopo una sincronizzazione: operatori cambiati e operazioni rifiutate in questo giro.
+    int operatoriAggiornati() const { return m_operatori; }
+    int rifiutate() const { return m_rifiutate; }
+
+    // "&updated_at=gte.<marcatore - 5 minuti>" (vuoto senza marcatore).
+    static QString filtroDalMarcatore(const QString& marcatore);
+    static QDateTime leggiMarcatore(const QString& testo);
+
 signals:
     void accessoRiuscito(const QString& email);
     void accessoFallito(const QString& errore);
@@ -42,14 +52,18 @@ signals:
     void terminata(bool ok, int inviate, int articoli);
 
 private:
-    void inviaCoda(QList<OperazioneInCoda> coda, int inviate);
-    void scaricaReparti(int inviate);
-    void scaricaArticoli(int inviate, const QString& dal, int offset, int articoli);
-    void fine(bool ok, int inviate, int articoli);
+    void inviaCoda(QList<OperazioneInCoda> coda);
+    void scaricaReparti();
+    void scarica(const QString& nome, const QString& vista, int offset, const QString& massimo);
+    void fine(bool ok);
 
     ArchivioLocale& m_archivio;
     ClientServer* m_client;
     bool m_inCorso = false;
+    int m_inviate = 0;
+    int m_articoli = 0;
+    int m_operatori = 0;
+    int m_rifiutate = 0;
 };
 
 } // namespace mdr

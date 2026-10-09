@@ -2,6 +2,7 @@
 
 #include "payloadvendita.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -133,9 +134,29 @@ bool ArchivioLocale::apri()
                         azzeramento integer not null,
                         data_ora    text not null,
                         totale      integer not null,
-                        primary key (matricola, azzeramento)))");
+                        primary key (matricola, azzeramento)))")
+        && esegui("create table if not exists stato (chiave text primary key, valore text)")
+        && esegui(R"(create table if not exists operatori (
+                        id         text primary key,
+                        codice     text,
+                        nome       text not null,
+                        ruolo      text,
+                        attivo     integer not null,
+                        pin_sale   text,
+                        pin_hash   text,
+                        updated_at text))");
     if (!ok)
         return false;
+
+    // Archivi creati da versioni precedenti: colonne aggiunte dopo.
+    {
+        QSqlQuery q("pragma table_info(coda_invio)", db());
+        bool presente = false;
+        while (q.next())
+            presente = presente || q.value(1).toString() == QLatin1String("da_verificare");
+        if (!presente && !esegui("alter table coda_invio add column da_verificare integer not null default 0"))
+            return false;
+    }
 
     if (reparti().isEmpty()) {
         for (const auto& r : repartiIniziali())
@@ -228,8 +249,10 @@ bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
     return d.commit();
 }
 
-bool ArchivioLocale::applicaRigaSync(const QJsonObject& riga)
+bool ArchivioLocale::applicaRigaSync(const QJsonObject& riga, bool* cambiato)
 {
+    if (cambiato)
+        *cambiato = true;
     const auto unita = unitaDaCodice(riga.value("unita").toString());
     Articolo a;
     a.id = QUuid::fromString(riga.value("id").toString());
@@ -246,6 +269,18 @@ bool ArchivioLocale::applicaRigaSync(const QJsonObject& riga)
     a.attivo = riga.value("attivo").toBool(true);
     for (const auto& b : riga.value("barcode").toArray())
         a.barcode << b.toString();
+
+    // Già uguale (riga ripetuta dal margine della sincronizzazione): niente da fare.
+    {
+        QSqlQuery q(db());
+        q.prepare("select updated_at from articoli where id = ?");
+        q.addBindValue(testoUuid(a.id));
+        if (q.exec() && q.next() && q.value(0).toString() == riga.value("updated_at").toString()) {
+            if (cambiato)
+                *cambiato = false;
+            return true;
+        }
+    }
 
     if (!salvaArticolo(a, riga.value("updated_at").toString()))
         return false;
@@ -356,8 +391,112 @@ int ArchivioLocale::contaArticoli() const
 
 QString ArchivioLocale::ultimoSync() const
 {
-    QSqlQuery q("select max(updated_at) from articoli", db());
-    return q.next() ? q.value(0).toString() : QString();
+    return marcatore(QStringLiteral("articoli"));
+}
+
+QString ArchivioLocale::marcatore(const QString& nome) const
+{
+    QSqlQuery q(db());
+    q.prepare("select valore from stato where chiave = ?");
+    q.addBindValue(QStringLiteral("marcatore_") + nome);
+    return q.exec() && q.next() ? q.value(0).toString() : QString();
+}
+
+bool ArchivioLocale::salvaMarcatore(const QString& nome, const QString& valore)
+{
+    QSqlQuery q(db());
+    q.prepare("insert or replace into stato (chiave, valore) values (?, ?)");
+    q.addBindValue(QStringLiteral("marcatore_") + nome);
+    q.addBindValue(valore);
+    if (!q.exec()) {
+        m_errore = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Operatori
+// ---------------------------------------------------------------------------
+
+namespace {
+
+OperatoreCassa leggiOperatore(const QSqlQuery& q)
+{
+    return {QUuid::fromString(q.value(0).toString()), q.value(1).toString(), q.value(2).toString(),
+            q.value(3).toString(), q.value(4).toInt() != 0, q.value(5).toString(), q.value(6).toString()};
+}
+
+const char* const colonneOperatore = "id, codice, nome, ruolo, attivo, pin_sale, pin_hash";
+
+} // namespace
+
+bool ArchivioLocale::applicaOperatoreSync(const QJsonObject& riga, bool* cambiato)
+{
+    if (cambiato)
+        *cambiato = true;
+    const auto id = QUuid::fromString(riga.value("id").toString());
+    if (id.isNull()) {
+        m_errore = QStringLiteral("Riga operatore non valida: %1").arg(json(riga));
+        return false;
+    }
+    QSqlQuery q(db());
+    q.prepare("select updated_at from operatori where id = ?");
+    q.addBindValue(testoUuid(id));
+    if (q.exec() && q.next() && q.value(0).toString() == riga.value("updated_at").toString()) {
+        if (cambiato)
+            *cambiato = false;
+        return true;
+    }
+    q.prepare("insert or replace into operatori (id, codice, nome, ruolo, attivo, pin_sale, pin_hash, updated_at) "
+              "values (?, ?, ?, ?, ?, ?, ?, ?)");
+    q.addBindValue(testoUuid(id));
+    q.addBindValue(riga.value("codice").isNull() ? QVariant() : QVariant(riga.value("codice").toString()));
+    q.addBindValue(riga.value("nome").toString());
+    q.addBindValue(riga.value("ruolo").toString());
+    q.addBindValue(riga.value("attivo").toBool(true) ? 1 : 0);
+    q.addBindValue(riga.value("pin_sale").isNull() ? QVariant() : QVariant(riga.value("pin_sale").toString()));
+    q.addBindValue(riga.value("pin_hash").isNull() ? QVariant() : QVariant(riga.value("pin_hash").toString()));
+    q.addBindValue(riga.value("updated_at").toString());
+    if (!q.exec()) {
+        m_errore = q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+std::optional<OperatoreCassa> ArchivioLocale::operatore(const QString& codice) const
+{
+    QSqlQuery q(db());
+    q.prepare(QStringLiteral("select %1 from operatori where codice = ? and attivo = 1").arg(colonneOperatore));
+    q.addBindValue(codice.trimmed());
+    if (!q.exec() || !q.next())
+        return std::nullopt;
+    return leggiOperatore(q);
+}
+
+std::optional<OperatoreCassa> ArchivioLocale::operatorePerId(const QUuid& id) const
+{
+    QSqlQuery q(db());
+    q.prepare(QStringLiteral("select %1 from operatori where id = ?").arg(colonneOperatore));
+    q.addBindValue(testoUuid(id));
+    if (!q.exec() || !q.next())
+        return std::nullopt;
+    return leggiOperatore(q);
+}
+
+int ArchivioLocale::contaOperatori() const
+{
+    QSqlQuery q("select count(*) from operatori where attivo = 1", db());
+    return q.next() ? q.value(0).toInt() : 0;
+}
+
+bool ArchivioLocale::verificaPin(const OperatoreCassa& o, const QString& pin)
+{
+    if (!o.attivo || o.pinHash.isEmpty() || pin.isEmpty())
+        return false;
+    const auto calcolato = QCryptographicHash::hash((o.pinSale + pin).toUtf8(), QCryptographicHash::Sha256).toHex();
+    return QString::fromLatin1(calcolato) == o.pinHash.toLower();
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +594,7 @@ bool ArchivioLocale::registraVendita(const QJsonObject& p)
     return d.commit();
 }
 
-bool ArchivioLocale::registraAnnullo(const QUuid& venditaId)
+bool ArchivioLocale::registraAnnullo(const QUuid& venditaId, const QUuid& operatore)
 {
     auto d = db();
     if (!d.transaction()) {
@@ -473,8 +612,10 @@ bool ArchivioLocale::registraAnnullo(const QUuid& venditaId)
         d.rollback();
         return false;
     }
-    if (!accoda(QUuid::createUuid(), QStringLiteral("annulla_vendita"),
-                {{"p_vendita_id", testoUuid(venditaId)}})) {
+    QJsonObject corpo{{"p_vendita_id", testoUuid(venditaId)}};
+    if (!operatore.isNull())
+        corpo.insert("p_operatore_id", testoUuid(operatore));
+    if (!accoda(QUuid::createUuid(), QStringLiteral("annulla_vendita"), corpo)) {
         d.rollback();
         return false;
     }
@@ -488,7 +629,9 @@ QList<VenditaLocale> ArchivioLocale::leggiVendite(const QString& where, const QV
     q.prepare(QStringLiteral(R"(select id, tipo, stato, data_ora, rt_matricola, rt_azzeramento, rt_numero,
                                        totale, vendita_origine_id, payload,
                                        exists (select 1 from coda_invio c
-                                                where c.id = vendite_locali.id and c.inviata_at is not null)
+                                                where c.id = vendite_locali.id and c.inviata_at is not null),
+                                       (select c.da_verificare from coda_invio c where c.id = vendite_locali.id),
+                                       (select c.ultimo_errore from coda_invio c where c.id = vendite_locali.id)
                                   from vendite_locali where %1
                                  order by data_ora desc, rt_numero desc)").arg(where));
     for (const auto& v : valori)
@@ -510,6 +653,8 @@ QList<VenditaLocale> ArchivioLocale::leggiVendite(const QString& where, const QV
         v.origine = QUuid::fromString(q.value(8).toString());
         v.payload = QJsonDocument::fromJson(q.value(9).toString().toUtf8()).object();
         v.inviata = q.value(10).toInt() != 0;
+        v.daVerificare = q.value(11).toInt() != 0;
+        v.erroreServer = q.value(12).toString();
         out.append(v);
     }
     return out;
@@ -579,9 +724,14 @@ bool ArchivioLocale::salvaStatoRt(const QString& matricolaRt, int azzeramento, i
 }
 
 bool ArchivioLocale::registraChiusura(const QString& matricolaRt, int azzeramento, const QDateTime& dataOra,
-                                      Money totale)
+                                      Money totale, const QJsonObject& corpoServer)
 {
-    QSqlQuery q(db());
+    auto d = db();
+    if (!d.transaction()) {
+        m_errore = d.lastError().text();
+        return false;
+    }
+    QSqlQuery q(d);
     q.prepare("insert or replace into chiusure (matricola, azzeramento, data_ora, totale) values (?, ?, ?, ?)");
     q.addBindValue(matricolaRt);
     q.addBindValue(azzeramento);
@@ -589,9 +739,20 @@ bool ArchivioLocale::registraChiusura(const QString& matricolaRt, int azzerament
     q.addBindValue(qint64(totale.cents()));
     if (!q.exec()) {
         m_errore = q.lastError().text();
+        d.rollback();
         return false;
     }
-    return salvaStatoRt(matricolaRt, azzeramento + 1, 0);
+    if (!corpoServer.isEmpty()
+        && !accoda(QUuid::fromString(corpoServer.value("id").toString()), QStringLiteral("registra_chiusura"),
+                   {{"p", corpoServer}})) {
+        d.rollback();
+        return false;
+    }
+    if (!salvaStatoRt(matricolaRt, azzeramento + 1, 0)) {
+        d.rollback();
+        return false;
+    }
+    return d.commit();
 }
 
 // ---------------------------------------------------------------------------
@@ -602,7 +763,7 @@ QList<OperazioneInCoda> ArchivioLocale::codaDaInviare() const
 {
     QList<OperazioneInCoda> out;
     QSqlQuery q("select id, rpc, corpo, tentativi, ultimo_errore from coda_invio "
-                "where inviata_at is null order by seq", db());
+                "where inviata_at is null and da_verificare = 0 order by seq", db());
     while (q.next()) {
         out.append({QUuid::fromString(q.value(0).toString()), q.value(1).toString(),
                     QJsonDocument::fromJson(q.value(2).toString().toUtf8()).object(),
@@ -639,8 +800,50 @@ bool ArchivioLocale::segnaErrore(const QUuid& id, const QString& errore)
 
 int ArchivioLocale::contaDaInviare() const
 {
-    QSqlQuery q("select count(*) from coda_invio where inviata_at is null", db());
+    QSqlQuery q("select count(*) from coda_invio where inviata_at is null and da_verificare = 0", db());
     return q.next() ? q.value(0).toInt() : 0;
+}
+
+bool ArchivioLocale::segnaDaVerificare(const QUuid& id, const QString& errore)
+{
+    QSqlQuery q(db());
+    q.prepare("update coda_invio set da_verificare = 1, tentativi = tentativi + 1, ultimo_errore = ? where id = ?");
+    q.addBindValue(errore);
+    q.addBindValue(testoUuid(id));
+    if (!q.exec()) {
+        m_errore = q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() == 1;
+}
+
+QList<OperazioneInCoda> ArchivioLocale::operazioniDaVerificare() const
+{
+    QList<OperazioneInCoda> out;
+    QSqlQuery q("select id, rpc, corpo, tentativi, ultimo_errore from coda_invio "
+                "where inviata_at is null and da_verificare = 1 order by seq", db());
+    while (q.next()) {
+        out.append({QUuid::fromString(q.value(0).toString()), q.value(1).toString(),
+                    QJsonDocument::fromJson(q.value(2).toString().toUtf8()).object(),
+                    q.value(3).toInt(), q.value(4).toString()});
+    }
+    return out;
+}
+
+int ArchivioLocale::contaDaVerificare() const
+{
+    QSqlQuery q("select count(*) from coda_invio where inviata_at is null and da_verificare = 1", db());
+    return q.next() ? q.value(0).toInt() : 0;
+}
+
+int ArchivioLocale::rimettiInCoda()
+{
+    QSqlQuery q(db());
+    if (!q.exec("update coda_invio set da_verificare = 0 where inviata_at is null and da_verificare = 1")) {
+        m_errore = q.lastError().text();
+        return 0;
+    }
+    return q.numRowsAffected();
 }
 
 } // namespace mdr
