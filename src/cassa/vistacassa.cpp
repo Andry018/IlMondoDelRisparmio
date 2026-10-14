@@ -190,9 +190,14 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     connect(bOperatore, &QPushButton::clicked, this, &VistaCassa::cambiaOperatore);
 
     const auto stato = m_op.rt().stato();
-    log(stato.ok ? QStringLiteral("RT %1 pronto — azzeramento %2, ultimo documento %3")
-                       .arg(m_op.rt().matricola()).arg(stato.numeroAzzeramento).arg(stato.numeroDocumento)
-                 : QStringLiteral("RT non disponibile: %1").arg(stato.errore));
+    if (stato.ok) {
+        QString riga = QStringLiteral("RT %1 pronto — azzeramento %2").arg(m_op.rt().matricola()).arg(stato.numeroAzzeramento);
+        if (stato.numeroDocumento > 0)
+            riga += QStringLiteral(", ultimo documento %1").arg(stato.numeroDocumento);
+        log(riga);
+    } else {
+        log(QStringLiteral("RT non disponibile: %1").arg(stato.errore));
+    }
     aggiorna();
 }
 

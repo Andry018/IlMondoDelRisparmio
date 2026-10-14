@@ -1,5 +1,6 @@
 #include "dimostrativi.h"
 #include "finestracassa.h"
+#include "fiscal/customxml.h"
 #include "fiscal/simulatore.h"
 #include "impostazioni.h"
 #include "installazioneaggiornamento.h"
@@ -68,17 +69,36 @@ int main(int argc, char* argv[])
             archivio.salvaArticolo(a);
     }
 
-    // Finché non c'è il driver del Custom K3 F RT si lavora col simulatore, che riprende la
-    // numerazione salvata nell'archivio. Il collegamento scelto (USB o rete) è già nelle impostazioni.
-    mdr::StampanteSimulata rt;
-    const auto stato = archivio.statoRt(rt.matricola());
-    rt.riprendi(stato.azzeramento, stato.documento, stato.totaleGiorno);
+    // Registratore: Custom in rete col protocollo XML, altrimenti il simulatore (che riprende la
+    // numerazione salvata nell'archivio). Con USB per ora non c'è un driver.
+    std::unique_ptr<mdr::StampanteFiscale> rt;
+    QString registratore;
+    if (impostazioni.rtConnessione == mdr::ConnessioneRt::Rete && !impostazioni.rtIndirizzo.isEmpty()) {
+        auto custom = std::make_unique<mdr::StampanteCustomXml>(
+            std::make_unique<mdr::TrasportoHttpCustom>(impostazioni.rtIndirizzo),
+            mdr::ConfigurazioneCustom::daTesto(impostazioni.rtPagamenti, impostazioni.rtAliquote),
+            impostazioni.rtMatricola);
+        QString errore;
+        if (custom->leggiInformazioni(&errore, 3000) && custom->matricola() != impostazioni.rtMatricola) {
+            impostazioni.rtMatricola = custom->matricola();
+            impostazioni.salva(fileImpostazioni);
+        }
+        registratore = QStringLiteral("%1 %2 (%3)").arg(custom->nome(), custom->matricola(), impostazioni.descrizioneRt());
+        if (!errore.isEmpty())
+            registratore += QStringLiteral(" — all'avvio: %1").arg(errore);
+        rt = std::move(custom);
+    } else {
+        auto simulatore = std::make_unique<mdr::StampanteSimulata>();
+        const auto stato = archivio.statoRt(simulatore->matricola());
+        simulatore->riprendi(stato.azzeramento, stato.documento, stato.totaleGiorno);
+        registratore = QStringLiteral("%1 (%2)").arg(simulatore->nome(), simulatore->matricola());
+        if (impostazioni.rtConnessione == mdr::ConnessioneRt::Usb)
+            registratore += QStringLiteral(" — configurato %1: driver USB non disponibile, usare la rete")
+                                .arg(impostazioni.descrizioneRt());
+        rt = std::move(simulatore);
+    }
 
-    mdr::OperazioniCassa operazioni(archivio, rt, impostazioni.terminale);
-    QString registratore = QStringLiteral("%1 (%2)").arg(rt.nome(), rt.matricola());
-    if (impostazioni.rtConnessione != mdr::ConnessioneRt::Simulatore)
-        registratore += QStringLiteral(" — configurato: %1, driver non ancora disponibile")
-                            .arg(impostazioni.descrizioneRt());
+    mdr::OperazioniCassa operazioni(archivio, *rt, impostazioni.terminale);
     const QString info = QStringLiteral("Archivio: %1<br>Impostazioni: %2<br>Registratore: %3")
                              .arg(QDir::toNativeSeparators(fileArchivio), QDir::toNativeSeparators(fileImpostazioni),
                                   registratore);

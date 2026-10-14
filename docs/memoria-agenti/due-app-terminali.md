@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b738b062-466c-4096-a64b-2214d2d7c211
-  modified: 2026-10-08T12:56:12.466Z
+  modified: 2026-10-13T11:18:33.314Z
 ---
 
 Decided 2026-10-08: two separate executables sharing libraries — `mdr-cassa` (till only) and
@@ -16,8 +16,13 @@ by machine. Per-PC settings file holds terminal ID, RT address, server address.
 The fiscal printers (RT) have **both USB and Ethernet**. The driver needs a transport layer (USB/serial and TCP)
 chosen per PC in settings; Ethernet is what lets a backup PC take over a till's RT.
 Model (per user, "dovrebbe essere"): **Custom K3 F RT** — interfaces RS232, USB, Ethernet; protocols CUSTOM,
-CUSTOM DLL, XON/XOFF, XML Web Services; USB via Custom "Virtual COM". Protocol manual not public — must come
-from Custom/dealer. https://www.custom.biz/products/stampanti-fiscali/k3-f-rt
+CUSTOM DLL, XON/XOFF, XML Web Services; USB via Custom "Virtual COM". https://www.custom.biz/products/stampanti-fiscali/k3-f-rt
+Driver documentation found 2026-10-13 (user's Downloads, Custom-confidential, not to be copied into the repo):
+`0577200M000082_2.00.PDF` "WEB SERVICES Commands manual for 3rd generation fiscal devices" — XML via HTTP POST to
+`http://<ip>/xml/printer.htm` (printerFiscalReceipt/printerFiscalReport/printerCommand/printerFiscalDocument;
+printZReport, getDailyTotals, getVatTotalsOnDemand, beginRtDocAnnulment/Refund). Chosen route: no DLL.
+Not useful: CuCustomWndAPI (non-fiscal printers), CeFdll 2013 installer, Utility RT (Fusion PC RT),
+a fake "Custom.dll" from dll-files.com (OnlineFix game crack).
 
 **Why:** a crash in management must not kill the till, and any PC must be able to take over.
 **How to apply:** keep till code out of the management app and vice versa; shared widgets/login

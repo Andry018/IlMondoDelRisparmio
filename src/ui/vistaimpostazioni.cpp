@@ -1,6 +1,7 @@
 #include "vistaimpostazioni.h"
 
 #include "comune.h"
+#include "fiscal/customxml.h"
 #include "locale/aggiornatore.h"
 #include "locale/archiviolocale.h"
 #include "locale/sincronizzatore.h"
@@ -8,6 +9,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QFormLayout>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -74,13 +76,29 @@ VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni imposta
         m_rtIndirizzo = new QLineEdit(m_imp.rtIndirizzo, gruppoRt);
         m_rtIndirizzo->setObjectName("rt_indirizzo");
         m_rtIndirizzo->setPlaceholderText(QStringLiteral("es. 192.168.1.50"));
-        auto* nota = new QLabel(QStringLiteral("Il driver del Custom K3 F RT non è ancora disponibile: "
-                                               "finché manca si emette sul simulatore."), gruppoRt);
+        const auto conf = ConfigurazioneCustom::daTesto(m_imp.rtPagamenti, m_imp.rtAliquote);
+        m_rtPagamenti = new QLineEdit(conf.testoPagamenti(), gruppoRt);
+        m_rtPagamenti->setObjectName("rt_pagamenti");
+        m_rtPagamenti->setToolTip(QStringLiteral("Numero di ogni pagamento nella tabella programmata sul registratore "
+                                                 "(chiedere al rivenditore)"));
+        m_rtAliquote = new QLineEdit(m_imp.rtAliquote, gruppoRt);
+        m_rtAliquote->setObjectName("rt_aliquote");
+        m_rtAliquote->setPlaceholderText(QStringLiteral("vuoto = IVA del reparto; es. 2200=1; 1000=2; 400=3"));
+        m_rtAliquote->setToolTip(QStringLiteral("Indice IVA del registratore per ogni aliquota: permette di stampare "
+                                                "la quantità vera sulle righe"));
+        auto* prova = new QPushButton(QStringLiteral("Prova collegamento"), gruppoRt);
+        prova->setObjectName("rt_prova");
+        auto* nota = new QLabel(QStringLiteral("Custom K3-F RT in rete, servizio XML attivo. Vale dal riavvio."), gruppoRt);
+        nota->setToolTip(QStringLiteral("Con il collegamento USB, per ora, si emette sul simulatore."));
         nota->setWordWrap(true);
         formRt->addRow(QStringLiteral("Collegamento"), m_rtConnessione);
         formRt->addRow(QStringLiteral("Porta USB"), m_rtPorta);
         formRt->addRow(QStringLiteral("Indirizzo IP"), m_rtIndirizzo);
+        formRt->addRow(QStringLiteral("Pagamenti RT"), m_rtPagamenti);
+        formRt->addRow(QStringLiteral("Aliquote RT"), m_rtAliquote);
+        formRt->addRow(QString(), prova);
         formRt->addRow(nota);
+        connect(prova, &QPushButton::clicked, this, &VistaImpostazioni::provaRegistratore);
         sinistra->addWidget(gruppoRt);
         connect(m_rtConnessione, &QComboBox::currentIndexChanged, this, &VistaImpostazioni::aggiornaCampiRt);
         aggiornaCampiRt();
@@ -260,8 +278,7 @@ void VistaImpostazioni::salva()
                                  QStringLiteral("Indicare la porta COM del registratore, es. COM3."));
             return;
         }
-        if (connessione == ConnessioneRt::Rete
-            && QHostAddress(indirizzo).protocol() != QAbstractSocket::IPv4Protocol) {
+        if (connessione == ConnessioneRt::Rete && !indirizzoRtValido(indirizzo)) {
             QMessageBox::warning(this, QStringLiteral("Impostazioni"),
                                  QStringLiteral("Indirizzo IP del registratore non valido, es. 192.168.1.50."));
             return;
@@ -276,6 +293,13 @@ void VistaImpostazioni::salva()
     m_imp.rtConnessione = connessione;
     m_imp.rtPorta = porta;
     m_imp.rtIndirizzo = indirizzo;
+    if (m_rtPagamenti) {
+        const auto conf = ConfigurazioneCustom::daTesto(m_rtPagamenti->text(), m_rtAliquote->text());
+        m_imp.rtPagamenti = conf.testoPagamenti();
+        m_imp.rtAliquote = conf.testoAliquote();
+        m_rtPagamenti->setText(m_imp.rtPagamenti);
+        m_rtAliquote->setText(m_imp.rtAliquote);
+    }
     if (serverCambiato)
         m_imp.refreshToken.clear();   // la sessione vale solo per il server su cui è stata aperta
     if (m_terminale)
@@ -292,6 +316,43 @@ void VistaImpostazioni::aggiornaCampiRt()
     const auto c = static_cast<ConnessioneRt>(m_rtConnessione->currentData().toInt());
     m_rtPorta->setEnabled(c == ConnessioneRt::Usb);
     m_rtIndirizzo->setEnabled(c == ConnessioneRt::Rete);
+    m_rtPagamenti->setEnabled(c == ConnessioneRt::Rete);
+    m_rtAliquote->setEnabled(c == ConnessioneRt::Rete);
+}
+
+bool VistaImpostazioni::indirizzoRtValido(const QString& indirizzo)
+{
+    // "192.168.1.50" oppure "192.168.1.50:8080".
+    const auto parti = indirizzo.split(QLatin1Char(':'));
+    if (parti.size() > 2 || QHostAddress(parti[0]).protocol() != QAbstractSocket::IPv4Protocol)
+        return false;
+    if (parti.size() == 2) {
+        const int porta = parti[1].toInt();
+        return porta > 0 && porta < 65536;
+    }
+    return true;
+}
+
+void VistaImpostazioni::provaRegistratore()
+{
+    const QString indirizzo = m_rtIndirizzo->text().trimmed();
+    if (!indirizzoRtValido(indirizzo)) {
+        QMessageBox::warning(this, QStringLiteral("Registratore"),
+                             QStringLiteral("Indirizzo IP del registratore non valido, es. 192.168.1.50."));
+        return;
+    }
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    StampanteCustomXml rt(std::make_unique<TrasportoHttpCustom>(indirizzo), ConfigurazioneCustom::predefinita());
+    QString errore;
+    const bool ok = rt.leggiInformazioni(&errore, 5000);
+    QGuiApplication::restoreOverrideCursor();
+    if (ok) {
+        log(QStringLiteral("Registratore %1 raggiungibile").arg(rt.matricola()));
+        QMessageBox::information(this, QStringLiteral("Registratore"), rt.descrizioneInformazioni());
+    } else {
+        log(QStringLiteral("Registratore %1: %2").arg(indirizzo, errore));
+        QMessageBox::warning(this, QStringLiteral("Registratore"), errore);
+    }
 }
 
 void VistaImpostazioni::accedi()

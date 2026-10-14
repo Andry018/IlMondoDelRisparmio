@@ -633,7 +633,7 @@ QList<VenditaLocale> ArchivioLocale::leggiVendite(const QString& where, const QV
                                        (select c.da_verificare from coda_invio c where c.id = vendite_locali.id),
                                        (select c.ultimo_errore from coda_invio c where c.id = vendite_locali.id)
                                   from vendite_locali where %1
-                                 order by data_ora desc, rt_numero desc)").arg(where));
+                                 order by data_ora desc, rt_azzeramento desc, rt_numero desc)").arg(where));
     for (const auto& v : valori)
         q.addBindValue(v);
     if (!q.exec()) {

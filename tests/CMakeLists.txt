@@ -8,6 +8,7 @@ endfunction()
 
 mdr_test(test_core)
 mdr_test(test_locale)
+mdr_test(test_custom)
 
 mdr_test(test_sync)
 mdr_test(test_aggiornamento)

@@ -59,6 +59,9 @@ Impostazioni Impostazioni::carica(const QString& file)
     i.rtConnessione = daChiave(s.value("rt/connessione").toString());
     i.rtPorta = s.value("rt/porta").toString();
     i.rtIndirizzo = s.value("rt/indirizzo").toString();
+    i.rtMatricola = s.value("rt/matricola").toString();
+    i.rtPagamenti = s.value("rt/pagamenti").toString();
+    i.rtAliquote = s.value("rt/aliquote").toString();
     return i;
 }
 
@@ -75,6 +78,9 @@ void Impostazioni::salva(const QString& file) const
     s.setValue("rt/connessione", chiave(rtConnessione));
     s.setValue("rt/porta", rtPorta);
     s.setValue("rt/indirizzo", rtIndirizzo);
+    s.setValue("rt/matricola", rtMatricola);
+    s.setValue("rt/pagamenti", rtPagamenti);
+    s.setValue("rt/aliquote", rtAliquote);
 }
 
 } // namespace mdr

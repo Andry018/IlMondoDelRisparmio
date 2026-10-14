@@ -46,8 +46,9 @@ Schede della cassa (Alt+1…3):
   mentre si serve un altro cliente; chiuso il secondo si torna al primo. F12 *Verifica prezzo*:
   mostra il prezzo dell'articolo letto senza aggiungerlo.
 - **Vendite** — giornale per giorno, dettaglio, *Annulla vendita* e *Reso* (quantità per riga).
-- **Impostazioni** — terminale, registratore (simulatore, USB con porta COM, rete con indirizzo IP),
-  server Supabase e chiave, accesso, sincronizzazione, reparti.
+- **Impostazioni** — terminale, registratore (simulatore oppure Custom RT in rete con indirizzo IP,
+  codici pagamento e aliquote dell'RT, *Prova collegamento*), server Supabase e chiave, accesso,
+  sincronizzazione, reparti.
 
 Senza server la cassa lavora in locale: vendite, resi e annulli restano in coda e partono
 alla prima sincronizzazione riuscita.
@@ -72,6 +73,21 @@ il magazziniere Magazzino e Articoli, Operatori solo l'amministratore):
   **Operatori** (ruolo, codice, PIN), **Negozio** (dati per le fatture).
 
 Senza server la gestione mostra solo gli articoli dell'archivio locale.
+
+### Registratore Custom (driver XML)
+
+Con *Rete* la cassa usa il driver `src/fiscal/customxml.*`: comandi XML in HTTP POST su
+`http://<ip-rt>/xml/printer.htm` (Custom RT di 3a generazione, K3-F RT compresa; servizio XML
+attivo sull'RT). Numero di documento e di azzeramento vengono dal registratore; alla Z i totali
+sono letti dall'RT (`getDailyTotals`) prima dell'azzeramento. Se la risposta a uno scontrino si
+perde, il driver chiede all'RT l'ultimo documento per capire se è uscito, invece di ristamparlo.
+
+Senza la stampante, un registratore finto che risponde allo stesso modo e stampa a video gli scontrini:
+
+```powershell
+python strumentit-fintot_finto.py     # poi in cassa: Rete, indirizzo 127.0.0.1:8099, riavvio
+$env:MDR_RT_FINTO = "127.0.0.1:8099"; ctest --preset debug -R test_custom   # prova anche l'HTTP vero
+```
 
 ### Server di sviluppo
 

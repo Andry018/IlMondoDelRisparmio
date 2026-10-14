@@ -39,6 +39,8 @@ private:
     void accedi();
     void esci();
     void aggiornaCampiRt();
+    void provaRegistratore();
+    static bool indirizzoRtValido(const QString& indirizzo);
 
     Postazione m_postazione;
     Impostazioni m_imp;
@@ -50,6 +52,8 @@ private:
     QComboBox* m_rtConnessione = nullptr; // solo cassa
     QLineEdit* m_rtPorta = nullptr;
     QLineEdit* m_rtIndirizzo = nullptr;
+    QLineEdit* m_rtPagamenti = nullptr;
+    QLineEdit* m_rtAliquote = nullptr;
     QLineEdit* m_server = nullptr;
     QLineEdit* m_apiKey = nullptr;
     QLineEdit* m_email = nullptr;

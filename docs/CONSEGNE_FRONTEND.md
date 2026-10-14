@@ -1,6 +1,6 @@
 # Passaggio di consegne — frontend (cassa e gestione)
 
-Aggiornato l'8/10/2026, prima del cambio di PC. Branch: `frontend/cassa`.
+Aggiornato il 14/10/2026, prima del cambio di PC. Branch: `frontend/cassa`.
 
 ## Ruoli (decisi dall'utente)
 
@@ -22,13 +22,14 @@ Il client è diviso in due programmi (struttura della sessione due-app unita qui
 | Sessione col server (login, rinnovo una volta sola, richieste) | `src/locale/clientserver.*` | fatto, condivisa da sync e schede |
 | Sincronizzazione (coda, articoli e operatori con margine 5 min, rifiutate "da verificare") | `src/locale/sincronizzatore.*` | fatto, provata con server vero |
 | Cassa: operatore con codice e PIN, chiusura Z inviata, controllo orologio/terminale | `src/cassa/*` | fatto, `test_cassa_server` |
-| Totali di chiusura dal registratore (`TotaliChiusura`) | `src/fiscal/stampantefiscale.h` | simulatore li dà; il driver Custom K3F dovrà riempirli dalla Z |
+| Totali di chiusura dal registratore (`TotaliChiusura`) | `src/fiscal/stampantefiscale.h` | dal simulatore e dal driver Custom (`getDailyTotals` prima della Z) |
+| Driver Custom RT (XML su HTTP, `/xml/printer.htm`) | `src/fiscal/customxml.*`, `test_custom` | fatto e provato col registratore finto `strumenti/rt-finto`; **da provare sull'RT vero in modalità addestramento** |
 | Gestione: 11 schede sulle API | `src/gestione/*` | fatto, `test_gestione_server` |
 | Carico da fattura passiva (`proposta_carico`) | `src/gestione/vistamagazzino.cpp` | fatto |
 | Aggiornamento automatico (cassa e gestione) | `src/locale/aggiornatore.*`, `installazione/aggiorna.ps1` | fatto |
 | Server di sviluppo | `strumenti/server-sviluppo/` | PostgreSQL + PostgREST v16.4 + gateway |
 
-Test: 8 suite C++ verdi; `test_gestione_server` e `test_cassa_server` con il server di sviluppo acceso.
+Test: 9 suite C++ verdi (`test_custom` anche contro il registratore finto con `MDR_RT_FINTO`); `test_gestione_server` e `test_cassa_server` con il server di sviluppo acceso.
 
 ## Funzioni della cassa (richieste dall'utente)
 
@@ -42,8 +43,7 @@ Test: 8 suite C++ verdi; `test_gestione_server` e `test_cassa_server` con il ser
 
 Custom **Silk 15"** (custom.biz/products/windows-linux/silk-windows): 1024×768 4:3, touch
 capacitivo, Celeron J1900, 4 GB, probabilmente **Windows 10** (Qt 6.8 richiede 1809+; con
-Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: secondo il branch
-due-app è un **Custom K3 F RT** (USB + Ethernet) — manca il driver (serve il manuale protocolli).
+Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Custom K3-F RT** (USB + Ethernet), driver XML in rete in `src/fiscal/customxml.*`.
 
 ## Aggiornamento automatico
 
@@ -58,15 +58,45 @@ due-app è un **Custom K3 F RT** (USB + Ethernet) — manca il driver (serve il 
 
 ## Prossimi passi
 
-1. Driver del registratore **Custom K3 F RT** (serve il manuale dei protocolli): implementa
-   `StampanteFiscale`, con `TotaliChiusura` letti dalla Z.
-   Il PDF Custom 057D100M000024 ("Scambio importo") NON è quel manuale: riguarda il POS bancario
-   collegato alla RT (CustomPay, protocollo 17, tasto 909). Conferma che la K3-F RT è di 3ª generazione.
-   Funzione futura possibile: pagamento con carta con l'importo passato in automatico al POS dalla RT.
+1. Driver **Custom K3-F RT**: scritto dal manuale "WEB SERVICES – Commands manual for 3rd generation
+   fiscal devices" (Custom 0577200M000082 rev. 2.00, in `Downloads` dell'utente; documento riservato
+   Custom: **non va copiato nel repository**). Da verificare sull'RT vero col rivenditore, in addestramento:
+   - servizio XML attivo e indirizzo IP fisso dell'RT; *Prova collegamento* in Impostazioni;
+   - **codici pagamento** (paymentType 1-30 dipendono dalla programmazione; predefiniti da confermare:
+     contanti=1, carta/bancomat/satispay=2, buono pasto=3, non riscosso=4);
+   - **aliquote**: senza mappa si usa l'IVA del reparto (reparti dell'RT = reparti del gestionale) e le righe
+     con più pezzi escono come prezzo di riga + riga "3 x 1,20"; con la mappa (`2200=1; 1000=2`) si manda
+     `idVat` e la quantità vera (formato intero: da verificare);
+   - reso (`beginRtDocRefund` + `printRecItem`) e annullo (`beginRtDocAnnulment` + `endFiscalReceipt`): la
+     struttura esatta non è nel manuale, va confermata; prima il driver verifica con `checkOnly="1"`;
+   - significato di `nClose` / `zSetNumber` (si assume: zSetNumber = Z fatte, documenti nella Z successiva);
+   - totali di `getDailyTotals` (si assume: receiptsTot comprende i documenti poi annullati).
+   USB: non supportato (il manuale XML è solo per la rete) → resta il simulatore.
 2. Vista `v_bolli_trimestrali` del backend (bollo per l'F24) nella scheda Fatture, quando è committata.
 3. Prima pubblicazione 0.3.0 con `scripts/pubblica_aggiornamento.ps1` (serve `gh auth login` e il token
    o il repository pubblico per le release).
-4. Importazione dati da SystemApp (in attesa del tipo di database).
+4. **Importazione dati da SystemApp** (iniziata il 14/10/2026). I database sono SQL Server 2014
+   (istanza `SQLSYSTEMAPP`), copiati dall'utente su una chiavetta USB (D:): `D:\SApp_Store_DATI`
+   (`MDR_Dati` = anagrafiche; `MDR_2020`…`MDR_2026` = movimenti per anno; `MDR_Fatt_Elett`, ecc.) e
+   `D:\SApp_Cash_DATI` (`SAPP_*`, la cassa). **Dati reali: mai nel repository né su GitHub.**
+   - Sul PC vecchio: SQL Server LocalDB 2025 (`(localdb)\SystemApp`), `MDR_Dati` collegato da una copia
+     in `C:\Users\andre\SystemApp_import` (dalla chiavetta l'aggancio fallisce, errore 21). Sul PC nuovo
+     va rifatto: winget non installa Express (404 / serve admin) → scaricare LocalDB con
+     `SQL2025-SSEI-Expr.exe /ACTION=Download /MEDIATYPE=LocalDB /QUIET /MEDIAPATH=<cartella>`, poi
+     `msiexec /i SqlLocalDB.msi IACCEPTSQLLOCALDBLICENSETERMS=YES` (UAC), `SqlLocalDB create SystemApp -s`,
+     copiare `.mdf` + `.ldf` sul disco interno e `CREATE DATABASE MDR_Dati ON (FILENAME=…),(FILENAME=…) FOR ATTACH`.
+     Da PowerShell basta `System.Data.SqlClient` (non serve sqlcmd).
+   - Tabelle utili in `MDR_Dati` (136 tabelle): `Articoli` (14.446: fcodart, fdescr, fcosto, fprezzo,
+     fricarico, fiva, fum, id_livello_1..3, frepcas, flag_eliminato_logicamente, flag_blocca_vendita),
+     `Alternativi` (8.821: fcodalt → fcodart, probabilmente i barcode), `Articoli_Listini_Vendita`,
+     `Articoli_Sco_Min_Max_Ubicaz` (scorte min/max, prezzo cassa), `Articoli_Puntivendita` (fornitore
+     abituale `ID_anag_clifor`), `Anag_CliFor` (90 clienti/fornitori), `TAB_Iva` (5, con natura),
+     `TAB_Livello_Articoli_1` (69 categorie), `TAB_Operatori_SFX` (20; colonna `pass`: non leggerla),
+     `TAB_Tipi_Pagamenti`, `TAB_Um`. Le giacenze non sono in `MDR_Dati`: cercarle in `MDR_2026`.
+   - Prossimo passo: mappatura SystemApp → tabelle Supabase (articoli, barcode, reparti, fornitori, clienti,
+     IVA), poi script di importazione provato sul server di sviluppo. Chiesto all'utente se collegare
+     anche `MDR_2026` per le giacenze.
+   - Da ricordare all'utente: cancellare `D:\MDR_import` (copia fallita) e `Downloads\custom\Custom.dll` (falso).
 
 ## Note per lavorare con l'utente
 
