@@ -38,6 +38,8 @@ Test: 9 suite C++ verdi (`test_custom` anche contro il registratore finto con `M
   `src/desktop/risorse/euro/CREDITI.txt`), resto in grande.
 - **Due scontrini paralleli** (F11), con ritorno automatico al primo; **Verifica prezzo** (F12).
 - Reparti sopra, tastierino sotto; layout verificato a **1024×768**.
+- Tasti **Shopper 0,05 / 0,10** (articoli 8000000000001/2 come in SystemApp, altrimenti articolo libero al 22%) e
+  **Ristampa** ultimo scontrino (Ctrl+P; sul Custom `printDuplicateReceipt`, da verificare sull'RT vero).
 
 ## POS
 

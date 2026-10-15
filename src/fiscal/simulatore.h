@@ -19,6 +19,7 @@ public:
     EsitoFiscale annullo(const RiferimentoDocumento& rif) override;
     EsitoFiscale chiusuraGiornaliera() override;
     EsitoFiscale aperturaCassetto() override;
+    EsitoFiscale ristampaUltimoDocumento() override;
 
     // Riprende la numerazione salvata (dopo un riavvio del programma). Con documenti già emessi
     // nell'azzeramento il simulatore non li conosce: alla Z dichiara i totali non disponibili.
@@ -43,6 +44,7 @@ private:
     QMap<int, Documento> m_vendite;   // documenti di vendita dell'azzeramento, per numero
     TotaliChiusura m_totali;
     bool m_totaliCompleti = true;
+    QString m_ultimoDocumento;   // riga di giornale dell'ultimo documento, per la copia
 };
 
 } // namespace mdr

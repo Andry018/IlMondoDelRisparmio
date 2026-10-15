@@ -45,6 +45,11 @@ public:
     // Mostra il prezzo senza aggiungere l'articolo. Senza codice: il prossimo articolo letto
     // viene solo mostrato.
     void verificaPrezzo(const QString& codice = {});
+    // Shopper (0 = 0,05 €, 1 = 0,10 €): l'articolo col suo codice, o un articolo libero se manca.
+    // Un numero digitato prima (es. 3) è la quantità.
+    void vendiShopper(int indice);
+    // Copia dell'ultimo documento emesso (Ctrl+P).
+    void ristampaUltimo();
 
 signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati
@@ -88,5 +93,13 @@ private:
 // Prezzo digitato sul tastierino: con la virgola è in euro ("2,50"), senza è in
 // centesimi come sui registratori ("250" = 2,50).
 std::optional<Money> prezzoDaTastierino(const QString& testo);
+
+// Shopper venduti alla cassa: codici degli articoli in archivio (gli stessi di SystemApp).
+struct Shopper {
+    QString etichetta;
+    QString codice;
+    Money prezzo;
+};
+const QList<Shopper>& shopperCassa();
 
 } // namespace mdr

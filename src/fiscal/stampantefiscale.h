@@ -53,6 +53,9 @@ public:
     virtual EsitoFiscale annullo(const RiferimentoDocumento& rif) = 0;
     virtual EsitoFiscale chiusuraGiornaliera() = 0;   // chiusura Z + invio corrispettivi
     virtual EsitoFiscale aperturaCassetto() = 0;
+    // Copia dell'ultimo documento emesso: per legge non è un secondo documento fiscale, ma una
+    // stampa non fiscale con le righe prese dal giornale elettronico.
+    virtual EsitoFiscale ristampaUltimoDocumento() = 0;
 };
 
 } // namespace mdr

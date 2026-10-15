@@ -40,6 +40,9 @@ QList<Articolo> articoliDimostrativi()
     c.append(articolo("2002", "800000000005", "Biscotti frollini 700g",   "2", 1000, 229));
     c.append(articolo("3001", "800000000006", "Latte intero 1L",          "3",  400, 135));
     c.append(articolo("3002", "800000000007", "Pane casereccio",          "3",  400, 320, UnitaMisura::Kg));
+    // Shopper con i codici usati in negozio (tasti Shopper della cassa).
+    c.append(articolo("8000000000001", "800000000010", "SHOPPER 0.05", "1", 2200, 5));
+    c.append(articolo("8000000000002", "800000000011", "SHOPPER 0.10", "1", 2200, 10));
     return c;
 }
 

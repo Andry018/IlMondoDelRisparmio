@@ -64,6 +64,11 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
         "QPushButton:checked { background: #1565c0; color: white; font-weight: bold; }"));
     connect(m_tastoVerifica, &QPushButton::clicked, this, [this] { verificaPrezzo(); });
     scontrini->addWidget(m_tastoVerifica, 1);
+    auto* ristampa = pulsanteComando(QStringLiteral("Ristampa"), QKeySequence(Qt::CTRL | Qt::Key_P), this);
+    ristampa->setObjectName("ristampa");
+    ristampa->setToolTip(QStringLiteral("Copia dell'ultimo scontrino emesso (Ctrl+P)"));
+    connect(ristampa, &QPushButton::clicked, this, &VistaCassa::ristampaUltimo);
+    scontrini->addWidget(ristampa, 1);
     sinistra->addLayout(scontrini);
 
     // F11: passa all'altro scontrino.
@@ -302,10 +307,19 @@ void VistaCassa::aggiornaReparti()
         delete item->widget();
         delete item;
     }
-    const auto reparti = m_archivio.reparti();
+    // Solo i reparti al 22% e al 5%: gli articoli hanno già la loro IVA, i tasti servono per gli
+    // articoli liberi. Sotto, i tasti shopper.
+    QList<Reparto> reparti;
+    for (const int aliquota : {500, 2200})
+        for (const auto& r : m_archivio.reparti())
+            if (r.iva.basisPoints == aliquota && r.iva.natura.isEmpty()) {
+                reparti << r;
+                break;
+            }
     for (int i = 0; i < reparti.size(); ++i) {
         const auto& r = reparti[i];
-        auto* b = new QPushButton(QStringLiteral("Rep. %1\n%2").arg(r.numero).arg(r.descrizione), this);
+        auto* b = new QPushButton(QStringLiteral("Reparto\nIVA %1%").arg(r.iva.basisPoints / 100), this);
+        b->setToolTip(QStringLiteral("Reparto %1 del registratore: %2").arg(r.numero).arg(r.descrizione));
         b->setObjectName(QStringLiteral("reparto_%1").arg(r.numero));
         b->setFocusPolicy(Qt::NoFocus);
         b->setMinimumSize(60, 44);
@@ -315,6 +329,22 @@ void VistaCassa::aggiornaReparti()
                                         "QPushButton:pressed { background: #8f3b10; }"));
         m_grigliaReparti->addWidget(b, i / 2, i % 2);
         connect(b, &QPushButton::clicked, this, [this, n = r.numero] { vendiReparto(n); });
+    }
+
+    // Shopper: un tocco e il sacchetto è nello scontrino ("3" prima = 3 sacchetti).
+    const int rigaShopper = (reparti.size() + 1) / 2;
+    for (int i = 0; i < shopperCassa().size(); ++i) {
+        auto* b = new QPushButton(shopperCassa()[i].etichetta, this);
+        b->setObjectName(QStringLiteral("shopper_%1").arg(i));
+        b->setFocusPolicy(Qt::NoFocus);
+        b->setMinimumSize(60, 44);
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        b->setFont(fontGrande(font(), 11, true));
+        b->setStyleSheet(QStringLiteral("QPushButton { background: #00796b; color: white; border: 1px solid #004d40;"
+                                        " border-radius: 4px; }"
+                                        "QPushButton:pressed { background: #004d40; }"));
+        m_grigliaReparti->addWidget(b, rigaShopper + i / 2, i % 2);
+        connect(b, &QPushButton::clicked, this, [this, i] { vendiShopper(i); });
     }
 }
 
@@ -385,6 +415,60 @@ bool VistaCassa::vendiReparto(int numero, std::optional<Money> prezzo, const QSt
     aggiorna();
     m_righe->selectRow(m_righe->rowCount() - 1);
     return true;
+}
+
+const QList<Shopper>& shopperCassa()
+{
+    static const QList<Shopper> elenco{
+        {QStringLiteral("Shopper 0,05"), QStringLiteral("8000000000001"), Money::fromCents(5)},
+        {QStringLiteral("Shopper 0,10"), QStringLiteral("8000000000002"), Money::fromCents(10)},
+    };
+    return elenco;
+}
+
+void VistaCassa::vendiShopper(int indice)
+{
+    if (indice < 0 || indice >= shopperCassa().size())
+        return;
+    const Shopper& s = shopperCassa()[indice];
+    // Numero digitato prima del tasto: quanti sacchetti.
+    const QString digitato = m_codice->text().trimmed();
+    int quanti = 1;
+    if (!digitato.isEmpty()) {
+        bool ok = false;
+        quanti = digitato.toInt(&ok);
+        if (!ok || quanti <= 0 || quanti > 99) {
+            messaggio(QStringLiteral("Per gli shopper digitare solo il numero di sacchetti (1-99)"), true);
+            return;
+        }
+    }
+    m_codice->clear();
+    if (m_archivio.cerca(s.codice)) {
+        leggi(QStringLiteral("%1*%2").arg(quanti).arg(s.codice));
+        return;
+    }
+    // Articolo non in archivio: articolo libero sul primo reparto al 22%.
+    for (const auto& r : m_archivio.reparti()) {
+        if (r.iva.basisPoints == 2200) {
+            if (vendiReparto(r.numero, s.prezzo, QStringLiteral("SHOPPER")) && quanti > 1) {
+                carr().quantitaRiga(carr().righe().size() - 1, Quantita::pezzi(quanti));
+                aggiorna();
+            }
+            return;
+        }
+    }
+    messaggio(QStringLiteral("Shopper: articolo %1 non in archivio e nessun reparto al 22%").arg(s.codice), true);
+}
+
+void VistaCassa::ristampaUltimo()
+{
+    const auto esito = m_op.ristampaUltimo();
+    if (!esito.ok) {
+        messaggio(QStringLiteral("Ristampa non riuscita: %1").arg(esito.errore), true);
+        return;
+    }
+    log(QStringLiteral("Copia dell'ultimo scontrino stampata"));
+    messaggio(QStringLiteral("Copia dell'ultimo scontrino stampata"));
 }
 
 void VistaCassa::articoloLibero()

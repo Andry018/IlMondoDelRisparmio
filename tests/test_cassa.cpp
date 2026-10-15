@@ -107,17 +107,22 @@ private slots:
         QCOMPARE(cassa()->carrello().righe()[0].iva.basisPoints, 2200);
         QVERIFY(m_finestra->findChild<QLineEdit*>("codice")->text().isEmpty());
 
-        // Senza virgola sono centesimi, come sui registratori; X moltiplica: 3 × 1,20 al 10%.
+        // Senza virgola sono centesimi, come sui registratori; X moltiplica: 3 × 1,20 al 5% (reparto 4).
         for (const auto* t : {"tasto_3", "tasto_X", "tasto_1", "tasto_2", "tasto_0"})
             clic(t);
-        clic("reparto_2");
+        clic("reparto_4");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
         QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(3));
         QCOMPARE(cassa()->carrello().righe()[1].prezzoUnitario.cents(), 120);
-        QCOMPARE(cassa()->carrello().righe()[1].iva.basisPoints, 1000);
+        QCOMPARE(cassa()->carrello().righe()[1].iva.basisPoints, 500);
+
+        // A schermo solo i reparti al 22% e al 5% (gli altri restano in Articolo libero, F2).
+        QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_2"));
+        QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_3"));
+        QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_5"));
 
         // Reparto senza prezzo: non aggiunge nulla.
-        clic("reparto_3");
+        clic("reparto_1");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
 
         // Codice articolo dal tastierino + Invio; ← corregge.
@@ -288,6 +293,52 @@ private slots:
         QVERIFY(testo("messaggio").contains("1,35"));
         cassa()->leggi("3001");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
+    }
+
+    void shopper()
+    {
+        // Tasto: l'articolo shopper del catalogo.
+        clic("shopper_1");
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        QCOMPARE(cassa()->carrello().righe()[0].descrizione, QStringLiteral("SHOPPER 0.10"));
+        QCOMPARE(cassa()->carrello().totale().cents(), 10);
+        // "3" sul tastierino e poi il tasto: 3 sacchetti.
+        clic("tasto_3");
+        clic("shopper_0");
+        QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(3));
+        QCOMPARE(cassa()->carrello().totale().cents(), 25);
+        // Testo che non è un numero: non vende e lo dice.
+        cassa()->findChild<QLineEdit*>("codice")->setText("abc");
+        clic("shopper_0");
+        QCOMPARE(cassa()->carrello().righe().size(), 2);
+        QVERIFY(testo("messaggio").contains("numero di sacchetti"));
+
+        // Articolo non più in vendita: articolo libero "SHOPPER" a 0,05 sul reparto al 22%.
+        auto a = m_archivio->cerca("8000000000001");
+        QVERIFY(a);
+        a->attivo = false;
+        QVERIFY(m_archivio->salvaArticolo(*a));
+        cassa()->findChild<QLineEdit*>("codice")->setText("2");
+        clic("shopper_0");
+        const auto& r = cassa()->carrello().righe().last();
+        QCOMPARE(r.descrizione, QStringLiteral("SHOPPER"));
+        QCOMPARE(r.iva.basisPoints, 2200);
+        QCOMPARE(r.prezzoUnitario.cents(), 5);
+        QCOMPARE(r.quantita, Quantita::pezzi(2));
+    }
+
+    void ristampa_ultimo_scontrino()
+    {
+        // Prima di qualsiasi documento non c'è niente da ristampare.
+        clic("ristampa");
+        QVERIFY(testo("messaggio").contains("Ristampa non riuscita"));
+        cassa()->leggi("1001");
+        cassa()->paga(TipoPagamento::Carta);
+        clic("ristampa");
+        QVERIFY2(testo("messaggio").contains("Copia"), qPrintable(testo("messaggio")));
+        QVERIFY(m_rt->giornale().last().startsWith("COPIA"));
+        QVERIFY(m_rt->giornale().last().contains("1,89"));
+        QVERIFY(cassa()->carrello().vuoto());   // la copia non tocca lo scontrino
     }
 
     void operatore_richiesto_se_configurato()

@@ -93,6 +93,12 @@ def riferimento(el):
 
 def scontrino(elementi):
     apertura = elementi[0]
+    if apertura.tag == "printDuplicateReceipt":
+        if not rt.documenti:
+            return errore(5, "nessun documento da ristampare")
+        (z, numero), doc = max(rt.documenti.items())
+        print(f"--- COPIA (non fiscale) di {doc['tipo'].upper()} {z:04d}-{numero:04d}  TOTALE {doc['totale'] / 100:.2f}")
+        return risposta(info={"lastCommand": "printDuplicateReceipt"})
     if apertura.tag in ("beginRtDocRefund", "beginRtDocAnnulment"):
         chiave = riferimento(apertura)
         doc = rt.documenti.get(chiave)

@@ -511,6 +511,14 @@ QByteArray xmlChiusuraZ()
     return xml.fine();
 }
 
+QByteArray xmlRistampa()
+{
+    // printDuplicateReceipt è un comando di printerFiscalReceipt; da solo, fuori da uno scontrino.
+    ScrittoreXml xml(QStringLiteral("printerFiscalReceipt"));
+    xml.comando(QStringLiteral("printDuplicateReceipt"));
+    return xml.fine();
+}
+
 // --- Driver ------------------------------------------------------------------------------------
 
 StampanteCustomXml::StampanteCustomXml(std::unique_ptr<TrasportoRt> trasporto, ConfigurazioneCustom conf,
@@ -764,6 +772,14 @@ EsitoFiscale StampanteCustomXml::chiusuraGiornaliera()
         m_azzeramento = azzeramento > 0 ? azzeramento + 1 : 0;
     }
     return e;
+}
+
+EsitoFiscale StampanteCustomXml::ristampaUltimoDocumento()
+{
+    const auto s = invia(xmlRistampa(), kAttesaDocumento);
+    if (!s.ok)
+        return {false, s.errore};
+    return {true};
 }
 
 EsitoFiscale StampanteCustomXml::aperturaCassetto()

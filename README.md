@@ -44,7 +44,9 @@ Schede della cassa (Alt+1…3):
   F7 bancomat, F8 annulla scontrino, F10 riepilogo e chiusura Z.
   Due scontrini paralleli (tasti *Scontrino 1/2* o F11): uno resta in attesa con righe e acconti
   mentre si serve un altro cliente; chiuso il secondo si torna al primo. F12 *Verifica prezzo*:
-  mostra il prezzo dell'articolo letto senza aggiungerlo.
+  mostra il prezzo dell'articolo letto senza aggiungerlo. A schermo solo i reparti al 22% e al 5% (gli altri da F2); sotto, i tasti *Shopper 0,05* e *Shopper 0,10* (articoli
+  8000000000001 e 8000000000002, come in SystemApp; "3" prima del tasto = 3 sacchetti). *Ristampa* (Ctrl+P):
+  copia non fiscale dell'ultimo scontrino.
 - **Vendite** — giornale per giorno, dettaglio, *Annulla vendita* e *Reso* (quantità per riga).
 - **Impostazioni** — terminale, registratore (simulatore oppure Custom RT in rete con indirizzo IP,
   codici pagamento e aliquote dell'RT, *Prova collegamento*), server Supabase e chiave, accesso,

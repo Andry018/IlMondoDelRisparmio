@@ -87,6 +87,7 @@ QByteArray xmlReso(const Carrello& righeRese, const RiferimentoDocumento& rif, c
 QByteArray xmlAnnullo(const RiferimentoDocumento& rif, const QString& matricolaPropria, bool soloVerifica);
 QByteArray xmlComando(const QString& tag, const QList<QPair<QString, QString>>& attributi = {});
 QByteArray xmlChiusuraZ();
+QByteArray xmlRistampa();
 
 // Driver del registratore Custom con il protocollo XML. I numeri di documento e di
 // azzeramento sono quelli restituiti dal registratore.
@@ -108,6 +109,7 @@ public:
     EsitoFiscale annullo(const RiferimentoDocumento& rif) override;
     EsitoFiscale chiusuraGiornaliera() override;
     EsitoFiscale aperturaCassetto() override;
+    EsitoFiscale ristampaUltimoDocumento() override;
 
 private:
     struct Scambio {

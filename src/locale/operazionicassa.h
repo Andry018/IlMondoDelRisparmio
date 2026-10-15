@@ -49,6 +49,8 @@ public:
     // righeRese: righe della vendita con la quantità da rendere; pagamenti = rimborso.
     EsitoOperazione reso(const QUuid& venditaId, const Carrello& righeRese);
     EsitoOperazione chiusura();
+    // Copia non fiscale dell'ultimo documento (il registratore la prende dal giornale elettronico).
+    EsitoFiscale ristampaUltimo() { return m_rt.ristampaUltimoDocumento(); }
 
     // Quantità ancora rendibili per ogni riga della vendita (stesso ordine delle righe).
     QList<Quantita> quantitaRendibili(const QUuid& venditaId) const;

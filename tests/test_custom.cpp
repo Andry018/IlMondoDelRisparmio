@@ -163,6 +163,19 @@ private slots:
         QVERIFY(annullo.contains(QStringLiteral("<endFiscalReceipt></endFiscalReceipt>")));
     }
 
+    void ristampa()
+    {
+        const QString xml = QString::fromUtf8(xmlRistampa());
+        QVERIFY2(xml.contains("<printerFiscalReceipt>") && xml.contains("<printDuplicateReceipt></printDuplicateReceipt>"),
+                 qPrintable(xml));
+        QList<QByteArray> richieste;
+        auto trasporto = std::make_unique<TrasportoFinto>(richieste, [](const QByteArray&) { return ok(risposta({})); });
+        StampanteCustomXml rt(std::move(trasporto), ConfigurazioneCustom::predefinita(), QStringLiteral("STMTE000123"));
+        QVERIFY(rt.ristampaUltimoDocumento().ok);
+        QCOMPARE(richieste.size(), 1);
+        QVERIFY(richieste[0].contains("printDuplicateReceipt"));
+    }
+
     void lettura_risposta()
     {
         const auto r = leggiRispostaCustom(risposta(QStringLiteral(
@@ -417,6 +430,7 @@ private slots:
         QVERIFY2(a.ok, qPrintable(a.errore));
         QVERIFY(!rt.annullo(rif2).ok);   // già annullato
         QVERIFY(rt.aperturaCassetto().ok);
+        QVERIFY(rt.ristampaUltimoDocumento().ok);
 
         const auto z = rt.chiusuraGiornaliera();
         QVERIFY2(z.ok, qPrintable(z.errore));

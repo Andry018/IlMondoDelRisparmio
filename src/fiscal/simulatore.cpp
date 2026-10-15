@@ -47,6 +47,7 @@ EsitoFiscale StampanteSimulata::emettiDocumentoCommerciale(const Carrello& carre
                       .arg(m_azzeramento, 4, 10, QChar('0'))
                       .arg(m_documento, 4, 10, QChar('0'))
                       .arg(carrello.totale().toString());
+    m_ultimoDocumento = m_giornale.last();
     return esitoOk();
 }
 
@@ -61,6 +62,7 @@ EsitoFiscale StampanteSimulata::reso(const Carrello& righeRese, const Riferiment
     m_giornale << QStringLiteral("RESO rif %1-%2 totale %3")
                       .arg(rif.numeroAzzeramento).arg(rif.numeroDocumento)
                       .arg(righeRese.totale().toString());
+    m_ultimoDocumento = m_giornale.last();
     return esitoOk();
 }
 
@@ -78,6 +80,7 @@ EsitoFiscale StampanteSimulata::annullo(const RiferimentoDocumento& rif)
             m_totali.perAliquota[it.key()] -= it.value();
     }
     m_giornale << QStringLiteral("ANNULLO rif %1-%2").arg(rif.numeroAzzeramento).arg(rif.numeroDocumento);
+    m_ultimoDocumento = m_giornale.last();
     return esitoOk();
 }
 
@@ -96,7 +99,16 @@ EsitoFiscale StampanteSimulata::chiusuraGiornaliera()
     m_vendite.clear();
     m_totali = {};
     m_totaliCompleti = true;
+    m_ultimoDocumento.clear();
     return esito;
+}
+
+EsitoFiscale StampanteSimulata::ristampaUltimoDocumento()
+{
+    if (m_ultimoDocumento.isEmpty())
+        return {false, QStringLiteral("Nessun documento da ristampare dall'ultima chiusura")};
+    m_giornale << QStringLiteral("COPIA (non fiscale) di: ") + m_ultimoDocumento;
+    return esitoOk();
 }
 
 EsitoFiscale StampanteSimulata::aperturaCassetto()
