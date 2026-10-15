@@ -10,3 +10,7 @@ CMakeUserPresets.json
 .env
 .env.*
 /dist/
+
+# Claude Code: nel repository solo skill e impostazioni condivise
+/.claude/worktrees/
+/.claude/settings.local.json
