@@ -1,5 +1,7 @@
 ﻿#include "vistaarticoliserver.h"
 
+#include "dialogoimportazione.h"
+
 #include "comune.h"
 #include "core/barcode.h"
 #include "core/quantita.h"
@@ -267,7 +269,10 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     nuovo->setObjectName("nuovo_articolo");
     m_modifica = new QPushButton(QStringLiteral("Modifica"), this);
     m_attivo = new QPushButton(QStringLiteral("Disattiva"), this);
-    for (auto* b : {nuovo, m_modifica, m_attivo})
+    auto* importa = new QPushButton(QStringLiteral("Importa da file…"), this);
+    importa->setObjectName("importa_articoli");
+    importa->setToolTip(QStringLiteral("Articoli nuovi o aggiornamento di prezzi, costi, barcode da CSV o Excel"));
+    for (auto* b : {nuovo, m_modifica, m_attivo, importa})
         barra->addWidget(b);
     layout->addLayout(barra);
 
@@ -308,6 +313,9 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     connect(ritardo, &QTimer::timeout, this, &VistaArticoliServer::aggiorna);
     connect(m_soloAttivi, &QCheckBox::toggled, this, &VistaArticoliServer::aggiorna);
     connect(nuovo, &QPushButton::clicked, this, [this] { modifica({}); });
+    connect(importa, &QPushButton::clicked, this, [this] {
+        importaDaFile(m_client, TipoImportazione::Articoli, this, [this] { aggiorna(); });
+    });
     connect(m_modifica, &QPushButton::clicked, this, [this] {
         if (const auto a = m_tabella->selezionata())
             modifica(*a);

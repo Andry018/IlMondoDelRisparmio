@@ -1,5 +1,7 @@
 #include "vistaamministrazione.h"
 
+#include "dialogoimportazione.h"
+
 #include "tabellaserver.h"
 
 #include <QCheckBox>
@@ -97,9 +99,15 @@ VistaFornitori::VistaFornitori(ClientServer& client, QWidget* parent)
     barra->addWidget(m_cerca, 1);
     auto* nuovo = new QPushButton(QStringLiteral("Nuovo fornitore"), this);
     auto* modifica = new QPushButton(QStringLiteral("Modifica"), this);
+    auto* importa = new QPushButton(QStringLiteral("Importa da file…"), this);
+    importa->setObjectName("importa_fornitori");
     barra->addWidget(nuovo);
     barra->addWidget(modifica);
+    barra->addWidget(importa);
     layout->addLayout(barra);
+    connect(importa, &QPushButton::clicked, this, [this] {
+        importaDaFile(m_client, TipoImportazione::Fornitori, this, [this] { aggiorna(); });
+    });
     m_tabella = new TabellaServer({
         {"codice", QStringLiteral("Codice")},
         {"ragione_sociale", QStringLiteral("Ragione sociale")},

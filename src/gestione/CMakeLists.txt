@@ -11,9 +11,14 @@ add_library(mdr_gestione STATIC
     vistaclienti.h       vistaclienti.cpp
     vistafatture.h       vistafatture.cpp
     vistaamministrazione.h vistaamministrazione.cpp
+    filetabella.h        filetabella.cpp
+    importazione.h       importazione.cpp
+    importatore.h        importatore.cpp
+    dialogoimportazione.h dialogoimportazione.cpp
 )
 target_include_directories(mdr_gestione PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mdr_gestione PUBLIC mdr_ui)
+find_package(ZLIB REQUIRED)   # per leggere i file Excel (.xlsx sono zip)
+target_link_libraries(mdr_gestione PUBLIC mdr_ui PRIVATE ZLIB::ZLIB)
 
 add_executable(mdr-gestione WIN32 main.cpp)
 target_link_libraries(mdr-gestione PRIVATE mdr_gestione)

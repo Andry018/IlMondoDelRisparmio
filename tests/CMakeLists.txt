@@ -29,4 +29,5 @@ if(TARGET mdr_gestione)
     mdr_test_vista(test_gestione mdr_gestione)
     # Contro il server di sviluppo: si salta da solo se non è avviato (vedi il file).
     mdr_test_vista(test_gestione_server mdr_gestione)
+    mdr_test_vista(test_importazione mdr_gestione)   # parte col server di sviluppo, se acceso
 endif()

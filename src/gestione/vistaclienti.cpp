@@ -1,5 +1,7 @@
 #include "vistaclienti.h"
 
+#include "dialogoimportazione.h"
+
 #include "tabellaserver.h"
 
 #include <QCheckBox>
@@ -154,9 +156,15 @@ VistaClienti::VistaClienti(ClientServer& client, QWidget* parent)
     auto* nuovo = new QPushButton(QStringLiteral("Nuovo cliente"), this);
     m_modifica = new QPushButton(QStringLiteral("Modifica"), this);
     m_modifica->setEnabled(false);
+    auto* importa = new QPushButton(QStringLiteral("Importa da file…"), this);
+    importa->setObjectName("importa_clienti");
     barra->addWidget(nuovo);
     barra->addWidget(m_modifica);
+    barra->addWidget(importa);
     layout->addLayout(barra);
+    connect(importa, &QPushButton::clicked, this, [this] {
+        importaDaFile(m_client, TipoImportazione::Clienti, this, [this] { aggiorna(); });
+    });
 
     m_tabella = new TabellaServer({
         {"codice", QStringLiteral("Codice")},

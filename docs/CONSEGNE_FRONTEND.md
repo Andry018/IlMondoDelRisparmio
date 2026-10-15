@@ -75,28 +75,25 @@ Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Cu
 2. Vista `v_bolli_trimestrali` del backend (bollo per l'F24) nella scheda Fatture, quando è committata.
 3. Prima pubblicazione 0.3.0 con `scripts/pubblica_aggiornamento.ps1` (serve `gh auth login` e il token
    o il repository pubblico per le release).
-4. **Importazione dati da SystemApp** (iniziata il 14/10/2026). I database sono SQL Server 2014
-   (istanza `SQLSYSTEMAPP`), copiati dall'utente su una chiavetta USB (D:): `D:\SApp_Store_DATI`
-   (`MDR_Dati` = anagrafiche; `MDR_2020`…`MDR_2026` = movimenti per anno; `MDR_Fatt_Elett`, ecc.) e
-   `D:\SApp_Cash_DATI` (`SAPP_*`, la cassa). **Dati reali: mai nel repository né su GitHub.**
-   - Sul PC vecchio: SQL Server LocalDB 2025 (`(localdb)\SystemApp`), `MDR_Dati` collegato da una copia
-     in `C:\Users\andre\SystemApp_import` (dalla chiavetta l'aggancio fallisce, errore 21). Sul PC nuovo
-     va rifatto: winget non installa Express (404 / serve admin) → scaricare LocalDB con
-     `SQL2025-SSEI-Expr.exe /ACTION=Download /MEDIATYPE=LocalDB /QUIET /MEDIAPATH=<cartella>`, poi
-     `msiexec /i SqlLocalDB.msi IACCEPTSQLLOCALDBLICENSETERMS=YES` (UAC), `SqlLocalDB create SystemApp -s`,
-     copiare `.mdf` + `.ldf` sul disco interno e `CREATE DATABASE MDR_Dati ON (FILENAME=…),(FILENAME=…) FOR ATTACH`.
-     Da PowerShell basta `System.Data.SqlClient` (non serve sqlcmd).
-   - Tabelle utili in `MDR_Dati` (136 tabelle): `Articoli` (14.446: fcodart, fdescr, fcosto, fprezzo,
-     fricarico, fiva, fum, id_livello_1..3, frepcas, flag_eliminato_logicamente, flag_blocca_vendita),
-     `Alternativi` (8.821: fcodalt → fcodart, probabilmente i barcode), `Articoli_Listini_Vendita`,
-     `Articoli_Sco_Min_Max_Ubicaz` (scorte min/max, prezzo cassa), `Articoli_Puntivendita` (fornitore
-     abituale `ID_anag_clifor`), `Anag_CliFor` (90 clienti/fornitori), `TAB_Iva` (5, con natura),
-     `TAB_Livello_Articoli_1` (69 categorie), `TAB_Operatori_SFX` (20; colonna `pass`: non leggerla),
-     `TAB_Tipi_Pagamenti`, `TAB_Um`. Le giacenze non sono in `MDR_Dati`: cercarle in `MDR_2026`.
-   - Prossimo passo: mappatura SystemApp → tabelle Supabase (articoli, barcode, reparti, fornitori, clienti,
-     IVA), poi script di importazione provato sul server di sviluppo. Chiesto all'utente se collegare
-     anche `MDR_2026` per le giacenze.
+4. **Importazione dati da SystemApp**: fatta e provata sul server di sviluppo (15/10/2026). Piano,
+   comandi e risultati in `docs/MIGRAZIONE_SYSTEMAPP.md`; script in `strumenti/importa-systemapp/`
+   (`estrai.ps1` da LocalDB a CSV, `carica.ps1`/`carica.sql` con psql in una transazione). Decisioni
+   dell'utente: giacenze negative così come sono, storico vendite solo 2025 e 2026. Database di SystemApp
+   (dati reali, mai nel repository): chiavetta D: `SApp_Store_DATI`, copie di lavoro in
+   `C:\Users\andre\SystemApp_import` collegate a `(localdb)\SystemApp` (MDR_Dati, MDR_2025, MDR_2026).
+   Sul PC nuovo LocalDB va reinstallato: winget non installa Express (404 / serve admin) → scaricare con
+   `SQL2025-SSEI-Expr.exe /ACTION=Download /MEDIATYPE=LocalDB /QUIET /MEDIAPATH=<cartella>`, poi
+   `msiexec /i SqlLocalDB.msi IACCEPTSQLLOCALDBLICENSETERMS=YES` (UAC), `SqlLocalDB create SystemApp -s`,
+   copiare `.mdf` + `.ldf` sul disco interno (dalla chiavetta l'aggancio fallisce) e
+   `CREATE DATABASE … ON (FILENAME=…),(FILENAME=…) FOR ATTACH`.
+   - Il seed dei reparti (5%→4, esente→5) è diverso dal registratore vero (esente→4, 5%→5): `carica.sql`
+     li allinea. Da dire alla sessione backend.
+   - Giorno del passaggio: estrazione e caricamento rifatti dopo l'ultima Z di SystemApp (giacenze del momento).
    - Da ricordare all'utente: cancellare `D:\MDR_import` (copia fallita) e `Downloads\custom\Custom.dll` (falso).
+5. **Importa da file** in mdr-gestione (Articoli, Barcode, Clienti, Fornitori, Giacenze; CSV ed Excel .xlsx):
+   `src/gestione/filetabella.*`, `importazione.*`, `importatore.*`, `dialogoimportazione.*`; test
+   `test_importazione` (con `MDR_SERVER_SVILUPPO` anche contro il server; `MDR_IMPORTA_ARTICOLI=<csv>` per le
+   prestazioni con un file vero).
 
 ## Note per lavorare con l'utente
 

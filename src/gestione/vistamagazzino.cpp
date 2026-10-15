@@ -1,5 +1,7 @@
 #include "vistamagazzino.h"
 
+#include "dialogoimportazione.h"
+
 #include "comune.h"
 #include "core/quantita.h"
 #include "tabellaserver.h"
@@ -597,8 +599,15 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     inventario->setObjectName("inventario");
     barra->addWidget(carico);
     barra->addWidget(daFattura);
+    auto* importa = new QPushButton(QStringLiteral("Giacenze da file…"), this);
+    importa->setObjectName("importa_giacenze");
+    importa->setToolTip(QStringLiteral("Inventario da CSV o Excel: codice e quantità contata"));
     barra->addWidget(inventario);
+    barra->addWidget(importa);
     barra->addStretch();
+    connect(importa, &QPushButton::clicked, this, [this] {
+        importaDaFile(m_client, TipoImportazione::Giacenze, this, [this] { this->aggiorna(); });
+    });
     barra->addWidget(aggiorna);
     layout->addLayout(barra);
 

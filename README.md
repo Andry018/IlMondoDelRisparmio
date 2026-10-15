@@ -74,6 +74,13 @@ il magazziniere Magazzino e Articoli, Operatori solo l'amministratore):
 
 Senza server la gestione mostra solo gli articoli dell'archivio locale.
 
+**Importa da file…** (Articoli, Clienti, Fornitori; *Giacenze da file…* in Magazzino): CSV o Excel .xlsx,
+colonne riconosciute da sole e modificabili, anteprima, modello da scaricare, righe sbagliate scartate
+con il motivo. Dettagli in [docs/MIGRAZIONE_SYSTEMAPP.md](docs/MIGRAZIONE_SYSTEMAPP.md).
+
+**Dati da SystemApp:** `strumenti/importa-systemapp/estrai.ps1` (CSV dai database SQL Server) e
+`carica.ps1` (caricamento in una transazione, anche dello storico vendite 2025–2026): vedi lo stesso documento.
+
 ### Registratore Custom (driver XML)
 
 Con *Rete* la cassa usa il driver `src/fiscal/customxml.*`: comandi XML in HTTP POST su
