@@ -193,6 +193,7 @@ servono un login e un account abilitato. Si interrogano con `GET /rest/v1/<vista
 | [`v_articoli_cassa`](#v_articoli_cassa) | copia offline degli articoli | tutti |
 | [`v_operatori_cassa`](#v_operatori_cassa) | copia offline di operatori e PIN | terminali, amministratore |
 | [`v_sottoscorta`](#v_sottoscorta) | riordino | tutti |
+| [`v_scheda_articolo`](#v_scheda_articolo) | pagina Articoli della gestione | tutti |
 | [`v_riconciliazione_chiusure`](#riconciliazione) | chiusure Z contro vendite | tutti |
 | [`v_riconciliazione_chiusure_aliquote`](#riconciliazione) | idem per aliquota | tutti |
 | [`v_incassi`](#report) | incassi per giorno, terminale, pagamento | tutti |
@@ -267,6 +268,53 @@ locale). Vuota per chi non è un terminale o l'amministratore.
 
 Articoli attivi con giacenza sotto la scorta minima: `id`, `codice`, `descrizione`,
 `giacenza` (millesimi), `scorta_minima` (millesimi), `fornitore_abituale_id`.
+
+### `v_scheda_articolo`
+
+Tutto quello che la pagina Articoli della gestione mostra di **un** articolo, in una sola lettura
+(migrazione `20261016000100_scheda_articolo.sql`, sul modello dell'anagrafica di SystemApp):
+
+```
+GET /rest/v1/v_scheda_articolo?id=eq.<uuid>          (oppure codice=eq.<codice>)
+```
+
+Circa 50 ms sui dati veri (14.444 articoli, due anni di vendite). È pensata per **un articolo per
+volta**: per l'elenco a sinistra si legge `articoli` (o `v_articoli_cassa`) con i soliti filtri e
+la paginazione, poi la scheda dell'articolo selezionato.
+
+| Colonne | Tipo | Note |
+|---|---|---|
+| `id`, `codice`, `descrizione`, `descrizione_breve`, `attivo`, `unita` | | come `articoli` |
+| `reparto_id`, `numero_reparto`, `reparto`, `aliquota_bp`, `natura` | | reparto e IVA |
+| `categoria_id`, `categoria` | | |
+| `fornitore_abituale_id`, `fornitore_abituale`, `codice_fornitore` | | codice dell'articolo presso il fornitore abituale |
+| `barcode` | text[] | tutti i codici a barre |
+| `prezzo_vendita`, `costo_ultimo` | centesimi | prezzo IVA inclusa, costo netto |
+| `ricarico_bp` | int \| null | ricarico **voluto** (30% = 3000): per proporre il prezzo quando cambia il costo |
+| `prezzo_netto` | centesimi | prezzo senza IVA |
+| `ricarico_effettivo_bp`, `margine_bp` | int \| null | ricarico e margine **attuali** sul prezzo senza IVA, uguali a SystemApp (es. 2962 = 29,62%); null il ricarico se il costo è 0 |
+| `pezzi_collo`, `scorta_minima` | int, millesimi | pezzi per collo: multiplo per gli ordini |
+| `richiede_lotto`, `dispositivo_medico` | boolean | dispositivo medico CE: spesa sanitaria detraibile |
+| `giacenza`, `valore_giacenza` | millesimi, centesimi | valore al costo ultimo |
+| `carichi`, `carichi_valore` | millesimi, centesimi | carichi dai fornitori, valore al costo del carico |
+| `resi_fornitore`, `scarichi_interni` | millesimi | negativi (escono) |
+| `rettifiche_inventario` | millesimi | inventari e rettifiche, **senza** la giacenza iniziale importata |
+| `giacenza_iniziale` | millesimi | giacenza portata da SystemApp all'importazione |
+| `venduto`, `venduto_totale` | millesimi, centesimi | dalle vendite (anche lo storico SystemApp), al netto dei resi; le annullate non contano |
+| `venduto_30_giorni` | millesimi | per capire quanto gira l'articolo (e per gli ordini) |
+| `resi_clienti` | millesimi | quantità resa dai clienti |
+| `ultima_vendita_at` | timestamptz \| null | |
+| `ultimo_carico_at`, `ultimo_carico_quantita`, `ultimo_carico_costo` | | ultimo carico dal fornitore |
+| `ultimo_carico_documento_id`, `ultimo_carico_documento`, `ultimo_carico_fornitore` | | es. `"118/2026 (fatt. FF 59723)"` |
+| `created_at`, `updated_at` | timestamptz | |
+
+Le vendite dello storico SystemApp non hanno movimenti di magazzino (la giacenza importata le
+comprende già): per questo `giacenza` ≠ `giacenza_iniziale + carichi − venduto + …` sugli articoli
+importati, mentre torna per tutto quello che succede dopo l'importazione.
+
+**Campi nuovi di `articoli`** (si modificano come gli altri, `PATCH /rest/v1/articoli?id=eq.<uuid>`,
+amministratore e responsabile): `ricarico_bp` (int \| null), `pezzi_collo` (int ≥ 1, default 1),
+`richiede_lotto` e `dispositivo_medico` (boolean, default false).
 
 <a id="riconciliazione"></a>
 ### `v_riconciliazione_chiusure`, `v_riconciliazione_chiusure_aliquote`
@@ -970,6 +1018,46 @@ client non vedono. Le fatture passive dei fornitori arrivano in `fatture_passive
 ---
 
 ## Richieste al frontend
+
+### Gestione: pagina Articoli come l'anagrafica di SystemApp (16/10/2026)
+
+L'utente vuole la pagina Articoli **simile** a quella di SystemApp (stessa organizzazione, non per
+forza lo stesso aspetto); schema approvato il 16/10/2026:
+
+```
+┌ Articoli ─────────────────────────────────────────────────────────────────────┐
+│ [Cerca codice / descrizione / barcode…]                        [+ Nuovo]      │
+├──────────────────────────────┬────────────────────────────────────────────────┤
+│ ELENCO                       │ ACE CANDEGGINA PROFUMATA LT 3      [Salva]     │
+│ Codice  Descrizione   Prezzo │ Codice 8001480020993   Barcode +2  Reparto 22% │
+│▶80014.. ACE CAND.LT3   3,40  │ Categoria …   UM PZ   Fornitore AMERICAN CASH  │
+│ …                            │ ── Prezzi ──────────────────────────────────── │
+│                              │ Costo ult. 2,150  Ricarico 30% → Prezzo 3,40   │
+│                              │ Margine 22,85%   Pezzi per collo 1             │
+│                              │ ── Magazzino ────────────── Qtà    Valore      │
+│                              │ Carichi / Vendite / Inventario / Resi          │
+│                              │ GIACENZA    48   103,20                        │
+│                              │ ── Ultimo carico: documento, data, quantità ── │
+│                              │ [ ] Lotto  [ ] Disp. medico  [x] Attivo        │
+│                              │ [Movimenti] [Stampa etichetta] [Storico prezzi]│
+└──────────────────────────────┴────────────────────────────────────────────────┘
+```
+
+- Dati della scheda: [`v_scheda_articolo`](#v_scheda_articolo) per l'articolo selezionato; elenco
+  da `articoli` con ricerca e paginazione. Salvataggio con `PATCH articoli` (campi nuovi compresi).
+- **Ricarico**: `ricarico_bp` è quello voluto; cambiando costo o ricarico la gestione propone il
+  prezzo = costo × (1 + ricarico) × (1 + IVA), arrotondato come preferisce il negozio (da chiedere).
+  `ricarico_effettivo_bp` e `margine_bp` sono quelli attuali, uguali a SystemApp.
+- "Movimenti": `movimenti_magazzino?articolo_id=eq.<id>&order=data_ora.desc` e le vendite da
+  `v_venduto_articoli`.
+- **Importazione SystemApp** (`strumenti/importa-systemapp`): portare anche `Articoli.fricarico`
+  (× 100 → `ricarico_bp`, 0 = null), `pz_collo` (→ `pezzi_collo`, minimo 1), `DETRAIBILE`
+  (→ `dispositivo_medico`), `RICHIESTO_LOTTO` (→ `richiede_lotto`). Sul Supabase di prova in WSL
+  sono già stati riempiti a mano il 16/10/2026: 5.917 ricarichi, 21 dispositivi medici, 19 lotti.
+- In SystemApp scorte max, ubicazioni, repartisti, blocchi, matricole, immagini, seconda unità di
+  misura e calo peso non sono usati (0–1 articoli): non servono nella pagina.
+- Da prevedere in cassa: gli articoli con `dispositivo_medico` vanno indicati come spesa sanitaria
+  sullo scontrino (codice fiscale del cliente); quando si fa, il backend li aggiunge a `v_articoli_cassa`.
 
 ### Gestione: palmare (15/10/2026)
 
