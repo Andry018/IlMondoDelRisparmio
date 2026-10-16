@@ -26,6 +26,7 @@ struct Articolo {
     Quantita giacenza;
     Quantita scortaMinima;
     bool attivo = true;
+    bool dispositivoMedico = false;   // spesa sanitaria: la cassa propone il codice fiscale
 };
 
 enum class TipoPagamento { Contanti, Carta, Bancomat, Satispay, BuonoPasto, NonRiscosso };

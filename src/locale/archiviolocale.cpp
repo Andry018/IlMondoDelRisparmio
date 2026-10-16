@@ -47,7 +47,7 @@ const QList<Reparto>& repartiIniziali()
 }
 
 const char* const colonneArticolo =
-    "id, codice, descrizione, unita, prezzo_vendita, numero_reparto, aliquota_bp, natura, attivo";
+    "id, codice, descrizione, unita, prezzo_vendita, numero_reparto, aliquota_bp, natura, attivo, dispositivo_medico";
 
 } // namespace
 
@@ -94,7 +94,8 @@ bool ArchivioLocale::apri()
                         aliquota_bp           integer not null,
                         natura                text,
                         attivo                integer not null,
-                        updated_at            text))")
+                        updated_at            text,
+                        dispositivo_medico    integer not null default 0))")
         && esegui("create index if not exists articoli_codice on articoli (codice)")
         && esegui(R"(create table if not exists articoli_barcode (
                         barcode     text primary key,
@@ -152,14 +153,19 @@ bool ArchivioLocale::apri()
         return false;
 
     // Archivi creati da versioni precedenti: colonne aggiunte dopo.
-    {
-        QSqlQuery q("pragma table_info(coda_invio)", db());
+    const auto aggiungiColonna = [this](const QString& tabella, const QString& colonna, const QString& definizione) {
+        QSqlQuery q(QStringLiteral("pragma table_info(%1)").arg(tabella), db());
         bool presente = false;
         while (q.next())
-            presente = presente || q.value(1).toString() == QLatin1String("da_verificare");
-        if (!presente && !esegui("alter table coda_invio add column da_verificare integer not null default 0"))
-            return false;
-    }
+            presente = presente || q.value(1).toString() == colonna;
+        return presente
+            || esegui(QStringLiteral("alter table %1 add column %2 %3").arg(tabella, colonna, definizione));
+    };
+    if (!aggiungiColonna(QStringLiteral("coda_invio"), QStringLiteral("da_verificare"), QStringLiteral("integer not null default 0"))
+        // 16/10/2026: i dispositivi medici arrivano con la sincronizzazione (il server ha toccato
+        // updated_at di quelli già segnati, quindi non serve riscaricare tutto)
+        || !aggiungiColonna(QStringLiteral("articoli"), QStringLiteral("dispositivo_medico"), QStringLiteral("integer not null default 0")))
+        return false;
 
     if (reparti().isEmpty()) {
         for (const auto& r : repartiIniziali())
@@ -196,6 +202,7 @@ Articolo leggiArticolo(const QSqlQuery& q)
     a.reparto = QString::number(q.value(5).toInt());
     a.iva = {q.value(6).toInt(), q.value(7).toString()};
     a.attivo = q.value(8).toInt() != 0;
+    a.dispositivoMedico = q.value(9).toInt() != 0;
     return a;
 }
 
@@ -240,14 +247,14 @@ bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
 
     QSqlQuery q(d);
     q.prepare(R"(insert into articoli (id, codice, descrizione, unita, prezzo_vendita, numero_reparto,
-                                       aliquota_bp, natura, attivo, updated_at)
-                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       aliquota_bp, natura, attivo, updated_at, dispositivo_medico)
+                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  on conflict (id) do update set
                      codice = excluded.codice, descrizione = excluded.descrizione,
                      unita = excluded.unita, prezzo_vendita = excluded.prezzo_vendita,
                      numero_reparto = excluded.numero_reparto, aliquota_bp = excluded.aliquota_bp,
                      natura = excluded.natura, attivo = excluded.attivo,
-                     updated_at = excluded.updated_at)");
+                     updated_at = excluded.updated_at, dispositivo_medico = excluded.dispositivo_medico)");
     q.addBindValue(testoUuid(a.id));
     q.addBindValue(a.codice);
     q.addBindValue(a.descrizione);
@@ -258,6 +265,7 @@ bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
     q.addBindValue(a.iva.natura.isEmpty() ? QVariant() : a.iva.natura);
     q.addBindValue(a.attivo ? 1 : 0);
     q.addBindValue(updatedAt.isEmpty() ? adesso() : updatedAt);
+    q.addBindValue(a.dispositivoMedico ? 1 : 0);
     bool ok = q.exec();
 
     // I barcode arrivano sempre completi: si sostituiscono in blocco.
@@ -304,6 +312,7 @@ bool ArchivioLocale::applicaRigaSync(const QJsonObject& riga, bool* cambiato)
     a.reparto = QString::number(riga.value("numero_reparto").toInt());
     a.iva = {riga.value("aliquota_bp").toInt(), riga.value("natura").toString()};
     a.attivo = riga.value("attivo").toBool(true);
+    a.dispositivoMedico = riga.value("dispositivo_medico").toBool(false);   // assente sui server vecchi
     for (const auto& b : riga.value("barcode").toArray())
         a.barcode << b.toString();
 

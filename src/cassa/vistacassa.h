@@ -5,6 +5,8 @@
 
 #include <QWidget>
 #include <array>
+#include <functional>
+#include <optional>
 
 class QGridLayout;
 class QLabel;
@@ -50,6 +52,13 @@ public:
     void vendiShopper(int indice);
     // Copia dell'ultimo documento emesso (Ctrl+P).
     void ristampaUltimo();
+    // Codice fiscale o partita IVA del cliente sullo scontrino (spese sanitarie detraibili).
+    // Testo vuoto: lo toglie. false se non è valido (lo scontrino resta com'era).
+    bool impostaCodiceFiscale(const QString& testo);
+    // Tasto "Codice fiscale" (F11): lo chiede, anche letto dalla tessera sanitaria.
+    void chiediCodiceFiscale();
+    // Finestra che chiede il codice fiscale; nullopt = annullato. Sostituibile nei test.
+    std::function<std::optional<QString>(const QString& spiegazione)> richiestaCodiceFiscale;
 
 signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati

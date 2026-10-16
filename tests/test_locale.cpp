@@ -4,6 +4,9 @@
 #include "locale/payloadvendita.h"
 
 #include <QJsonArray>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTimeZone>
 #include <QtTest>
 
@@ -104,6 +107,41 @@ private slots:
         QCOMPARE(db.ultimoSync(), QStringLiteral("2026-10-08T09:00:00.123456+00:00"));
 
         QVERIFY(!db.applicaRigaSync(QJsonObject{{"id", "non-un-uuid"}, {"unita", "PZ"}}));
+
+        // dispositivo_medico: assente (server vecchio) = no; poi segnato dalla gestione
+        QVERIFY(!a->dispositivoMedico);
+        auto medico = riga;
+        medico["dispositivo_medico"] = true;
+        medico["updated_at"] = "2026-10-16T09:00:00.000000+00:00";
+        QVERIFY(db.applicaRigaSync(medico));
+        QVERIFY(db.cerca("2000000000008")->dispositivoMedico);
+    }
+
+    void archivio_di_una_versione_precedente()
+    {
+        // Archivio creato prima del 16/10/2026: articoli senza dispositivo_medico
+        QTemporaryDir dir;
+        const QString file = dir.filePath("cassa.sqlite");
+        {
+            auto vecchio = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("vecchio"));
+            vecchio.setDatabaseName(file);
+            QVERIFY(vecchio.open());
+            QSqlQuery q(vecchio);
+            QVERIFY(q.exec(R"(create table articoli (id text primary key, codice text not null, descrizione text not null,
+                              descrizione_scontrino text, unita text not null, prezzo_vendita integer not null,
+                              numero_reparto integer not null, aliquota_bp integer not null, natura text,
+                              attivo integer not null, updated_at text))"));
+            QVERIFY(q.exec("insert into articoli values ('8b0c2a52-1f0e-4bb5-9a43-6a1c3b1f0d01', '7001', 'Vecchio', null, "
+                           "'PZ', 100, 1, 2200, null, 1, '2026-10-01T00:00:00Z')"));
+            vecchio.close();
+        }
+        QSqlDatabase::removeDatabase(QStringLiteral("vecchio"));
+
+        ArchivioLocale db(file);
+        QVERIFY2(db.apri(), qPrintable(db.ultimoErrore()));
+        const auto a = db.cerca("7001");
+        QVERIFY(a);
+        QVERIFY(!a->dispositivoMedico);
     }
 
     void giornale_e_coda()

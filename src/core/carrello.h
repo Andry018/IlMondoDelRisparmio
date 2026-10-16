@@ -15,6 +15,7 @@ struct RigaCarrello {
     Quantita quantita;
     Money prezzoUnitario;   // IVA inclusa
     Money sconto;           // sconto in euro sulla riga
+    bool dispositivoMedico = false;
 
     Money totale() const { return prezzoUnitario * quantita - sconto; }
 };
@@ -48,9 +49,16 @@ public:
     Money pagato() const;
     Money residuo() const { return totale() - pagato(); }   // > 0: manca; < 0: resto
 
+    // Codice fiscale (o partita IVA) del cliente da stampare sul documento commerciale, già
+    // normalizzato e controllato (codicefiscale.h); vuoto se il cliente non lo chiede.
+    void impostaCodiceFiscale(const QString& cf) { m_codiceFiscale = cf; }
+    const QString& codiceFiscale() const { return m_codiceFiscale; }
+    bool contieneDispositiviMedici() const;
+
 private:
     QList<RigaCarrello> m_righe;
     QList<Pagamento> m_pagamenti;
+    QString m_codiceFiscale;
 };
 
 } // namespace mdr

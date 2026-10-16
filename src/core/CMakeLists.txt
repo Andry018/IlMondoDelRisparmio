@@ -5,6 +5,7 @@ add_library(mdr_core STATIC
     barcode.h      barcode.cpp
     modelli.h      modelli.cpp
     carrello.h     carrello.cpp
+    codicefiscale.h codicefiscale.cpp
 )
 
 target_include_directories(mdr_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)

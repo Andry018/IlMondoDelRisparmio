@@ -467,6 +467,12 @@ QByteArray xmlScontrino(const Carrello& carrello, const ConfigurazioneCustom& co
     ScrittoreXml xml(QStringLiteral("printerFiscalReceipt"));
     xml.comando(QStringLiteral("beginFiscalReceipt"));
     scriviRighe(xml, carrello, conf);
+    // Codice fiscale / partita IVA del cliente (pitch "B", manuale Web Services pag. 55): il
+    // registratore lo stampa e lo registra nel documento commerciale (spese detraibili).
+    // Posizione dopo le righe e prima dei pagamenti: DA VERIFICARE sul registratore vero.
+    if (!carrello.codiceFiscale().isEmpty())
+        xml.comando(QStringLiteral("fixedLines"), {{QStringLiteral("description"), carrello.codiceFiscale()},
+                                                   {QStringLiteral("pitch"), QStringLiteral("B")}});
     if (carrello.pagamenti().isEmpty())
         scriviPagamento(xml, TipoPagamento::Contanti, carrello.totale(), conf);
     for (const auto& p : carrello.pagamenti())

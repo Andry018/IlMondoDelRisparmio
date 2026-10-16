@@ -160,12 +160,13 @@ do $$ begin
 end $$;
 
 -- Contratto con i client (docs/API.md) ----------------------------------------
--- Colonne di v_articoli_cassa: cambiarle rompe la sincronizzazione delle casse.
+-- Colonne di v_articoli_cassa: cambiarle rompe la sincronizzazione delle casse. Aggiungerne in
+-- fondo no (la cassa legge i campi per nome): dispositivo_medico dal 16/10/2026.
 do $$ begin
     assert (select string_agg(column_name, ',' order by ordinal_position)
               from information_schema.columns where table_name = 'v_articoli_cassa')
          = 'id,codice,descrizione,descrizione_scontrino,unita,prezzo_vendita,numero_reparto,'
-           'aliquota_bp,natura,attivo,updated_at,barcode', 'colonne v_articoli_cassa';
+           'aliquota_bp,natura,attivo,updated_at,barcode,dispositivo_medico', 'colonne v_articoli_cassa';
 end $$;
 
 -- Operatore disattivato: nessun ruolo, nessuna riga, RPC negate.

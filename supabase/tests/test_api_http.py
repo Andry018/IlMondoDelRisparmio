@@ -281,7 +281,7 @@ class TestApiHttp(unittest.TestCase):
         self.assertEqual(righe[0]["barcode"], ["7000000000017"])
         self.assertEqual(sorted(righe[0]), sorted(["id", "codice", "descrizione", "descrizione_scontrino", "unita",
                                                    "prezzo_vendita", "numero_reparto", "aliquota_bp", "natura",
-                                                   "attivo", "updated_at", "barcode"]))
+                                                   "attivo", "updated_at", "barcode", "dispositivo_medico"]))
         # '+' non codificato: diventa uno spazio e la richiesta fallisce
         stato, _ = chiama("GET", "/v_articoli_cassa?updated_at=gte.2000-01-01T00:00:00+01:00", utente=CASSA)
         self.assertEqual(stato, 400)

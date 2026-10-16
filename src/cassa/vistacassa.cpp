@@ -1,6 +1,7 @@
 #include "vistacassa.h"
 
 #include "comune.h"
+#include "core/codicefiscale.h"
 #include "dialogocontanti.h"
 #include "dialogooperatore.h"
 
@@ -69,7 +70,19 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     ristampa->setToolTip(QStringLiteral("Copia dell'ultimo scontrino emesso (Ctrl+P)"));
     connect(ristampa, &QPushButton::clicked, this, &VistaCassa::ristampaUltimo);
     scontrini->addWidget(ristampa, 1);
+    auto* cf = pulsanteComando(QStringLiteral("Cod. fiscale"), QKeySequence(Qt::CTRL | Qt::Key_F), this);
+    cf->setObjectName("codice_fiscale");
+    cf->setToolTip(QStringLiteral("Codice fiscale del cliente sullo scontrino, per le spese sanitarie (Ctrl+F)"));
+    connect(cf, &QPushButton::clicked, this, &VistaCassa::chiediCodiceFiscale);
+    scontrini->addWidget(cf, 1);
     sinistra->addLayout(scontrini);
+
+    richiestaCodiceFiscale = [this](const QString& spiegazione) -> std::optional<QString> {
+        bool ok = false;
+        const auto testo = QInputDialog::getText(this, QStringLiteral("Codice fiscale del cliente"), spiegazione,
+                                                 QLineEdit::Normal, carr().codiceFiscale(), &ok);
+        return ok ? std::optional<QString>(testo) : std::nullopt;
+    };
 
     // F11: passa all'altro scontrino.
     auto* scambia = new QShortcut(QKeySequence(Qt::Key_F11), this);
@@ -100,6 +113,7 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     m_totale->setObjectName("totale");
     m_totale->setFont(fontGrande(font(), 24, true));
     m_residuo = new QLabel(this);
+    m_residuo->setObjectName("residuo");
     m_residuo->setFont(fontGrande(font(), 16));
     totali->addWidget(m_totale);
     totali->addStretch();
@@ -563,10 +577,53 @@ void VistaCassa::scontoRiga()
     m_righe->selectRow(riga);
 }
 
+bool VistaCassa::impostaCodiceFiscale(const QString& testo)
+{
+    const auto cf = normalizzaCodiceFiscale(testo);
+    if (!cf.isEmpty() && !codiceFiscaleValido(cf)) {
+        messaggio(QStringLiteral("Codice fiscale non valido: %1").arg(cf), true);
+        return false;
+    }
+    carr().impostaCodiceFiscale(cf);
+    aggiorna();
+    messaggio(cf.isEmpty() ? QStringLiteral("Scontrino senza codice fiscale")
+                           : QStringLiteral("Codice fiscale %1 sullo scontrino").arg(cf));
+    return true;
+}
+
+void VistaCassa::chiediCodiceFiscale()
+{
+    QString spiegazione = QStringLiteral("Codice fiscale o partita IVA del cliente, digitato o letto dalla "
+                                         "tessera sanitaria.\nVuoto: scontrino senza codice fiscale.");
+    while (const auto testo = richiestaCodiceFiscale(spiegazione)) {
+        if (impostaCodiceFiscale(*testo))
+            break;
+        spiegazione = QStringLiteral("Il codice %1 non è valido: ricontrollarlo (o lasciare vuoto).")
+                          .arg(normalizzaCodiceFiscale(*testo));
+    }
+    attiva();
+}
+
 void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
 {
     if (carr().vuoto() || carr().residuo() <= Money())
         return;
+
+    // Spesa sanitaria: al primo pagamento si propone il codice fiscale per la detrazione.
+    if (carr().pagamenti().isEmpty() && carr().codiceFiscale().isEmpty() && carr().contieneDispositiviMedici()) {
+        QString spiegazione = QStringLiteral("Nello scontrino c'è un dispositivo medico: spesa detraibile.\n"
+                                             "Codice fiscale del cliente (anche dalla tessera sanitaria)?\n"
+                                             "Vuoto: scontrino senza codice fiscale.");
+        while (true) {
+            const auto testo = richiestaCodiceFiscale(spiegazione);
+            if (!testo)
+                return;   // annullato: niente pagamento, si torna allo scontrino
+            if (impostaCodiceFiscale(*testo))
+                break;
+            spiegazione = QStringLiteral("Il codice %1 non è valido: ricontrollarlo (o lasciare vuoto).")
+                              .arg(normalizzaCodiceFiscale(*testo));
+        }
+    }
 
     if (!importo) {
         importo = carr().residuo();
@@ -704,9 +761,11 @@ void VistaCassa::azzeraPagamenti()
     if (carr().pagamenti().isEmpty())
         return;
     const auto righe = carr().righe();
+    const auto cf = carr().codiceFiscale();
     carr().svuota();
     for (const auto& r : righe)
         carr().aggiungiRiga(r);
+    carr().impostaCodiceFiscale(cf);
 }
 
 void VistaCassa::aggiorna()
@@ -737,10 +796,12 @@ void VistaCassa::aggiorna()
                   .arg(euro(c.totale())));
     }
     m_totale->setText(QStringLiteral("TOTALE %1").arg(euro(carr().totale())));
-    m_residuo->setText(carr().pagamenti().isEmpty()
-                           ? QString()
-                           : QStringLiteral("Pagato %1 — da pagare %2")
-                                 .arg(euro(carr().pagato()), euro(carr().residuo())));
+    QStringList stato;
+    if (!carr().codiceFiscale().isEmpty())
+        stato << QStringLiteral("C.F. %1").arg(carr().codiceFiscale());
+    if (!carr().pagamenti().isEmpty())
+        stato << QStringLiteral("Pagato %1 — da pagare %2").arg(euro(carr().pagato()), euro(carr().residuo()));
+    m_residuo->setText(stato.join(QStringLiteral(" · ")));
     m_codice->setFocus();
 }
 

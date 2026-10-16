@@ -226,6 +226,10 @@ articoli disattivati** (`attivo = false`), così la cassa sa di doverli togliere
 | `attivo` | boolean | `false` = non più vendibile |
 | `updated_at` | timestamptz | marcatore per la sincronizzazione incrementale |
 | `barcode` | text[] | tutti i barcode dell'articolo, `{}` se nessuno |
+| `dispositivo_medico` | boolean | dal 16/10/2026: spesa sanitaria, la cassa propone il codice fiscale del cliente |
+
+Colonne nuove arrivano solo **in fondo** (la cassa legge i campi per nome e ignora quelli che non
+conosce): le casse già installate continuano a funzionare.
 
 `updated_at` cambia quando cambia l'articolo, uno dei suoi barcode (aggiunto, modificato,
 tolto), il suo reparto (numero RT o aliquota) o l'aliquota del reparto. Gli articoli non si
@@ -458,6 +462,7 @@ Payload:
 | `operatore_id` | uuid | sì per i terminali | chi ha battuto lo scontrino (`v_operatori_cassa.id`); con login personale, default l'operatore collegato. Accettato anche se nel frattempo è stato disattivato. |
 | `cliente_id` | uuid | no | |
 | `vendita_origine_id` | uuid | no | per i resi: la vendita di partenza |
+| `codice_fiscale` | text | no | codice fiscale (16) o partita IVA (11) del cliente stampato sul documento commerciale (spese detraibili); spazi e minuscole tollerati, salvato in `vendite.codice_fiscale_cliente`; formato non valido → errore |
 | `data_ora` | timestamptz | sì | ora dello scontrino sulla cassa (anche se inviato dopo) |
 | `totale` | bigint | sì | somma esatta dei `totale` di riga |
 | `rt_matricola` | text | no | matricola del registratore (serve alla riconciliazione Z) |

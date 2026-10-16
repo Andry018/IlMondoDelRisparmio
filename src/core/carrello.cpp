@@ -13,7 +13,15 @@ void Carrello::aggiungi(const Articolo& a, Quantita q)
             }
         }
     }
-    m_righe.append({a.id, a.descrizione, a.reparto, a.iva, q, a.prezzoVendita, {}});
+    m_righe.append({a.id, a.descrizione, a.reparto, a.iva, q, a.prezzoVendita, {}, a.dispositivoMedico});
+}
+
+bool Carrello::contieneDispositiviMedici() const
+{
+    for (const auto& r : m_righe)
+        if (r.dispositivoMedico)
+            return true;
+    return false;
 }
 
 void Carrello::rimuovi(int indice)
@@ -48,6 +56,7 @@ void Carrello::svuota()
 {
     m_righe.clear();
     m_pagamenti.clear();
+    m_codiceFiscale.clear();
 }
 
 Money Carrello::totale() const

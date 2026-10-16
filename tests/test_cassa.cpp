@@ -508,6 +508,60 @@ private slots:
         QCOMPARE(cassa()->carrello().totale().cents(), 1234);
     }
 
+    void codice_fiscale_per_dispositivo_medico()
+    {
+        Articolo termometro;
+        termometro.id = QUuid::createUuid();
+        termometro.codice = "9101";
+        termometro.descrizione = "Termometro digitale CE";
+        termometro.reparto = "1";
+        termometro.prezzoVendita = Money::fromCents(990);
+        termometro.dispositivoMedico = true;
+        QVERIFY(m_archivio->salvaArticolo(termometro));
+        QVERIFY(m_archivio->cerca("9101")->dispositivoMedico);   // l'archivio locale lo conserva
+
+        // Il cassiere sbaglia una lettera, poi lo legge dalla tessera sanitaria
+        QStringList risposte = {"RSSMRA80A01H501A", "rss mra80a01h501u"};
+        int domande = 0;
+        cassa()->richiestaCodiceFiscale = [&](const QString&) -> std::optional<QString> {
+            ++domande;
+            return risposte.isEmpty() ? std::nullopt : std::optional<QString>(risposte.takeFirst());
+        };
+
+        // Annullando la domanda non si paga: lo scontrino resta aperto
+        cassa()->leggi("9101");
+        risposte = {};
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(1000));
+        QCOMPARE(domande, 1);
+        QVERIFY(!cassa()->carrello().vuoto());
+
+        risposte = {"RSSMRA80A01H501A", "rss mra80a01h501u"};
+        domande = 0;
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(1000));
+        QCOMPARE(domande, 2);
+        QVERIFY(cassa()->carrello().vuoto());
+        QVERIFY2(m_rt->giornale().last().contains("C.F. RSSMRA80A01H501U"), qPrintable(m_rt->giornale().last()));
+        // vendite(): dalla più recente
+        QCOMPARE(m_archivio->vendite(QDate::currentDate()).first().payload.value("codice_fiscale").toString(),
+                 QStringLiteral("RSSMRA80A01H501U"));
+
+        // Senza dispositivi medici non chiede niente; il tasto lo aggiunge a richiesta
+        domande = 0;
+        cassa()->leggi("1001");
+        cassa()->paga(TipoPagamento::Carta);
+        QCOMPARE(domande, 0);
+        QVERIFY(!m_archivio->vendite(QDate::currentDate()).first().payload.contains("codice_fiscale"));
+
+        cassa()->leggi("1001");
+        risposte = {"01234567897"};
+        clic("codice_fiscale");
+        QCOMPARE(cassa()->carrello().codiceFiscale(), QStringLiteral("01234567897"));
+        QVERIFY2(testo("residuo").contains("C.F. 01234567897"), qPrintable(testo("residuo")));
+        cassa()->paga(TipoPagamento::Carta);
+        QCOMPARE(m_archivio->vendite(QDate::currentDate()).first().payload.value("codice_fiscale").toString(),
+                 QStringLiteral("01234567897"));
+    }
+
     void solo_schede_di_cassa()
     {
         auto* schede = m_finestra->findChild<QTabWidget*>();

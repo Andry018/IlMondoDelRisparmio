@@ -1,5 +1,6 @@
 #include "core/barcode.h"
 #include "core/carrello.h"
+#include "core/codicefiscale.h"
 #include "core/iva.h"
 #include "core/money.h"
 #include "core/quantita.h"
@@ -126,6 +127,44 @@ private slots:
 
         c.aggiungiPagamento({TipoPagamento::Contanti, Money::fromCents(1000)});
         QCOMPARE(c.residuo().cents(), -403);  // resto
+    }
+
+    void codice_fiscale()
+    {
+        // Valori di controllo calcolati a parte (non con questo codice)
+        QCOMPARE(normalizzaCodiceFiscale(QStringLiteral(" rss mra80a01-h501u ")), QStringLiteral("RSSMRA80A01H501U"));
+        QVERIFY(codiceFiscaleValido(QStringLiteral("RSSMRA80A01H501U")));
+        QVERIFY(codiceFiscaleValido(QStringLiteral("RSSMRA80A01H50MM")));    // omocodia: 1 -> M
+        QVERIFY(!codiceFiscaleValido(QStringLiteral("RSSMRA80A01H501A")));   // carattere di controllo
+        QVERIFY(!codiceFiscaleValido(QStringLiteral("RSSMRA80A01H50")));
+        QVERIFY(!codiceFiscaleValido(QStringLiteral("RSSMRA80A01H5O1U")));   // O al posto di 0
+        QVERIFY(codiceFiscaleValido(QStringLiteral("01234567897")));         // partita IVA
+        QVERIFY(codiceFiscaleValido(QStringLiteral("12345678903")));
+        QVERIFY(!codiceFiscaleValido(QStringLiteral("01234567890")));
+        QVERIFY(!codiceFiscaleValido(QString()));
+    }
+
+    void carrello_dispositivi_medici()
+    {
+        Articolo cerotti;
+        cerotti.id = QUuid::createUuid();
+        cerotti.descrizione = "Termometro";
+        cerotti.prezzoVendita = Money::fromCents(990);
+        cerotti.dispositivoMedico = true;
+        Articolo sapone;
+        sapone.id = QUuid::createUuid();
+        sapone.descrizione = "Sapone";
+        sapone.prezzoVendita = Money::fromCents(150);
+
+        Carrello c;
+        c.aggiungi(sapone);
+        QVERIFY(!c.contieneDispositiviMedici());
+        c.aggiungi(cerotti);
+        QVERIFY(c.contieneDispositiviMedici());
+        QVERIFY(c.righe().last().dispositivoMedico);
+        c.impostaCodiceFiscale(QStringLiteral("RSSMRA80A01H501U"));
+        c.svuota();
+        QVERIFY(c.codiceFiscale().isEmpty());
     }
 
     void simulatore_rt()

@@ -63,6 +63,9 @@ QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
     };
     if (!origine.isNull())
         p.insert("vendita_origine_id", origine.toString(QUuid::WithoutBraces));
+    // Codice fiscale stampato sul documento commerciale (spese detraibili)
+    if (!carrello.codiceFiscale().isEmpty())
+        p.insert("codice_fiscale", carrello.codiceFiscale());
     // Obbligatorio quando la cassa usa l'account del terminale (docs/API.md).
     if (!operatore.isNull())
         p.insert("operatore_id", operatore.toString(QUuid::WithoutBraces));

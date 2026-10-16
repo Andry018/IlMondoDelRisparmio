@@ -40,6 +40,12 @@ Test: 9 suite C++ verdi (`test_custom` anche contro il registratore finto con `M
 - Reparti sopra, tastierino sotto; layout verificato a **1024×768**.
 - Tasti **Shopper 0,05 / 0,10** (articoli 8000000000001/2 come in SystemApp, altrimenti articolo libero al 22%) e
   **Ristampa** ultimo scontrino (Ctrl+P; sul Custom `printDuplicateReceipt`, da verificare sull'RT vero).
+- **Codice fiscale del cliente** sullo scontrino (16/10/2026, spese sanitarie detraibili): tasto
+  *Cod. fiscale* (Ctrl+F), digitato o letto dal barcode della tessera sanitaria, controllo del
+  carattere di controllo (`src/core/codicefiscale.*`, anche partita IVA). Proposto da solo al primo
+  pagamento se nel carrello c'è un articolo `dispositivo_medico`. Sul Custom `fixedLines` con
+  `pitch="B"` dopo le righe e prima dei pagamenti (manuale pag. 55): **posizione da verificare sull'RT
+  vero**, e che il codice compaia nel documento commerciale e nei corrispettivi.
 
 ## POS
 

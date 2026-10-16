@@ -131,6 +131,21 @@ private slots:
         QVERIFY(xml.trimmed().endsWith(QStringLiteral("</printerFiscalReceipt>")));
     }
 
+    void scontrino_codice_fiscale()
+    {
+        const auto conf = ConfigurazioneCustom::daTesto({}, {});
+        QVERIFY(!QString::fromUtf8(xmlScontrino(carrelloDiProva(), conf)).contains(QStringLiteral("fixedLines")));
+
+        auto c = carrelloDiProva();
+        c.impostaCodiceFiscale(QStringLiteral("RSSMRA80A01H501U"));
+        const QString xml = QString::fromUtf8(xmlScontrino(c, conf));
+        const QString riga = QStringLiteral("<fixedLines description=\"RSSMRA80A01H501U\" pitch=\"B\"></fixedLines>");
+        QVERIFY2(xml.contains(riga), qPrintable(xml));
+        // Dopo le righe, prima dei pagamenti
+        QVERIFY(xml.lastIndexOf(QStringLiteral("printRecItem")) < xml.indexOf(riga));
+        QVERIFY(xml.indexOf(riga) < xml.indexOf(QStringLiteral("printRecTotal")));
+    }
+
     void reso_annullo_xml()
     {
         const RiferimentoDocumento proprio{QStringLiteral("STMTE000123"), QDate(2026, 10, 9), 41, 7};

@@ -43,10 +43,12 @@ EsitoFiscale StampanteSimulata::emettiDocumentoCommerciale(const Carrello& carre
     m_vendite.insert(m_documento, doc);
     m_totali.vendite += carrello.totale();
     ++m_totali.documenti;
-    m_giornale << QStringLiteral("DOC %1-%2 totale %3")
+    m_giornale << QStringLiteral("DOC %1-%2 totale %3%4")
                       .arg(m_azzeramento, 4, 10, QChar('0'))
                       .arg(m_documento, 4, 10, QChar('0'))
-                      .arg(carrello.totale().toString());
+                      .arg(carrello.totale().toString(),
+                           carrello.codiceFiscale().isEmpty() ? QString()
+                                                              : QStringLiteral(" C.F. ") + carrello.codiceFiscale());
     m_ultimoDocumento = m_giornale.last();
     return esitoOk();
 }

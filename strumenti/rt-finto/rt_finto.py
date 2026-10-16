@@ -80,6 +80,12 @@ def righe_documento(elementi):
             testo.append(f"  {el.get('description', ''):<22}           {segno * importo / 100:>8.2f}")
         elif el.tag == "printRecMessage":
             testo.append(f"    {el.get('message', '')}")
+        elif el.tag == "fixedLines":
+            # pitch B = codice fiscale / partita IVA del cliente (manuale pag. 55, max 44 caratteri)
+            descrizione = el.get("description", "")
+            if len(descrizione) > 44:
+                raise ValueError("fixedLines: descrizione oltre 44 caratteri")
+            testo.append(f"  C.F. CLIENTE {descrizione}" if el.get("pitch") == "B" else f"  {descrizione}")
         elif el.tag == "printRecTotal":
             pagato += int(el.get("payment"))
             testo.append(f"  {el.get('description', ''):<22} (tipo {el.get('paymentType')}) "
@@ -216,6 +222,8 @@ class Gestore(BaseHTTPRequestHandler):
                 testo = errore(5, f"richiesta {radice.tag} non simulata")
         except ET.ParseError as e:
             testo = errore(24, f"XML non valido: {e}")
+        except ValueError as e:
+            testo = errore(24, str(e))
         dati = testo.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/xml; charset=utf-8")
