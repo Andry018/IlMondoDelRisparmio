@@ -64,6 +64,16 @@ begin
      where n.nspname = 'public' and c.relkind = 'v'
        and not coalesce('security_invoker=true' = any (c.reloptions), false);
     assert v_elenco is null, 'viste senza security_invoker: ' || v_elenco;
+
+    -- Nelle politiche le funzioni di ruolo vanno racchiuse in (select ...): altrimenti
+    -- PostgreSQL le valuta per ogni riga (vedi 20261015000000_rls_una_volta_per_query.sql).
+    select string_agg(tablename || '.' || policyname, ', ') into v_elenco
+      from pg_policies
+     where schemaname = 'public'
+       and regexp_replace(coalesce(qual, '') || ' ' || coalesce(with_check, ''),
+                          'SELECT (ruolo_corrente|terminale_corrente|ha_ruolo|auth\.uid)\(', '', 'g')
+           ~ '(ruolo_corrente|terminale_corrente|ha_ruolo|auth\.uid)\(';
+    assert v_elenco is null, 'politiche con funzioni valutate per riga, usare (select ...): ' || v_elenco;
 end $$;
 
 \echo 'test_sicurezza: superati'
