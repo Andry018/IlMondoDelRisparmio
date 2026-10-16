@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Palmare MdR</string>
+    <string name="title_activity_main">Palmare MdR</string>
+    <string name="package_name">it.mondodelrisparmio.palmare</string>
+    <string name="custom_url_scheme">it.mondodelrisparmio.palmare</string>
+</resources>

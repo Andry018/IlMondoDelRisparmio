@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colori del palmare (gli stessi di www/stile.css). Hanno la precedenza su quelli di Capacitor. -->
+<resources>
+    <color name="colorPrimary">#16395C</color>
+    <color name="colorPrimaryDark">#16395C</color>
+    <color name="colorAccent">#F59E0B</color>
+    <color name="mdrSfondo">#F3F5F9</color>
+</resources>

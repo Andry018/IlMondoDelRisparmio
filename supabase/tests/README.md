@@ -30,3 +30,6 @@ Aiuti in `aiuti.sql`:
 `sdi_*` non eseguibili dai client. Vale anche per le migrazioni future.
 
 PostgREST per Windows: `postgrest-v14.x-windows-x86-64.zip` dalle release di GitHub.
+
+Palmare: `palmare/README.md` (test della logica con Node e prova completa in Chrome con
+`palmare/test/prova_palmare.ps1`, che usa lo stesso stub e le stesse migrazioni).

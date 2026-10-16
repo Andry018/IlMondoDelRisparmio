@@ -4,7 +4,7 @@ Contratto tra il server del negozio e i client (cassa `mdr-cassa`, PC ufficio, p
 Tutto ciò che è descritto qui è **API pubblica**: cambiarlo in modo non compatibile è una
 modifica che rompe i client e va concordata. Va aggiornato insieme a ogni migrazione.
 
-Schema descritto: migrazioni fino a `20261009000100_report_bolli.sql`.
+Schema descritto: migrazioni fino a `20261016000000_palmare.sql`.
 
 Verificato da `supabase/tests/`: test SQL per ogni funzione, validazione XSD ufficiale delle
 fatture generate, e `test_api_http.py`, che controlla stati HTTP, corpi e filtri descritti qui
@@ -202,6 +202,8 @@ servono un login e un account abilitato. Si interrogano con `GET /rest/v1/<vista
 | [`v_resi_da_verificare`](#v_resi_da_verificare) | resi anomali da controllare | tutti |
 | [`v_fatture_passive_da_caricare`](#carichi-passive) | fatture dei fornitori da caricare in magazzino | tutti |
 | [`v_bolli_trimestrali`](#v_bolli_trimestrali) | imposta di bollo da versare per trimestre | tutti |
+| [`v_inventari`, `v_inventario_righe`](#palmare) | inventari e differenze per articolo | tutti |
+| [`v_etichette_da_stampare`](#palmare) | cartellini da rifare | tutti |
 
 <a id="v_articoli_cassa"></a>
 ### `v_articoli_cassa`
@@ -372,6 +374,7 @@ niente.
 | [`carico_magazzino(p)`](#carico_magazzino) | amministratore, responsabile, magazziniere | uuid documento |
 | [`rettifica_inventario(p_articolo_id, p_quantita_contata, p_note?)`](#rettifica_inventario) | amministratore, responsabile, magazziniere | differenza (millesimi) |
 | [`proposta_carico(p_fattura_passiva_id)`](#carichi-passive) | amministratore, responsabile, magazziniere | righe con articolo abbinato |
+| [`cerca_articolo`, inventario, ricevimento, etichette](#palmare) | vedi la sezione Palmare | |
 | [`emetti_fattura(p)`](#emetti_fattura) | amministratore, responsabile, cassiere | uuid documento |
 | [`rigenera_fattura_sdi(p_documento_id)`](#rigenera_fattura_sdi) | amministratore, responsabile | niente |
 | [`fattura_xml(p_documento_id)`](#fattura_xml) | amministratore, responsabile, cassiere, magazziniere | XML FatturaPA |
@@ -766,7 +769,7 @@ Scrittura diretta (`POST`/`PATCH`/`DELETE /rest/v1/<tabella>`):
 | `impostazioni`, `terminali`, `aliquote_iva`, `reparti`, `categorie`, `fornitori`, `articoli`, `articoli_barcode`, `articoli_fornitori` | amministratore, responsabile |
 | `clienti` | amministratore, responsabile; il cassiere (anche il terminale) può solo **inserire** |
 | `operatori` | amministratore |
-| `vendite*`, `movimenti_magazzino`, `giacenze`, `documenti*`, `numeratori`, `chiusure_rt*`, `fatture_sdi`, `fatture_passive*`, `operatori_pin` | nessuno: solo tramite RPC |
+| `vendite*`, `movimenti_magazzino`, `giacenze`, `documenti*`, `numeratori`, `chiusure_rt*`, `fatture_sdi`, `fatture_passive*`, `operatori_pin`, `inventari*`, `ricevimento_spunte`, `etichette_richieste` | nessuno: solo tramite RPC |
 
 Articoli e operatori **non si cancellano** (errore `Gli articoli non si cancellano: disattivarli
 (attivo = false)`): si mette `attivo = false`.
@@ -801,6 +804,74 @@ curl -X POST 'http://<ip-server>:8000/rest/v1/clienti' \
 ```
 
 ---
+
+<a id="palmare"></a>
+## Palmare: inventario, ricevimento, etichette, ricerca
+
+Usate dall'app del palmare (`palmare/`, installazione in `infra/palmare/README.md`) e utili alla
+gestione. Il palmare usa il **login personale** dell'operatore. Le registrazioni hanno un `id`
+generato dal palmare: sono idempotenti (stesso id e stessi dati → nessun doppione; stesso id con
+dati diversi → `P0001 … già registrata con dati diversi`).
+
+### Ricerca articolo: `cerca_articolo`
+
+`{"p_testo": "8001111000017", "p_limite": 20}` → righe: `id`, `codice`, `descrizione`, `unita`,
+`prezzo_vendita`, `costo_ultimo` (null per il cassiere), `giacenza`, `scorta_minima`,
+`numero_reparto`, `barcode` (text[]), `attivo`, `trovato_per` (`barcode` | `codice` |
+`descrizione`). Prima barcode e codice esatti (maiuscole indifferenti), poi le descrizioni che
+contengono il testo (almeno 3 caratteri; `%` e `_` cercati come testo). Tutti i ruoli.
+
+### Inventario
+
+| RPC / vista | Ruoli | Note |
+|---|---|---|
+| `apri_inventario(p)` | amministratore, responsabile | `p = { id?, descrizione, reparti?: [numero_rt…], note? }` → uuid. Un solo inventario aperto alla volta. `reparti` null = tutto il negozio |
+| `registra_conta(p)` | + magazziniere | `p = { id, articolo_id, quantita, ubicazione?, modo?: "aggiungi" \| "sostituisci", inventario_id? }` → totale contato dell'articolo (millesimi). Default: l'inventario aperto. `sostituisci` annulla le conte precedenti dello stesso articolo nella stessa ubicazione |
+| `annulla_conta(p_conta_id)` | + magazziniere | idempotente; il magazziniere annulla solo le sue (`42501` altrimenti) |
+| `chiudi_inventario(p_inventario_id, p_azzera_non_contati?)` | amministratore, responsabile | registra le rettifiche e restituisce `{articoli_contati, articoli_rettificati, articoli_azzerati, valore_differenza}` (centesimi al costo ultimo, negativo = ammanco). Ripetibile: la seconda volta restituisce lo stesso riepilogo |
+| `annulla_inventario(p_inventario_id)` | amministratore, responsabile | solo se aperto: nessuna rettifica |
+| `v_inventari` | tutti | `id, descrizione, stato (aperto/chiuso/annullato), reparti, note, aperto_at, chiuso_at, aperto_da, chiuso_da, articoli_contati, conte, riepilogo` |
+| `v_inventario_righe` | tutti | per articolo: `inventario_id, articolo_id, codice, descrizione, unita, contato, giacenza_teorica, differenza, numero_conte, ubicazioni, ultima_conta, costo_ultimo` |
+
+**Calcolo della differenza.** `differenza = contato − giacenza teorica al momento dell'ultima conta
+dell'articolo`; alla chiusura si registra come movimento `rettifica_inventario`. Le vendite fatte
+dopo la conta restano valide: si può contare a negozio aperto. Limite: un articolo esposto in più
+punti va contato in tutti i punti in poco tempo (una vendita tra due conte dello stesso articolo
+falserebbe il risultato).
+
+Errori `P0001`: `C'è già un inventario aperto…`, `Nessun inventario aperto`, `Inventario non
+aperto (stato …)`, `Articolo fuori dai reparti di questo inventario`, `Quantità mancante o
+negativa`, `Un inventario chiuso non si annulla…`.
+
+### Ricevimento merce
+
+Spunta degli articoli arrivati contro una fattura del fornitore (`v_fatture_passive_da_caricare`),
+poi carico con `carico_magazzino` + `fattura_passiva_id` (vedi [Carichi dalle fatture
+passive](#carichi-passive)).
+
+| RPC | Ruoli | Note |
+|---|---|---|
+| `registra_spunta(p)` | amministratore, responsabile, magazziniere | `p = { id, fattura_passiva_id, articolo_id, quantita }` → totale arrivato dell'articolo. Errore se la fattura è già caricata |
+| `annulla_spunta(p_spunta_id)` | idem | solo finché la fattura non è caricata |
+| `stato_ricevimento(p_fattura_passiva_id)` | idem | per articolo: `articolo_id, codice, descrizione, codice_fornitore, atteso, spuntato, differenza, costo_unitario`. Le righe della fattura non abbinate hanno `articolo_id` null; gli articoli arrivati ma non in fattura hanno `atteso = 0` |
+
+Il carico si compone dalle righe con `articolo_id` e `spuntato > 0`: `{articolo_id, quantita:
+spuntato, costo_unitario, codice_fornitore}`.
+
+### Etichette da ristampare
+
+Ogni cambio di `prezzo_vendita` di un articolo attivo crea una richiesta (`motivo:
+prezzo_cambiato`); dal palmare si chiede con `richiedi_etichetta`. Una sola richiesta aperta per
+articolo.
+
+| RPC / vista | Ruoli | Note |
+|---|---|---|
+| `richiedi_etichetta(p_articolo_id, p_note?)` | tutti | → id della richiesta aperta |
+| `segna_etichette_stampate(p_ids bigint[])` | amministratore, responsabile | dopo la stampa dalla gestione → quante segnate |
+| `v_etichette_da_stampare` | tutti | `id, articolo_id, codice, descrizione, descrizione_breve, prezzo_vendita, unita, barcode, motivo, note, richiesta_at, richiesta_da` |
+
+Realtime: `inventari_conte` ed `etichette_richieste` sono pubblicate (la gestione vede arrivare
+le conte).
 
 ## Realtime
 
@@ -899,6 +970,16 @@ client non vedono. Le fatture passive dei fornitori arrivano in `fatture_passive
 ---
 
 ## Richieste al frontend
+
+### Gestione: palmare (15/10/2026)
+
+- **Inventari**: elenco `v_inventari`, dettaglio `v_inventario_righe` (aggiornabile in tempo reale
+  con Realtime su `inventari_conte`), apertura e **chiusura** (`apri_inventario`,
+  `chiudi_inventario` con la scelta "azzera non contati", `annulla_inventario`). Il palmare sa
+  già aprire e chiudere, ma da PC si controllano meglio le differenze.
+- **Etichette**: elenco `v_etichette_da_stampare`, stampa dei cartellini, poi
+  `segna_etichette_stampate`.
+- **Ricerca articoli**: `cerca_articolo` va bene anche per la gestione.
 
 ### Verifica del codice della cassa (branch `frontend/cassa`, commit `bd6fd0a`, 9/10/2026)
 

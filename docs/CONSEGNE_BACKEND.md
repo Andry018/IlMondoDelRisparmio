@@ -15,12 +15,13 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261008000500_controllo_resi` | `v_resi_da_verificare` | `test_resi.sql` |
 | `20261009000000_carichi_da_fatture_passive` | XML e righe delle fatture passive, `proposta_carico`, `carico_magazzino` con `fattura_passiva_id`, `v_fatture_passive_da_caricare`; tabelle in sola lettura senza privilegi di scrittura | `test_carichi_passive.sql`, `test_api_http.py` |
 | `20261009000100_report_bolli` | `v_bolli_trimestrali` (bollo da versare per trimestre, codice tributo F24) | `test_bolli.sql` |
+| `20261016000000_palmare` | inventari a sessioni (`apri_inventario`, `registra_conta`, `chiudi_inventario`…), ricevimento merce (`registra_spunta`, `stato_ricevimento`), etichette da ristampare, `cerca_articolo` | `test_palmare.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),
 `docs/API.md` (contratto completo), `docs/COSA_SERVE.md` (cosa serve dall'utente).
 
-**Stato test** (9/10/2026): `.\supabase\tests\esegui_test.ps1` passa tutto (10 file SQL, XSD di
+**Stato test** (15/10/2026): `.\supabase\tests\esegui_test.ps1` passa tutto (11 file SQL, XSD di
 12 fatture, 5 test connettore, 14 test HTTP con `$env:POSTGREST` = postgrest.exe v14.18).
 
 **Prova vera su sandbox Openapi (8/10/2026)**: 3 fatture generate dal database (TD01, privato
@@ -28,6 +29,12 @@ con bollo/esente, TD04) validate e inviate dal connettore vero a `test.invoice.o
 arrivate a `DONE`/`DELIVERED` (sdi_id 5601150, 5601160, 5601170) in circa 8 minuti.
 Configurazione sandbox con dati fittizi: partita IVA `09278931820`, email `sandbox-mdr@example.com`.
 Il token sandbox NON è nel repository (era solo nella cartella temporanea del job).
+
+**Palmare (15/10/2026)**: app web in `palmare/` (fatta da questa sessione su richiesta dell'utente),
+servita da nginx (`infra/palmare`). Test: `node --test palmare/test/logica.test.mjs` e
+`palmare/test/prova_palmare.ps1` (flusso completo in Chrome senza finestra, controlli sul database).
+Palmare in valutazione: Kingtop KP58H (Android 14, IP67): da confermare modalità tastiera dello
+scanner, Wi-Fi 5 GHz, Google Play/Chrome; ordinare un campione.
 
 ## Decisioni
 - SDI tramite Openapi, API Invoice (`invoice.openapi.com`); connettore che interroga (niente webhook: server in LAN).

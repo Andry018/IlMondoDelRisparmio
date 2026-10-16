@@ -1,0 +1,2 @@
+# Gli script per WSL devono restare con a capo Unix anche con core.autocrlf
+*.sh text eol=lf
