@@ -1,0 +1,21 @@
+{
+    "name": "mdr-palmare",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Palmare del negozio: app web (www/) impacchettata come APK Android con Capacitor.",
+    "scripts": {
+        "test": "node --test test/logica.test.mjs test/aggiornamenti.test.mjs",
+        "sync": "cap sync android"
+    },
+    "dependencies": {
+        "@capacitor/android": "8.5.2",
+        "@capacitor/app": "8.1.1",
+        "@capacitor/core": "8.5.2",
+        "@capacitor/filesystem": "8.1.5"
+    },
+    "devDependencies": {
+        "@capacitor/cli": "8.5.2",
+        "qrcode": "1.5.4"
+    }
+}

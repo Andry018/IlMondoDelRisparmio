@@ -1,0 +1,4 @@
+{
+    "server": "http://192.168.1.10:8000",
+    "apikey": "INCOLLARE QUI LA ANON_KEY DEL FILE .env DI SUPABASE"
+}

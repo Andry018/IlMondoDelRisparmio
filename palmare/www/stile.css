@@ -1,0 +1,246 @@
+/* Palmare – Mondo del Risparmio. Stile app Android (Material): superfici chiare, un colore
+   principale, testi grandi per l'uso in piedi tra gli scaffali, aree da toccare ≥ 48 px. */
+:root {
+    --primario: #16395c;
+    --primario-2: #1f5a8f;
+    --primario-chiaro: #e3edf7;
+    --accento: #f59e0b;
+    --verde: #12805c;
+    --verde-chiaro: #e3f5ee;
+    --rosso: #c0392b;
+    --rosso-chiaro: #fdecea;
+    --arancio: #b45309;
+    --arancio-chiaro: #fff4e0;
+    --testo: #111827;
+    --testo-2: #5b6472;
+    --linea: #e3e7ee;
+    --sfondo: #f3f5f9;
+    --superficie: #ffffff;
+    --ombra: 0 1px 2px rgba(16, 24, 40, .06), 0 2px 8px rgba(16, 24, 40, .06);
+    --ombra-alta: 0 8px 28px rgba(16, 24, 40, .22);
+    --raggio: 16px;
+    --alto: env(safe-area-inset-top, 0px);
+    --basso: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; }
+body {
+    font-family: Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 17px; line-height: 1.35;
+    color: var(--testo); background: var(--sfondo);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+}
+input, textarea { user-select: text; }
+.icona { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* ---------- Barra superiore ---------- */
+.barra {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 4px;
+    padding: calc(8px + var(--alto)) 6px 8px 8px; min-height: 64px;
+    background: linear-gradient(135deg, var(--primario), var(--primario-2)); color: #fff;
+    box-shadow: 0 2px 10px rgba(22, 57, 92, .25);
+}
+.titoli { flex: 1; min-width: 0; padding-left: 8px; }
+.titoli h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .1px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sottotitolo { font-size: 13px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sottotitolo:empty { display: none; }
+.tasto-icona {
+    width: 48px; height: 48px; border-radius: 50%; border: 0; background: transparent; color: inherit;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0; flex: none;
+}
+.tasto-icona:active { background: rgba(255, 255, 255, .18); }
+#rete .icona { opacity: .95; }
+#rete.ko { color: #ffb4a8; }
+.chip-coda {
+    background: var(--accento); color: #1f1300; font-size: 13px; font-weight: 700;
+    border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+}
+
+/* ---------- Contenuto ---------- */
+main { padding: 14px 14px calc(96px + var(--basso)); max-width: 680px; margin: 0 auto; }
+body.senza-schede main { padding-bottom: calc(24px + var(--basso)); }
+.sezione { margin: 18px 4px 8px; font-size: 13px; font-weight: 700; letter-spacing: .6px;
+           text-transform: uppercase; color: var(--testo-2); }
+
+.scheda {
+    background: var(--superficie); border-radius: var(--raggio); box-shadow: var(--ombra);
+    padding: 16px; margin: 0 0 12px;
+}
+.scheda h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.scheda .sotto { color: var(--testo-2); font-size: 14px; margin-top: 2px; }
+.intestazione { display: flex; gap: 14px; align-items: center; }
+.bollo-icona {
+    width: 48px; height: 48px; border-radius: 14px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--primario-chiaro); color: var(--primario);
+}
+.bollo-icona.verde { background: var(--verde-chiaro); color: var(--verde); }
+.bollo-icona.arancio { background: var(--arancio-chiaro); color: var(--arancio); }
+
+/* Barra di lettura del codice */
+.lettore {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--superficie); border-radius: 999px; box-shadow: var(--ombra);
+    padding: 4px 4px 4px 16px; margin: 0 0 14px; border: 2px solid transparent;
+}
+.lettore:focus-within { border-color: var(--primario-2); }
+.lettore .icona { color: var(--testo-2); }
+.lettore input {
+    flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+    font-size: 19px; padding: 12px 6px; font-family: inherit; color: var(--testo);
+}
+.lettore .tasto-icona { color: var(--primario); }
+.lettore .tasto-icona:active { background: var(--primario-chiaro); }
+
+/* Campi e tasti */
+label.etichetta { display: block; font-size: 13px; font-weight: 600; color: var(--testo-2); margin: 14px 2px 6px; }
+.campo, textarea.campo {
+    width: 100%; min-height: 54px; padding: 12px 14px; font-size: 18px; font-family: inherit;
+    border: 1.5px solid var(--linea); border-radius: 12px; background: var(--superficie); color: var(--testo);
+    outline: none;
+}
+.campo:focus { border-color: var(--primario-2); box-shadow: 0 0 0 3px var(--primario-chiaro); }
+.tasto {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 52px; padding: 0 22px; border-radius: 999px; border: 0;
+    font-size: 17px; font-weight: 600; font-family: inherit; letter-spacing: .2px;
+    background: var(--primario-chiaro); color: var(--primario);
+}
+.tasto.pieno { background: var(--primario); color: #fff; box-shadow: 0 2px 6px rgba(22, 57, 92, .3); }
+.tasto.contorno { background: transparent; border: 1.5px solid var(--linea); color: var(--testo); }
+.tasto.pericolo { background: var(--rosso-chiaro); color: var(--rosso); }
+.tasto.largo { width: 100%; }
+.tasto:disabled { opacity: .45; }
+.tasto:active, .riga-elenco.toccabile:active, .tasto-schede:active { filter: brightness(.94); transform: scale(.995); }
+.tasti { display: flex; gap: 10px; margin-top: 14px; }
+.tasti > * { flex: 1; }
+
+/* Interruttore */
+.interruttore { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; }
+.interruttore input { appearance: none; width: 52px; height: 32px; border-radius: 999px; background: #c9d0db;
+                      position: relative; transition: background .15s; flex: none; margin: 0; }
+.interruttore input::after { content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px;
+                             border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .15s; }
+.interruttore input:checked { background: var(--primario-2); }
+.interruttore input:checked::after { left: 24px; }
+
+/* Elenchi */
+.elenco { list-style: none; margin: 0; padding: 0; background: var(--superficie); border-radius: var(--raggio);
+          box-shadow: var(--ombra); overflow: hidden; }
+.riga-elenco { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; min-height: 64px; }
+.riga-elenco + .riga-elenco { border-top: 1px solid var(--linea); }
+.riga-elenco .testo { flex: 1; min-width: 0; }
+.riga-elenco .testo b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.riga-elenco .testo small { display: block; color: var(--testo-2); font-size: 14px; margin-top: 2px; }
+.riga-elenco .tasto-icona { color: var(--testo-2); }
+.num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; text-align: right; }
+.pastiglia { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.pastiglia.ok { background: var(--verde-chiaro); color: var(--verde); }
+.pastiglia.meno { background: var(--rosso-chiaro); color: var(--rosso); }
+.pastiglia.piu { background: var(--arancio-chiaro); color: var(--arancio); }
+.pastiglia.neutra { background: var(--primario-chiaro); color: var(--primario); }
+
+/* Scheda articolo */
+.articolo .prezzo { font-size: 46px; font-weight: 700; letter-spacing: -.5px; margin: 10px 0 2px; color: var(--primario); }
+.articolo .prezzo small { font-size: 18px; font-weight: 500; color: var(--testo-2); }
+.griglia-dati { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.dato { background: var(--sfondo); border-radius: 12px; padding: 10px 12px; }
+.dato span { display: block; font-size: 12px; font-weight: 600; color: var(--testo-2); text-transform: uppercase; letter-spacing: .4px; }
+.dato b { display: block; font-size: 19px; margin-top: 2px; }
+.dato.allarme b { color: var(--rosso); }
+
+/* Avanzamento */
+.barra-avanzamento { height: 8px; background: var(--linea); border-radius: 999px; overflow: hidden; margin-top: 12px; }
+.barra-avanzamento div { height: 100%; background: var(--verde); border-radius: 999px; transition: width .3s; }
+
+/* Stato vuoto */
+.vuoto { text-align: center; color: var(--testo-2); padding: 48px 20px; }
+.vuoto .icona { width: 64px; height: 64px; color: #b8c2d1; }
+.vuoto h3 { color: var(--testo); margin: 12px 0 4px; font-size: 19px; }
+.vuoto p { margin: 0; }
+
+/* Caricamento */
+.caricamento { display: flex; justify-content: center; padding: 48px 0; }
+.ruota { width: 36px; height: 36px; border-radius: 50%; border: 4px solid var(--primario-chiaro);
+         border-top-color: var(--primario-2); animation: gira .8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+
+/* ---------- Navigazione in basso ---------- */
+.schede {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; background: var(--superficie); border-top: 1px solid var(--linea);
+    padding: 6px 4px calc(6px + var(--basso)); box-shadow: 0 -2px 12px rgba(16, 24, 40, .06);
+}
+.tasto-schede {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    border: 0; background: none; color: var(--testo-2); font-family: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 4px 0; min-height: 60px;
+}
+.tasto-schede .pillola { width: 60px; height: 32px; border-radius: 999px; display: flex; align-items: center; justify-content: center; }
+.tasto-schede.attiva { color: var(--primario); }
+.tasto-schede.attiva .pillola { background: var(--primario-chiaro); }
+
+/* ---------- Avviso (snackbar) ---------- */
+#avviso {
+    position: fixed; left: 12px; right: 12px; bottom: calc(86px + var(--basso)); z-index: 30;
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px;
+    background: #1f2937; color: #fff; font-size: 16px; font-weight: 500; box-shadow: var(--ombra-alta);
+    animation: entra .18s ease-out;
+}
+body.senza-schede #avviso { bottom: calc(16px + var(--basso)); }
+#avviso .icona { color: #6ee7b7; }
+#avviso.errore { background: var(--rosso); }
+#avviso.errore .icona, #avviso.attenzione .icona { color: #fff; }
+#avviso.attenzione { background: var(--arancio); }
+@keyframes entra { from { transform: translateY(12px); opacity: 0; } }
+
+/* ---------- Pannello dal basso ---------- */
+#sfondo-foglio { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 40; animation: dissolvi .15s; }
+.foglio {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 92vh; overflow: auto;
+    background: var(--superficie); border-radius: 24px 24px 0 0; box-shadow: var(--ombra-alta);
+    padding: 10px 18px calc(18px + var(--basso)); animation: sale .2s ease-out;
+    max-width: 680px; margin: 0 auto;
+}
+.foglio::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px;
+                  background: #c9d0db; margin: 0 auto 12px; }
+.foglio h2 { margin: 0 0 2px; font-size: 20px; }
+.foglio .sotto { color: var(--testo-2); font-size: 14px; }
+@keyframes sale { from { transform: translateY(40px); opacity: .6; } }
+@keyframes dissolvi { from { opacity: 0; } }
+
+/* Tastierino quantità */
+.display-qta { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; }
+.display-qta input {
+    flex: 1; min-width: 0; text-align: center; font-size: 40px; font-weight: 700; letter-spacing: .5px;
+    border: 2px solid var(--primario-2); border-radius: 14px; padding: 6px; height: 72px;
+    font-family: inherit; color: var(--testo); background: var(--primario-chiaro); outline: none;
+}
+.display-qta .unita { font-size: 18px; font-weight: 600; color: var(--testo-2); width: 34px; }
+.display-qta .tasto-icona { width: 56px; height: 56px; background: var(--sfondo); color: var(--primario); }
+.tastierino { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tastierino button {
+    height: 60px; border-radius: 14px; border: 0; background: var(--sfondo); color: var(--testo);
+    font-size: 26px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center;
+}
+.tastierino button:active { background: var(--primario-chiaro); }
+
+/* ---------- Accesso ---------- */
+.accesso { min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+           padding: calc(24px + var(--alto)) 20px calc(24px + var(--basso)); max-width: 480px; margin: 0 auto; }
+.accesso .logo { width: 84px; height: 84px; border-radius: 24px; box-shadow: var(--ombra-alta); }
+.accesso h1 { font-size: 26px; margin: 18px 0 2px; }
+.accesso .sotto { color: var(--testo-2); margin: 0 0 22px; }
+body.senza-barra main { padding: 0; max-width: none; }
+
+/* ---------- Fotocamera ---------- */
+#fotocamera { position: fixed; inset: 0; z-index: 50; background: #000; display: flex; align-items: center; justify-content: center; }
+#fotocamera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#fotocamera .mirino { position: relative; width: 78%; max-width: 360px; aspect-ratio: 16 / 9;
+                      border: 3px solid #fff; border-radius: 18px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); }
+#fotocamera p { position: absolute; bottom: calc(40px + var(--basso)); color: #fff; font-size: 17px; }
+#fotocamera .tasto-icona { position: absolute; top: calc(12px + var(--alto)); right: 12px; color: #fff; background: rgba(0,0,0,.4); }

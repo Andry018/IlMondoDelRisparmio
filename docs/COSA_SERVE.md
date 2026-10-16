@@ -26,6 +26,38 @@ sul programma di cassa (`src/`).
       CUSTOM), da chiedere al rivenditore o all'assistenza Custom: non è pubblico. Serve a
       chi scrive il driver per sapere come si comandano scontrino, annullo, reso e
       **chiusura giornaliera** e come si leggono i totali del giorno.
+      Il PDF ricevuto il 9/10 (`057D100M000024`, "Scambio importo — Guida aggiuntiva") **non è
+      questo manuale**: riguarda il collegamento al POS bancario (CustomPay, protocollo 17).
+      Va chiesto il "manuale tecnico del protocollo di comunicazione per lo sviluppo di software
+      gestionale" della K3-F RT (stampante Custom di 3ª generazione).
+      Protocolli della stampante: CUSTOM, CUSTOM DLL, CUSTOM XON/OFF, FASY XON/OFF, FASY UAP.
+      Da chiedere in ordine di preferenza: (1) specifica del protocollo **CUSTOM** (rete porta
+      9100 o USB, nessuna libreria esterna); (2) in alternativa l'SDK ufficiale **CUSTOM DLL**
+      (CeFdll/CeFCOM, probabilmente a 32 bit: dal nostro programma a 64 bit servirebbe un
+      programma ponte). XON/OFF e FASY non servono. Mai DLL da siti di raccolta (il file
+      `Downloads\custom\Custom.dll` del 13/10 era un "OnlineFix" per videogiochi: da cancellare).
+      **✅ Trovato il manuale per il driver (13/10)**: `Downloads\0577200M000082_2.00.PDF`, "WEB
+      SERVICES – Commands manual for 3rd generation fiscal devices" (rev. 2.00, nov. 2025, K3-F RT
+      supportata). Comandi XML inviati con HTTP POST a `http://<ip-stampante>/xml/printer.htm`:
+      scontrino (`printRecItem`, `printRecTotal`…), annulli e resi RT (`beginRtDocAnnulment`,
+      `beginRtDocRefund`…), chiusura (`printZReport`, `getZReports`, `getZTransmissionID`),
+      totali giornalieri e per aliquota (`getDailyTotals`, `getVatTotalsOnDemand`), stato e
+      codici di errore. È la strada consigliata per il driver (niente DLL). Sulla stampante va
+      attivato il servizio Web/XML. Non servono più il manuale cod. 77100000000700 né la DLL.
+      Esaminati e non necessari: Utility RT (`761000000111_1.30.PDF`, `UTILITYRT_1080800.ZIP`, per
+      Fusion PC RT, da non installare).
+      Complemento: `Downloads\057D100M000013_1.00.pdf`, "Guida per sviluppatori — applicazioni
+      pratiche nuove specifiche V10" (solo macchine di 3ª generazione): comandi del protocollo
+      CUSTOM e XON-XOFF per vendite a reparto, modificatori, pagamenti, annulli e resi. Mancano
+      chiusura Z, letture dei totali e formato dei pacchetti: stanno nel **manuale comandi
+      gruppo 0017, cod. 77100000000700**, da chiedere con questo codice. Documenti riservati
+      Custom: si passano a chi scrive il driver, non si copiano nel repository.
+      Già esaminati e **non adatti**: `01SW0000000536_128` "CuCustomWndAPI Pack 1.28" (originale
+      Custom, firmato, ma per stampanti **non fiscali**: nessun comando di scontrino, IVA o
+      chiusura) e `CeFdllInstallation_127.exe` (versione del 2013, precedente agli RT).
+- [ ] *(facoltativo, più avanti)* **Scambio importo con il POS bancario**: la K3-F RT può
+      passare l'importo al POS (CustomPay, funzione 909) se il POS bancario supporta il
+      **protocollo 17** ed è in rete via Ethernet. Da chiedere alla banca o al fornitore del POS.
 - [ ] **Versione del firmware** (dal menu della stampante o dallo scontrino di prova).
 - [ ] **Indirizzo IP fisso** per ogni registratore (DHCP disattivato), nella stessa rete
       delle casse. Dal menu di programmazione: P910 parametri di comunicazione, P911 rete TCP.

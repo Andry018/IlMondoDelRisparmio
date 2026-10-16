@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="theme-color" content="#16395c">
+    <title>Palmare – Mondo del Risparmio</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icona.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="stile.css">
+</head>
+<body>
+    <header class="barra" id="barra" hidden>
+        <button id="indietro" class="tasto-icona" hidden aria-label="Indietro"></button>
+        <div class="titoli">
+            <h1 id="titolo">Palmare</h1>
+            <div id="sottotitolo"></div>
+        </div>
+        <span id="coda" class="chip-coda" hidden></span>
+        <button id="rete" class="tasto-icona" aria-label="Stato del collegamento"></button>
+        <button id="profilo" class="tasto-icona" aria-label="Profilo"></button>
+    </header>
+
+    <main id="vista"></main>
+
+    <nav id="schede" class="schede" hidden></nav>
+
+    <div id="avviso" role="status" hidden></div>
+
+    <div id="sfondo-foglio" hidden></div>
+    <section id="foglio" class="foglio" hidden aria-modal="true" role="dialog"></section>
+
+    <div id="fotocamera" hidden>
+        <video id="video" playsinline muted></video>
+        <div class="mirino"></div>
+        <button id="chiudi-fotocamera" class="tasto-icona"></button>
+        <p>Inquadra il codice a barre</p>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

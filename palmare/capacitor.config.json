@@ -1,0 +1,16 @@
+{
+    "appId": "it.mondodelrisparmio.palmare",
+    "appName": "Palmare MdR",
+    "webDir": "www",
+    "server": {
+        "androidScheme": "http",
+        "hostname": "localhost"
+    },
+    "android": {
+        "allowMixedContent": true
+    },
+    "plugins": {
+        "CapacitorHttp": { "enabled": true },
+        "SystemBars": { "insetsHandling": "native", "style": "DARK" }
+    }
+}
