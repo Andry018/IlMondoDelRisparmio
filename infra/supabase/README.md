@@ -70,27 +70,36 @@ EOF
 docker compose -f docker-compose.yml -f docker-compose.mdr.yml up -d --no-deps db
 ```
 
-## Applicare lo schema
+## Applicare lo schema e gli aggiornamenti
 
-Dalla cartella del progetto, con il client `psql` (password = `POSTGRES_PASSWORD` di `.env`):
+Sul server, dalla cartella del progetto (copia del repository), con `applica_migrazioni.sh`:
+applica solo le migrazioni non ancora applicate, ognuna in una transazione insieme alla sua
+registrazione in `mdr_admin.migrazioni` (schema non esposto dall'API), e prima fa un backup.
 
 ```bash
-export PGPASSWORD=<POSTGRES_PASSWORD>
-for f in supabase/migrations/*.sql; do
-  psql -h <ip-server> -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -1 -f "$f"
-done
-psql -h <ip-server> -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -1 -f supabase/seed.sql
+infra/supabase/applica_migrazioni.sh --seed     # prima installazione: tutte le migrazioni + seed.sql
+infra/supabase/applica_migrazioni.sh --prova    # aggiornamento: cosa verrebbe applicato
+infra/supabase/applica_migrazioni.sh            # aggiornamento: backup, poi le migrazioni nuove
 ```
+
+Un database installato prima di questo script (senza registro) va "adottato" una volta,
+indicando l'ultima migrazione già applicata; lo script si rifiuta di partire finché non lo si fa:
+
+```bash
+infra/supabase/applica_migrazioni.sh --adotta-fino-a 20261016000200
+```
+
+Se un file già applicato viene cambiato lo script lo segnala (le migrazioni non si modificano:
+ogni correzione è un file nuovo). Da un altro PC, con `psql` e la porta pubblicata più sotto:
+`MDR_PSQL="psql -h <ip-server> -p 54322 -U postgres -d postgres" PGPASSWORD=<POSTGRES_PASSWORD> infra/supabase/applica_migrazioni.sh`.
+
+Provato il 16/10/2026 sul Supabase di prova in WSL (adozione delle 13 migrazioni presenti,
+backup, applicazione di `20261016000300_storico_prezzi`, seconda esecuzione senza modifiche).
 
 Su Supabase la migrazione iniziale stampa avvisi `no privileges could be revoked for "gtrgm_..."`:
 sono funzioni dell'estensione `pg_trgm`, di proprietà dell'amministratore interno di Supabase.
 Sono innocui (test_sicurezza.sql esclude già le funzioni delle estensioni).
 
-In alternativa la Supabase CLI: `supabase db push --db-url postgres://postgres:<pwd>@<ip-server>:5432/postgres`.
-
-Il ciclo `for` va bene **solo sul database vuoto**: le migrazioni non sono ripetibili.
-Per gli aggiornamenti applicare solo i file nuovi, oppure usare `supabase db push`, che
-tiene traccia di quelle già applicate. Prima di ogni aggiornamento: backup (vedi sotto).
 
 ## Primo amministratore
 
@@ -159,12 +168,33 @@ Storage, imgproxy, edge functions e analytics si possono togliere dal
 
 ## Backup (obbligatorio)
 
-Ogni notte, via cron, dump compresso su un disco diverso o un NAS, più una copia fuori
-dal negozio una volta a settimana:
+- `backup.sh`: dump completo compresso (dati del negozio **e** utenti), controllato (deve
+  contenere articoli, vendite, movimenti, operatori, fatture e `auth.users`), copiato sul NAS se
+  configurato, poi la rotazione: tutti gli ultimi 14 giorni, le domeniche per 8 settimane, il primo
+  del mese per un anno.
+- `prova_ripristino.sh`: carica l'ultimo dump in un database a parte dello stesso server, conta le
+  righe delle tabelle principali e degli utenti, controlla che le giacenze tornino con i movimenti,
+  poi lo cancella. Un backup mai ripristinato non è un backup.
 
 ```bash
-0 2 * * * docker exec supabase-db pg_dump -U postgres -Fc postgres > /backup/mdr_$(date +\%F).dump
+sudo mkdir -p /opt/mdr /etc/mdr /backup/mdr
+sudo cp infra/supabase/backup.sh infra/supabase/prova_ripristino.sh /opt/mdr/ && sudo chmod +x /opt/mdr/*.sh
+# NAS o disco esterno montato (consigliato: un disco diverso da quello del server)
+echo "MDR_BACKUP_DIR=/backup/mdr" | sudo tee /etc/mdr/backup.env
+echo "MDR_BACKUP_COPIA=/mnt/nas/mdr" | sudo tee -a /etc/mdr/backup.env
+sudo cp infra/supabase/mdr-backup.service infra/supabase/mdr-backup.timer \
+        infra/supabase/mdr-prova-ripristino.service infra/supabase/mdr-prova-ripristino.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now mdr-backup.timer mdr-prova-ripristino.timer
+sudo systemctl start mdr-backup.service && journalctl -u mdr-backup -n 20   # prima prova
 ```
 
-Provare periodicamente il ripristino su un'altra macchina: un backup mai ripristinato
-non è un backup.
+Backup ogni notte alle 2:30, prova di ripristino la prima domenica del mese alle 4:00
+(`journalctl -u mdr-prova-ripristino`). Una copia **fuori dal negozio** (chiavetta o disco
+portato a casa una volta a settimana) resta da fare a mano: furto o incendio prendono anche il NAS.
+
+**Ripristino vero** (server nuovo; procedura non ancora provata per intero): installare Supabase come sopra, poi
+`docker exec -i supabase-db pg_restore -U postgres -d postgres --clean --if-exists -n public -n auth < mdr_<data>.dump`
+e infine `infra/supabase/applica_migrazioni.sh` per le migrazioni arrivate dopo quel backup.
+
+Provati il 16/10/2026 sul Supabase di prova in WSL: dump di 11 MB, ripristino con 14.444
+articoli, 35.395 scontrini, 5 utenti e giacenze uguali alla somma dei movimenti.

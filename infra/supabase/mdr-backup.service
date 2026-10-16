@@ -1,0 +1,11 @@
+[Unit]
+Description=Mondo del Risparmio - backup del database (dump controllato e ruotato)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# MDR_BACKUP_DIR e, se c'è il NAS, MDR_BACKUP_COPIA (vedi infra/supabase/README.md)
+EnvironmentFile=-/etc/mdr/backup.env
+ExecStart=/opt/mdr/backup.sh
+Nice=10

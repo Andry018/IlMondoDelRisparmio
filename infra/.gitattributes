@@ -1,0 +1,4 @@
+# Script per il server Linux: a capo Unix anche con core.autocrlf
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf

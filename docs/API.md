@@ -194,6 +194,7 @@ servono un login e un account abilitato. Si interrogano con `GET /rest/v1/<vista
 | [`v_operatori_cassa`](#v_operatori_cassa) | copia offline di operatori e PIN | terminali, amministratore |
 | [`v_sottoscorta`](#v_sottoscorta) | riordino | tutti |
 | [`v_scheda_articolo`](#v_scheda_articolo) | pagina Articoli della gestione | tutti |
+| [`v_storico_prezzi`](#v_storico_prezzi) | storico di prezzo e costo di un articolo | tutti |
 | [`v_riconciliazione_chiusure`](#riconciliazione) | chiusure Z contro vendite | tutti |
 | [`v_riconciliazione_chiusure_aliquote`](#riconciliazione) | idem per aliquota | tutti |
 | [`v_incassi`](#report) | incassi per giorno, terminale, pagamento | tutti |
@@ -315,6 +316,22 @@ la paginazione, poi la scheda dell'articolo selezionato.
 Le vendite dello storico SystemApp non hanno movimenti di magazzino (la giacenza importata le
 comprende già): per questo `giacenza` ≠ `giacenza_iniziale + carichi − venduto + …` sugli articoli
 importati, mentre torna per tutto quello che succede dopo l'importazione.
+
+### `v_storico_prezzi`
+
+Ogni cambio di prezzo di vendita o di costo ultimo di un articolo, da dove arrivi (gestione,
+carico dal fornitore, importazione), lo registra un trigger in `articoli_prezzi` (migrazione
+`20261016000300_storico_prezzi.sql`; sola lettura per i client). La vista aggiunge la variazione
+rispetto alla riga prima:
+
+```
+GET /rest/v1/v_storico_prezzi?articolo_id=eq.<uuid>&order=cambiato_at.desc
+```
+
+Colonne: `id`, `articolo_id`, `codice`, `descrizione`, `prezzo_vendita`, `costo_ultimo` (centesimi),
+`variazione_prezzo`, `variazione_costo` (centesimi, null sulla prima riga), `origine`
+(`iniziale` = prezzo alla migrazione o alla creazione dell'articolo, `modifica`), `operatore_id`,
+`operatore` (null per importazioni e procedure del server), `cambiato_at`.
 
 **Campi nuovi di `articoli`** (si modificano come gli altri, `PATCH /rest/v1/articoli?id=eq.<uuid>`,
 amministratore e responsabile): `ricarico_bp` (int \| null), `pezzi_collo` (int ≥ 1, default 1),
@@ -1055,6 +1072,7 @@ forza lo stesso aspetto); schema approvato il 16/10/2026:
   `ricarico_effettivo_bp` e `margine_bp` sono quelli attuali, uguali a SystemApp.
 - "Movimenti": `movimenti_magazzino?articolo_id=eq.<id>&order=data_ora.desc` e le vendite da
   `v_venduto_articoli`.
+- "Storico prezzi" (16/10/2026, prima mancava): [`v_storico_prezzi`](#v_storico_prezzi).
 - **Importazione SystemApp** (`strumenti/importa-systemapp`): portare anche `Articoli.fricarico`
   (× 100 → `ricarico_bp`, 0 = null), `pz_collo` (→ `pezzi_collo`, minimo 1), `DETRAIBILE`
   (→ `dispositivo_medico`), `RICHIESTO_LOTTO` (→ `richiede_lotto`). Sul Supabase di prova in WSL

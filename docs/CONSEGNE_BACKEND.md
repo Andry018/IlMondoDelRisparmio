@@ -18,6 +18,7 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261016000000_palmare` | inventari a sessioni (`apri_inventario`, `registra_conta`, `chiudi_inventario`…), ricevimento merce (`registra_spunta`, `stato_ricevimento`), etichette da ristampare, `cerca_articolo` | `test_palmare.sql` |
 | `20261016000100_scheda_articolo` | campi `ricarico_bp`, `pezzi_collo`, `richiede_lotto`, `dispositivo_medico` su `articoli`; `v_scheda_articolo` (pagina Articoli sul modello di SystemApp: prezzi, ricarico/margine, totali di magazzino, ultimo carico) | `test_scheda_articolo.sql` |
 | `20261016000200_scontrino_codice_fiscale` | `vendite.codice_fiscale_cliente`, `registra_vendita` con `codice_fiscale`, `dispositivo_medico` in fondo a `v_articoli_cassa` | `test_scontrino_cf.sql`, `test_flussi.sql`, `test_api_http.py` |
+| `20261016000300_storico_prezzi` | `articoli_prezzi` scritta dal trigger su prezzo/costo, `v_storico_prezzi` con le variazioni | `test_storico_prezzi.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

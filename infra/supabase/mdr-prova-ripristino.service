@@ -1,0 +1,10 @@
+[Unit]
+Description=Mondo del Risparmio - prova di ripristino dell'ultimo backup
+After=docker.service mdr-backup.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/mdr/backup.env
+ExecStart=/opt/mdr/prova_ripristino.sh
+Nice=10
