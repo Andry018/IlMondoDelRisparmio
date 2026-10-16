@@ -18,12 +18,21 @@ function(mdr_test_vista nome libreria)
     add_executable(${nome} ${nome}.cpp)
     target_link_libraries(${nome} PRIVATE ${libreria} Qt6::Test)
     add_test(NAME ${nome} COMMAND ${nome})
-    set_tests_properties(${nome} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Su Windows i font di sistema, così le misure delle viste sono quelle del POS (Segoe UI).
+    if(WIN32)
+        set_tests_properties(${nome} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_FONTDIR=C:/Windows/Fonts")
+    else()
+        set_tests_properties(${nome} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
 endfunction()
 
 if(TARGET mdr_cassa)
     mdr_test_vista(test_cassa mdr_cassa)
     mdr_test_vista(test_cassa_server mdr_cassa)   # contro il server di sviluppo, se acceso
+endif()
+if(TARGET mdr_cassa AND TARGET mdr_gestione)
+    # Cassa e gestione contro un server con i dati veri (si salta senza MDR_PROVA_SERVER).
+    mdr_test_vista(test_dati_reali "mdr_cassa;mdr_gestione")
 endif()
 if(TARGET mdr_gestione)
     mdr_test_vista(test_gestione mdr_gestione)

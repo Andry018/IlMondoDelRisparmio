@@ -643,13 +643,14 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* sopra = new QWidget(divisore);
     auto* ls = new QVBoxLayout(sopra);
     ls->setContentsMargins(0, 0, 0, 0);
-    ls->addWidget(new QLabel(QStringLiteral("<b>Sotto scorta</b> — da riordinare"), sopra));
+    ls->addWidget(new QLabel(QStringLiteral("<b>Sotto scorta</b> — articoli con la scorta minima impostata, da riordinare"),
+                             sopra));
     m_sottoscorta = new TabellaServer({
         {"codice", QStringLiteral("Codice")},
         {"descrizione", QStringLiteral("Articolo")},
         {"giacenza", QStringLiteral("Giacenza"), ColonnaServer::Quantita},
         {"scorta_minima", QStringLiteral("Scorta minima"), ColonnaServer::Quantita},
-        {"da_ordinare", QStringLiteral("Mancano"), ColonnaServer::Testo,
+        {"da_ordinare", QStringLiteral("Mancano"), ColonnaServer::Quantita,   // calcolata, a destra come i numeri
          [](const QJsonObject& r) {
              return Quantita::fromMillesimi(r.value("scorta_minima").toInteger() - r.value("giacenza").toInteger()).toString();
          }},
@@ -686,7 +687,9 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
 void VistaMagazzino::aggiorna()
 {
     m_passive->carica(m_client, QStringLiteral("v_fatture_passive_da_caricare?order=data.desc&limit=200"));
-    m_sottoscorta->carica(m_client, QStringLiteral("v_sottoscorta?order=descrizione"));
+    // Solo gli articoli con una scorta minima: senza il filtro ogni giacenza negativa (migliaia,
+    // portate così da SystemApp) finirebbe tra quelli da riordinare.
+    m_sottoscorta->carica(m_client, QStringLiteral("v_sottoscorta?scorta_minima=gt.0&order=descrizione"));
     m_carichi->carica(m_client, QStringLiteral("documenti?select=id,anno,numero,data,numero_esterno,imponibile,totale,"
                                                "fornitori(ragione_sociale)&tipo=eq.carico_fornitore"
                                                "&order=data.desc,numero.desc&limit=50"));

@@ -94,7 +94,7 @@ perde, il driver chiede all'RT l'ultimo documento per capire se è uscito, invec
 Senza la stampante, un registratore finto che risponde allo stesso modo e stampa a video gli scontrini:
 
 ```powershell
-python strumentit-fintot_finto.py     # poi in cassa: Rete, indirizzo 127.0.0.1:8099, riavvio
+python strumenti\rt-finto\rt_finto.py     # poi in cassa: Rete, indirizzo 127.0.0.1:8099, riavvio
 $env:MDR_RT_FINTO = "127.0.0.1:8099"; ctest --preset debug -R test_custom   # prova anche l'HTTP vero
 ```
 

@@ -16,6 +16,14 @@ inline QString euro(Money m)
     return QStringLiteral("€ %1").arg(m.toString());
 }
 
+inline QFont fontGrande(const QFont& base, int punti, bool grassetto = false)
+{
+    QFont f = base;
+    f.setPointSize(punti);
+    f.setBold(grassetto);
+    return f;
+}
+
 // Pulsante grande per il touch, con il tasto rapido scritto sotto.
 inline QPushButton* pulsanteComando(const QString& testo, const QKeySequence& tasto, QWidget* parent)
 {
@@ -24,6 +32,7 @@ inline QPushButton* pulsanteComando(const QString& testo, const QKeySequence& ta
     if (!tasto.isEmpty())
         b->setShortcut(tasto);
     b->setMinimumHeight(42);
+    b->setFont(fontGrande(b->font(), 11));   // sul touch: il 9 di sistema è piccolo in un tasto così grande
     b->setFocusPolicy(Qt::NoFocus);   // il fuoco resta sul campo del lettore barcode
     return b;
 }
@@ -35,14 +44,6 @@ inline QTableWidgetItem* cella(const QString& testo, bool numero = false)
     if (numero)
         item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     return item;
-}
-
-inline QFont fontGrande(const QFont& base, int punti, bool grassetto = false)
-{
-    QFont f = base;
-    f.setPointSize(punti);
-    f.setBold(grassetto);
-    return f;
 }
 
 } // namespace mdr

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
+#include <QUrlQuery>
 #include <QtTest>
 
 using namespace mdr;
@@ -193,6 +194,46 @@ private slots:
         QCOMPARE(db.rimettiInCoda(), 1);
         QCOMPARE(db.contaDaInviare(), 1);
         QCOMPARE(db.contaDaVerificare(), 0);
+    }
+
+    // PostgREST con db-max-rows più basso della pagina chiesta: arrivano meno righe del limite, ma
+    // la cassa deve scaricare comunque tutti gli articoli (prima si fermava alla prima pagina "corta").
+    void server_con_poche_righe_per_richiesta()
+    {
+        ArchivioLocale db(":memory:");
+        QVERIFY(db.apri());
+        constexpr int totale = 5;
+        constexpr int massimoPerRichiesta = 2;
+        FintoSupabase server;
+        server.gestore = [&](const FintoSupabase::Richiesta& r) -> FintoSupabase::Risposta {
+            if (r.percorso.startsWith("/auth/v1/token"))
+                return {200, R"({"access_token":"ACCESSO","refresh_token":"RINNOVO2","expires_in":3600})"};
+            if (r.percorso.startsWith("/rest/v1/reparti"))
+                return {200, R"([{"numero_rt":1,"descrizione":"Casalinghi","aliquote_iva":{"basis_points":2200,"natura":null}}])"};
+            if (r.percorso.startsWith("/rest/v1/v_articoli_cassa")) {
+                const int offset = QUrlQuery(QUrl(r.percorso).query()).queryItemValue("offset").toInt();
+                QJsonArray righe;
+                for (int i = offset; i < std::min(totale, offset + massimoPerRichiesta); ++i)
+                    righe.append(QJsonObject{
+                        {"id", QUuid::createUuidV5(QUuid(), QString::number(i)).toString(QUuid::WithoutBraces)},
+                        {"codice", QString::number(6000 + i)}, {"descrizione", QStringLiteral("Articolo %1").arg(i)},
+                        {"descrizione_scontrino", QStringLiteral("ART %1").arg(i)}, {"unita", "PZ"}, {"prezzo_vendita", 100 + i},
+                        {"numero_reparto", 1}, {"aliquota_bp", 2200}, {"natura", QJsonValue()}, {"attivo", true},
+                        {"updated_at", QStringLiteral("2026-10-08T10:00:0%1+00:00").arg(i)}, {"barcode", QJsonArray{}}});
+                return {200, QJsonDocument(righe).toJson()};
+            }
+            return {200, "[]"};   // operatori e coda vuota
+        };
+        Sincronizzatore sync(db);
+        sync.configura(server.url(), "CHIAVE-ANON");
+        sync.impostaRefreshToken("RINNOVO");
+        QSignalSpy terminata(&sync, &Sincronizzatore::terminata);
+        sync.sincronizza();
+        QVERIFY(terminata.wait(5000));
+        QCOMPARE(terminata.first()[0].toBool(), true);
+        QCOMPARE(db.contaArticoli(), totale);
+        QCOMPARE(terminata.first()[2].toInt(), totale);
+        QCOMPARE(db.marcatore("articoli"), QStringLiteral("2026-10-08T10:00:04+00:00"));
     }
 
     void server_irraggiungibile_lascia_in_coda()

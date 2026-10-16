@@ -88,6 +88,12 @@ public:
     int contaArticoli() const;
     QString ultimoSync() const;   // marcatore degli articoli (updated_at più recente ricevuto)
 
+    // Blocco di scritture in una sola transazione (una pagina della sincronizzazione): il disco si
+    // scrive una volta alla chiusura invece che a ogni articolo. Dentro il blocco ogni articolo
+    // resta atomico (savepoint).
+    bool iniziaBlocco();
+    bool chiudiBlocco();
+
     // Marcatori della sincronizzazione incrementale ("articoli", "operatori").
     QString marcatore(const QString& nome) const;
     bool salvaMarcatore(const QString& nome, const QString& valore);
@@ -142,6 +148,7 @@ private:
     QString m_connessione;
     QString m_percorso;
     mutable QString m_errore;
+    bool m_inBlocco = false;
 };
 
 } // namespace mdr

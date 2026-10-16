@@ -324,6 +324,7 @@ void VistaCassa::aggiornaReparti()
         b->setFocusPolicy(Qt::NoFocus);
         b->setMinimumSize(60, 44);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        b->setFont(fontGrande(font(), 14, true));   // tasti grandi e usati di continuo: testo leggibile da lontano
         b->setStyleSheet(QStringLiteral("QPushButton { background: #c8551b; color: white; font-weight: bold;"
                                         " border: 1px solid #8f3b10; border-radius: 4px; }"
                                         "QPushButton:pressed { background: #8f3b10; }"));
@@ -339,7 +340,7 @@ void VistaCassa::aggiornaReparti()
         b->setFocusPolicy(Qt::NoFocus);
         b->setMinimumSize(60, 44);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        b->setFont(fontGrande(font(), 11, true));
+        b->setFont(fontGrande(font(), 14, true));
         b->setStyleSheet(QStringLiteral("QPushButton { background: #00796b; color: white; border: 1px solid #004d40;"
                                         " border-radius: 4px; }"
                                         "QPushButton:pressed { background: #004d40; }"));
@@ -725,14 +726,15 @@ void VistaCassa::aggiorna()
     for (int i = 0; i < 2; ++i) {
         const auto& c = m_carrelli[i];
         m_tastiScontrino[i]->setChecked(i == m_attivo);
+        // Su due righe: su una sola il testo non sta nel tasto a 1024x768.
         m_tastiScontrino[i]->setText(c.vuoto()
-            ? QStringLiteral("Scontrino %1 — vuoto").arg(i + 1)
-            : QStringLiteral("Scontrino %1 — %2 · %3%4")
+            ? QStringLiteral("Scontrino %1\nvuoto").arg(i + 1)
+            : QStringLiteral("Scontrino %1%2\n%3 · %4")
                   .arg(i + 1)
+                  .arg(i == m_attivo ? QString() : QStringLiteral(" · in attesa"))
                   .arg(c.righe().size() == 1 ? QStringLiteral("1 riga")
                                              : QStringLiteral("%1 righe").arg(c.righe().size()))
-                  .arg(euro(c.totale()))
-                  .arg(i == m_attivo ? QString() : QStringLiteral(" (in attesa)")));
+                  .arg(euro(c.totale())));
     }
     m_totale->setText(QStringLiteral("TOTALE %1").arg(euro(carr().totale())));
     m_residuo->setText(carr().pagamenti().isEmpty()

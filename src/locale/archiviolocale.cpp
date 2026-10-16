@@ -99,6 +99,9 @@ bool ArchivioLocale::apri()
         && esegui(R"(create table if not exists articoli_barcode (
                         barcode     text primary key,
                         articolo_id text not null references articoli (id) on delete cascade))")
+        // Senza questo indice ogni articolo salvato scorre tutti i barcode: con i 14.000 articoli
+        // di SystemApp la prima sincronizzazione durava quasi 5 minuti.
+        && esegui("create index if not exists articoli_barcode_articolo on articoli_barcode (articolo_id)")
         && esegui(R"(create table if not exists reparti (
                         numero      integer primary key,
                         descrizione text not null,
@@ -198,11 +201,40 @@ Articolo leggiArticolo(const QSqlQuery& q)
 
 } // namespace
 
-bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
+bool ArchivioLocale::iniziaBlocco()
 {
+    if (m_inBlocco)
+        return true;
     auto d = db();
     if (!d.transaction()) {
         m_errore = d.lastError().text();
+        return false;
+    }
+    m_inBlocco = true;
+    return true;
+}
+
+bool ArchivioLocale::chiudiBlocco()
+{
+    if (!m_inBlocco)
+        return true;
+    m_inBlocco = false;
+    auto d = db();
+    if (!d.commit()) {
+        m_errore = d.lastError().text();
+        d.rollback();
+        return false;
+    }
+    return true;
+}
+
+bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
+{
+    auto d = db();
+    // Dentro un blocco basta un savepoint: l'articolo resta tutto o niente, senza scrivere il disco.
+    if (m_inBlocco ? !esegui(QStringLiteral("savepoint articolo")) : !d.transaction()) {
+        if (!m_inBlocco)
+            m_errore = d.lastError().text();
         return false;
     }
 
@@ -243,10 +275,15 @@ bool ArchivioLocale::salvaArticolo(const Articolo& a, const QString& updatedAt)
 
     if (!ok) {
         m_errore = q.lastError().text();
-        d.rollback();
+        if (m_inBlocco) {
+            esegui(QStringLiteral("rollback to articolo"));
+            esegui(QStringLiteral("release articolo"));
+        } else {
+            d.rollback();
+        }
         return false;
     }
-    return d.commit();
+    return m_inBlocco ? esegui(QStringLiteral("release articolo")) : d.commit();
 }
 
 bool ArchivioLocale::applicaRigaSync(const QJsonObject& riga, bool* cambiato)

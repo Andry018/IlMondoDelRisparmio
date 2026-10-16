@@ -136,6 +136,10 @@ void FinestraBase::applica(const Impostazioni& imp)
         m_statoServer->setText(QStringLiteral("Server non configurato: solo locale"));
     else if (!m_sync->autenticato())
         m_statoServer->setText(QStringLiteral("Server: accesso richiesto (scheda Impostazioni)"));
+    else if (!m_statoServer->text().startsWith(QStringLiteral("Server: sincronizzato")))
+        // Appena collegati: fino alla fine della prima sincronizzazione (lunga con migliaia di
+        // articoli) resterebbe scritto "accesso richiesto".
+        m_statoServer->setText(QStringLiteral("Server: collegato, sincronizzazione in corso…"));
     m_statoServer->setStyleSheet(QString());
     m_aggiornatore->configura(imp.repositoryAggiornamenti, imp.tokenAggiornamenti);
     impostazioniApplicate(imp);

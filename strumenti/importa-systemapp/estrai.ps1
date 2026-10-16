@@ -214,7 +214,8 @@ foreach ($a in $Anni) {
 }
 $rapporto += ""
 $rapporto += "Articoli con prezzo a zero:"
-$cmd = $conn.CreateCommand(); $cmd.CommandText = "SELECT RTRIM(fcodart) + '  ' + ISNULL(RTRIM(fdescr), '') FROM Articoli WHERE ftipo <> 'R' AND fprezzo <= 0"
+# Senza a capo: alcune descrizioni di SystemApp li contengono e spezzavano l'elenco.
+$cmd = $conn.CreateCommand(); $cmd.CommandText = "SELECT REPLACE(REPLACE(RTRIM(fcodart) + '  ' + ISNULL(RTRIM(fdescr), ''), CHAR(13), ' '), CHAR(10), ' ') FROM Articoli WHERE ftipo <> 'R' AND fprezzo <= 0"
 $r = $cmd.ExecuteReader(); while ($r.Read()) { $rapporto += "  " + $r.GetString(0) }; $r.Close()
 $rapporto | Set-Content -Encoding UTF8 (Join-Path $Uscita "anomalie.txt")
 $conn.Close()

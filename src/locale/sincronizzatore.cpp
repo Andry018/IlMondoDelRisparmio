@@ -129,6 +129,9 @@ void Sincronizzatore::scarica(const QString& nome, const QString& vista, int off
         }
         const auto righe = r.json().array();
         QString max = massimo;
+        // Una transazione per pagina: con una scrittura su disco per articolo la prima
+        // sincronizzazione di 14.000 articoli durava minuti.
+        const bool blocco = articoli && m_archivio.iniziaBlocco();
         for (const auto& v : righe) {
             const auto riga = v.toObject();
             bool cambiato = false;
@@ -144,8 +147,16 @@ void Sincronizzatore::scarica(const QString& nome, const QString& vista, int off
             if (max.isEmpty() || leggiMarcatore(u) > leggiMarcatore(max))
                 max = u;
         }
-        if (righe.size() == pagina) {
-            scarica(nome, vista, offset + pagina, max);
+        if (blocco && !m_archivio.chiudiBlocco()) {
+            emit messaggio(QStringLiteral("Articoli non salvati: %1").arg(m_archivio.ultimoErrore()));
+            fine(false);
+            return;
+        }
+        // Si chiede la pagina dopo finché ne arriva una vuota: PostgREST può restituire meno righe
+        // di quelle chieste (db-max-rows), e fermarsi alla prima pagina "corta" lascerebbe la cassa
+        // senza una parte degli articoli.
+        if (!righe.isEmpty()) {
+            scarica(nome, vista, offset + int(righe.size()), max);
             return;
         }
         // Marcatore salvato solo a scaricamento completo: se si interrompe, si riparte da prima.

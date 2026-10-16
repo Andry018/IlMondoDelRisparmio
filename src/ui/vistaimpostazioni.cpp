@@ -19,6 +19,9 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QScroller>
 #include <QTableWidget>
 #include <QTime>
 #include <QUrl>
@@ -38,8 +41,18 @@ VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni imposta
     , m_infoPostazione(std::move(infoPostazione))
 {
     auto* colonne = new QHBoxLayout(this);
-    auto* sinistra = new QVBoxLayout;
-    colonne->addLayout(sinistra, 1);
+    // La colonna sinistra scorre: con tutti i gruppi è più alta dello schermo del POS (768 px) e,
+    // senza scorrimento, imporrebbe la sua altezza a tutta la finestra, anche alla scheda Cassa.
+    auto* scorrimento = new QScrollArea(this);
+    scorrimento->setObjectName("impostazioni_scorrimento");
+    scorrimento->setWidgetResizable(true);
+    scorrimento->setFrameShape(QFrame::NoFrame);
+    scorrimento->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    QScroller::grabGesture(scorrimento->viewport(), QScroller::TouchGesture);   // col dito sul POS
+    auto* pannello = new QWidget(scorrimento);
+    auto* sinistra = new QVBoxLayout(pannello);
+    sinistra->setContentsMargins(0, 0, 0, 0);
+    colonne->addWidget(scorrimento, 1);
 
     // Postazione e server.
     auto* gruppoServer = new QGroupBox(QStringLiteral("Postazione e server"), this);
@@ -174,6 +187,10 @@ VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni imposta
     formAgg->addRow(bottoniAgg);
     sinistra->addWidget(gruppoAgg);
     sinistra->addStretch();
+    scorrimento->setWidget(pannello);
+    // Larga quanto serve ai gruppi: si scorre solo in verticale.
+    scorrimento->setMinimumWidth(pannello->minimumSizeHint().width()
+                                 + scorrimento->verticalScrollBar()->sizeHint().width());
 
     connect(m_controlla, &QPushButton::clicked, this, [this] { m_aggiornatore.controlla(); });
     connect(m_installa, &QPushButton::clicked, this, &VistaImpostazioni::installazioneRichiesta);
@@ -242,6 +259,9 @@ VistaImpostazioni::VistaImpostazioni(Postazione postazione, Impostazioni imposta
         emit impostazioniCambiate(m_imp);
         aggiorna();
     });
+    // Valori più lunghi del campo (es. Pagamenti RT): si vede l'inizio, non la fine.
+    for (auto* campo : findChildren<QLineEdit*>())
+        campo->setCursorPosition(0);
     aggiorna();
 }
 

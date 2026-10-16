@@ -18,6 +18,8 @@
 #include <QPushButton>
 #include <QRadioButton>
 
+#include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -79,6 +81,13 @@ class TestGestioneServer : public QObject {
     }
 
 private slots:
+    void initTestCase()
+    {
+        // Per le immagini il font di sistema di Windows (vedi test_cassa).
+        if (!qEnvironmentVariableIsEmpty("MDR_SCREENSHOT"))
+            QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
+    }
+
     // QSKIP qui salta il test intero (in una funzione di aiuto salterebbe solo quella).
     void init()
     {
@@ -265,6 +274,41 @@ private slots:
         foto(QStringLiteral("operatori"));
         vai(QStringLiteral("Negozio"));
         foto(QStringLiteral("negozio"));
+    }
+
+    // MDR_SCREENSHOT=cartella: un'immagine di ogni scheda a 1024x768, come amministratore e senza
+    // modificare dati, quindi anche sul database con i dati importati da SystemApp.
+    void schermate()
+    {
+        const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT");
+        if (cartella.isEmpty())
+            QSKIP("MDR_SCREENSHOT non impostata");
+        apri(QStringLiteral("admin@negozio.lan"));
+        for (int i = 0; i < schede()->count(); ++i) {
+            if (!schede()->isTabEnabled(i))
+                continue;
+            schede()->setCurrentIndex(i);
+            // Si aspetta che nessuna tabella della scheda stia ancora caricando.
+            QElapsedTimer tempo;
+            tempo.start();
+            auto caricando = [this] {   // tabelle e intestazioni (es. Vendite) che dicono "Caricamento…"
+                for (auto* etichetta : schede()->currentWidget()->findChildren<QLabel*>())
+                    if (etichetta->isVisible() && etichetta->text().startsWith("Caricamento"))
+                        return true;
+                return false;
+            };
+            QTest::qWait(300);
+            while (caricando() && tempo.elapsed() < 30000)
+                QTest::qWait(100);
+            QTest::qWait(200);
+            const auto titolo = schede()->tabText(i);
+            qInfo().noquote() << QStringLiteral("%1: %2x%3, caricata in %4 ms%5")
+                                     .arg(titolo).arg(m_finestra->width()).arg(m_finestra->height())
+                                     .arg(tempo.elapsed()).arg(caricando() ? " (ANCORA IN CARICAMENTO)" : "");
+            auto nome = titolo.toLower();
+            nome.replace(QRegularExpression("[^a-z0-9]+"), "_");
+            m_finestra->grab().save(cartella + QStringLiteral("/gestione_%1_%2.png").arg(i, 2, 10, QChar('0')).arg(nome));
+        }
     }
 
     void magazziniere_solo_magazzino()

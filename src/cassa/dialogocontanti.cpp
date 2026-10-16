@@ -146,6 +146,7 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
     azzera->setObjectName("azzera");
     for (auto* b : {esatto, azzera}) {
         b->setMinimumHeight(52);
+        b->setFont(fontGrande(font(), 12));
         b->setFocusPolicy(Qt::NoFocus);
         altro->addWidget(b);
     }
@@ -168,8 +169,10 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
     m_conferma->setObjectName("conferma");
     m_conferma->setStyleSheet("QPushButton { background: #2e7d32; color: white; font-weight: bold; }"
                               "QPushButton:disabled { background: #555; color: #999; }");
-    for (auto* b : {annulla, m_conferma})
+    for (auto* b : {annulla, m_conferma}) {
         b->setMinimumHeight(56);
+        b->setFont(fontGrande(font(), 13));
+    }
     bottoni->addWidget(annulla);
     bottoni->addWidget(m_conferma, 2);
     layout->addLayout(bottoni);

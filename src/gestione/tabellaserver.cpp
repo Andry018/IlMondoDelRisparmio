@@ -8,6 +8,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -89,6 +90,10 @@ TabellaServer::TabellaServer(QList<ColonnaServer> colonne, QWidget* parent)
 void TabellaServer::carica(ClientServer& client, const QString& risorsa, std::function<void(const QJsonArray&)> dopo)
 {
     const int numero = ++m_richiesta;
+    // Con "limit=N" nella richiesta, N righe vogliono dire che ce ne sono altre sul server.
+    static const QRegularExpression reLimite(QStringLiteral("[?&]limit=(\\d+)"));
+    const auto limite = reLimite.match(risorsa);
+    m_limite = limite.hasMatch() ? limite.captured(1).toInt() : 0;
     m_stato->setStyleSheet(QString());
     m_stato->setText(QStringLiteral("Caricamento…"));
     QPointer<TabellaServer> io(this);
@@ -134,8 +139,12 @@ void TabellaServer::mostra(const QJsonArray& righe)
     m_tabella->resizeColumnsToContents();
     m_tabella->horizontalHeader()->setStretchLastSection(true);
     m_stato->setStyleSheet(QString());
-    m_stato->setText(righe.isEmpty() ? testoVuoto
-                                     : QStringLiteral("%1 righe").arg(righe.size()));
+    if (righe.isEmpty())
+        m_stato->setText(testoVuoto);
+    else if (m_limite > 0 && righe.size() >= m_limite)
+        m_stato->setText(QStringLiteral("Prime %1 righe: usare la ricerca o i filtri per vedere le altre").arg(righe.size()));
+    else
+        m_stato->setText(righe.size() == 1 ? QStringLiteral("1 riga") : QStringLiteral("%1 righe").arg(righe.size()));
 }
 
 std::optional<QJsonObject> TabellaServer::selezionata() const

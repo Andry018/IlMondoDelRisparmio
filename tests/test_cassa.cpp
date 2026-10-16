@@ -10,6 +10,7 @@
 #include <QComboBox>
 
 #include <QCryptographicHash>
+#include <QFontDatabase>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -47,6 +48,14 @@ class TestCassa : public QObject {
     }
 
 private slots:
+    void initTestCase()
+    {
+        // Per le immagini (MDR_SCREENSHOT) il font di sistema di Windows, come sul POS: con la
+        // piattaforma offscreen Qt sceglierebbe il primo font che trova (QT_QPA_FONTDIR).
+        if (!qEnvironmentVariableIsEmpty("MDR_SCREENSHOT"))
+            QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
+    }
+
     void init()
     {
         m_archivio = std::make_unique<ArchivioLocale>(QStringLiteral(":memory:"));
@@ -245,6 +254,28 @@ private slots:
         QCOMPARE(vendite.size(), 2);
         QCOMPARE(vendite[0].totale.cents(), 189 + 2 * 249);
         QVERIFY(!cassa()->scontrinoAperto());
+    }
+
+    // La finestra deve stare nello schermo del POS (1024x768) con il font di sistema di Windows:
+    // una scheda più alta dello schermo (es. Impostazioni) allungherebbe anche la Cassa, e sul POS
+    // l'ultima fila del tastierino e il totale finirebbero fuori dallo schermo.
+    void sta_nello_schermo_del_pos()
+    {
+        if (!QFontDatabase::families().contains(QStringLiteral("Segoe UI")))
+            QSKIP("Segoe UI non disponibile (impostare QT_QPA_FONTDIR=C:\\Windows\\Fonts)");
+        const QFont prima = QApplication::font();
+        QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
+        m_finestra->resize(1024, 768);
+        QTest::qWait(20);
+        const QSize dimensione = m_finestra->size();
+        auto* schede = m_finestra->findChild<QTabWidget*>();
+        QString minime;   // altezza minima di ogni scheda, per capire quale allunga la finestra
+        for (int i = 0; i < schede->count(); ++i)
+            minime += QStringLiteral(" %1=%2").arg(schede->tabText(i)).arg(schede->widget(i)->minimumSizeHint().height());
+        QApplication::setFont(prima);
+        QVERIFY2(dimensione == QSize(1024, 768),
+                 qPrintable(QStringLiteral("finestra %1x%2 invece di 1024x768; altezza minima delle schede:%3")
+                                .arg(dimensione.width()).arg(dimensione.height()).arg(minime)));
     }
 
     // MDR_SCREENSHOT=cartella: immagini a 1024x768, come sul POS Custom Silk 15".

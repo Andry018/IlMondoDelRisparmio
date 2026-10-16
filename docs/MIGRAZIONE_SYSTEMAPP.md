@@ -111,6 +111,24 @@ Script in `strumenti/importa-systemapp/` (provati il 15/10/2026 sul server di sv
 | Scontrini 2025 + 2026 | 35.394 | incasso identico a SystemApp: 2026 = 14.246 scontrini, € 198.049,86 |
 | Righe di scontrino | 154.463 | 19 scontrini con righe che non tornano al centesimo col totale |
 
+### Prova su Supabase self-hosted (16/10/2026)
+
+Stessa estrazione caricata con `carica.ps1` su un Supabase self-hosted vero (WSL, PostgreSQL 17.6,
+migrazioni del repository più `20261015000000_rls_una_volta_per_query`, branch
+`backend/rls-prestazioni`) in 22 secondi: tutti i conteggi identici ai file (14.444 articoli,
+23.133 barcode, 35.394 scontrini, 154.463 righe). Incasso 2026 = 14.246 scontrini, € 198.049,86,
+uguale a SystemApp. `tests/test_dati_reali.cpp` (variabili in testa al file) ha provato contro
+quel server: prima sincronizzazione della cassa completa in 12 s (14.444 articoli su 14.444),
+barcode veri trovati col prezzo giusto, vendita di un articolo vero con operatore e PIN, chiusura Z
+che quadra, tutte le schede della gestione senza errori.
+
+Tre correzioni necessarie emerse con i dati veri:
+- politiche RLS calcolate una volta per query (migrazione citata sopra): prima una pagina da
+  1000 articoli costava 14 s con l'account della cassa;
+- indice su `articoli_barcode (articolo_id)` nell'archivio locale della cassa;
+- la sincronizzazione chiede pagine finché ne arriva una vuota (PostgREST di Supabase restituisce
+  al massimo 1000 righe per richiesta: con un limite più basso si sarebbe fermata alla prima).
+
 Reparti: lo script li allinea alla programmazione del registratore usata da SystemApp
 (22%→1, 10%→2, 4%→3, esente N4→4, 5%→5). Il seed di sviluppo aveva 5%→4 ed esente→5.
 

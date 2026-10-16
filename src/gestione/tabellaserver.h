@@ -58,6 +58,7 @@ private:
     QTableWidget* m_tabella;
     QLabel* m_stato;
     int m_richiesta = 0;   // scarta risposte arrivate fuori ordine
+    int m_limite = 0;      // "limit=" dell'ultima richiesta (0 = nessuno)
 };
 
 } // namespace mdr
