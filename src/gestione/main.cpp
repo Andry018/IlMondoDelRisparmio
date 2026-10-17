@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QTimer>
@@ -15,6 +16,7 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("mdr-gestione"));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icona.png")));   // logo blu (risorse/icona.svg)
     QApplication::setOrganizationName(QStringLiteral("Mondo del Risparmio"));
     QApplication::setApplicationVersion(QStringLiteral(MDR_VERSIONE));
     QApplication::setStyle(QStringLiteral("Fusion"));

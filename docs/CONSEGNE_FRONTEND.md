@@ -40,6 +40,11 @@ Test: 9 suite C++ verdi (`test_custom` anche contro il registratore finto con `M
 - Reparti sopra, tastierino sotto; layout verificato a **1024×768**.
 - Tasti **Shopper 0,05 / 0,10** (articoli 8000000000001/2 come in SystemApp, altrimenti articolo libero al 22%) e
   **Ristampa** ultimo scontrino (Ctrl+P; sul Custom `printDuplicateReceipt`, da verificare sull'RT vero).
+- **Loghi** (17/10/2026): cassa verde (registratore), gestione blu (cartella con grafico), in
+  `src/<app>/risorse/icona.svg` → `icona.png` (finestra, `:/icona.png`) e `icona.ico` (eseguibile,
+  `mdr-<app>.rc`). Per rifarli: rendere l'SVG a 256 px e creare l'.ico con le misure 16-256.
+- Gestione: scheda **Palmare** (QR di configurazione dei palmari, libreria `src/third_party/qrcodegen`)
+  e in **Operatori** i pulsanti *Nuovo utente* (`crea_utente`) e *Cambia password*.
 - **Codice fiscale del cliente** sullo scontrino (16/10/2026, spese sanitarie detraibili): tasto
   *Cod. fiscale* (Ctrl+F), digitato o letto dal barcode della tessera sanitaria, controllo del
   carattere di controllo (`src/core/codicefiscale.*`, anche partita IVA). Proposto da solo al primo

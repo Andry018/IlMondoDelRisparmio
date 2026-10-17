@@ -180,17 +180,21 @@ VistaOperatori::VistaOperatori(ClientServer& client, QWidget* parent)
     : VistaServer(client, parent)
 {
     auto* layout = new QVBoxLayout(this);
-    auto* nota = new QLabel(QStringLiteral("Gli account di accesso (email e password) si creano sul server, in "
-                                           "Supabase Studio; poi l'operatore compare qui. Il codice e il PIN servono "
-                                           "per identificarsi alla cassa."), this);
+    auto* nota = new QLabel(QStringLiteral("Ogni persona entra con email e password (gestione, palmare) e si "
+                                           "identifica alla cassa con codice e PIN. \"Nuovo utente\" crea tutto insieme."), this);
     nota->setWordWrap(true);
     layout->addWidget(nota);
     auto* barra = new QHBoxLayout;
+    auto* nuovo = new QPushButton(QStringLiteral("Nuovo utente…"), this);
+    nuovo->setObjectName("nuovo_utente");
     auto* modifica = new QPushButton(QStringLiteral("Modifica"), this);
     auto* pin = new QPushButton(QStringLiteral("Imposta PIN…"), this);
+    auto* password = new QPushButton(QStringLiteral("Cambia password…"), this);
     auto* aggiorna = new QPushButton(QStringLiteral("Aggiorna"), this);
+    barra->addWidget(nuovo);
     barra->addWidget(modifica);
     barra->addWidget(pin);
+    barra->addWidget(password);
     barra->addStretch();
     barra->addWidget(aggiorna);
     layout->addLayout(barra);
@@ -214,7 +218,110 @@ VistaOperatori::VistaOperatori(ClientServer& client, QWidget* parent)
     });
     connect(m_tabella, &TabellaServer::attivata, this, &VistaOperatori::modifica);
     connect(pin, &QPushButton::clicked, this, &VistaOperatori::impostaPin);
+    connect(nuovo, &QPushButton::clicked, this, &VistaOperatori::nuovoUtente);
+    connect(password, &QPushButton::clicked, this, &VistaOperatori::cambiaPassword);
     connect(aggiorna, &QPushButton::clicked, this, &VistaOperatori::aggiorna);
+}
+
+void VistaOperatori::nuovoUtente()
+{
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Nuovo utente"));
+    auto* form = new QFormLayout(&d);
+    auto* nome = new QLineEdit(&d);
+    auto* email = new QLineEdit(&d);
+    email->setPlaceholderText(QStringLiteral("es. mario@negozio.lan (non serve che esista davvero)"));
+    auto* password = new QLineEdit(&d);
+    password->setEchoMode(QLineEdit::Password);
+    password->setPlaceholderText(QStringLiteral("almeno 6 caratteri"));
+    auto* ruolo = new QComboBox(&d);
+    for (const auto* r : {"amministratore", "responsabile", "magazziniere", "cassiere"})
+        ruolo->addItem(QLatin1String(r), QLatin1String(r));
+    ruolo->setToolTip(QStringLiteral("Amministratore: tutto (gestione, palmare, cassa, utenti)"));
+    auto* codice = new QLineEdit(&d);
+    codice->setPlaceholderText(QStringLiteral("facoltativo: 1-6 cifre, per la cassa"));
+    auto* pin = new QLineEdit(&d);
+    pin->setEchoMode(QLineEdit::Password);
+    pin->setPlaceholderText(QStringLiteral("facoltativo: 4-8 cifre, per la cassa"));
+    form->addRow(QStringLiteral("Nome"), nome);
+    form->addRow(QStringLiteral("Email di accesso"), email);
+    form->addRow(QStringLiteral("Password"), password);
+    form->addRow(QStringLiteral("Ruolo"), ruolo);
+    form->addRow(QStringLiteral("Codice cassa"), codice);
+    form->addRow(QStringLiteral("PIN"), pin);
+    auto* bottoni = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &d);
+    form->addRow(bottoni);
+    connect(bottoni, &QDialogButtonBox::accepted, &d, &QDialog::accept);
+    connect(bottoni, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    if (d.exec() != QDialog::Accepted)
+        return;
+
+    QString problema;
+    if (nome->text().trimmed().isEmpty())
+        problema = QStringLiteral("Manca il nome.");
+    else if (!email->text().contains(QLatin1Char('@')))
+        problema = QStringLiteral("Email non valida.");
+    else if (password->text().size() < 6)
+        problema = QStringLiteral("La password deve avere almeno 6 caratteri.");
+    else if (!codice->text().trimmed().isEmpty()
+             && !QRegularExpression(QStringLiteral("^[0-9]{1,6}$")).match(codice->text().trimmed()).hasMatch())
+        problema = QStringLiteral("Il codice cassa è di 1-6 cifre.");
+    else if (!pin->text().isEmpty() && !QRegularExpression(QStringLiteral("^[0-9]{4,8}$")).match(pin->text()).hasMatch())
+        problema = QStringLiteral("Il PIN deve avere da 4 a 8 cifre.");
+    if (!problema.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Nuovo utente"), problema);
+        return;
+    }
+    QJsonObject p{{"nome", nome->text().trimmed()}, {"email", email->text().trimmed()}, {"password", password->text()},
+                  {"ruolo", ruolo->currentData().toString()}};
+    if (!codice->text().trimmed().isEmpty())
+        p.insert("codice", codice->text().trimmed());
+    if (!pin->text().isEmpty())
+        p.insert("pin", pin->text());
+    QPointer<VistaOperatori> io(this);
+    const QString chi = email->text().trimmed();
+    m_client.rpc(QStringLiteral("crea_utente"), {{"p", p}}, [io, chi](const RispostaServer& r) {
+        if (!io)
+            return;
+        if (!r.ok()) {
+            mostraErroreServer(io, QStringLiteral("Nuovo utente"), r);
+            return;
+        }
+        QMessageBox::information(io, QStringLiteral("Nuovo utente"),
+                                 QStringLiteral("Creato: %1 può accedere subito alla gestione e al palmare; "
+                                                "codice e PIN arrivano alle casse con la sincronizzazione.").arg(chi));
+        io->aggiorna();
+    });
+}
+
+void VistaOperatori::cambiaPassword()
+{
+    const auto o = m_tabella->selezionata();
+    if (!o) {
+        QMessageBox::information(this, QStringLiteral("Password"), QStringLiteral("Selezionare prima l'operatore."));
+        return;
+    }
+    bool ok = false;
+    const QString pw = QInputDialog::getText(this, QStringLiteral("Password"),
+                                             QStringLiteral("Nuova password di accesso per %1 (almeno 6 caratteri):")
+                                                 .arg(o->value("nome").toString()),
+                                             QLineEdit::Password, {}, &ok);
+    if (!ok)
+        return;
+    if (pw.size() < 6) {
+        QMessageBox::warning(this, QStringLiteral("Password"), QStringLiteral("La password deve avere almeno 6 caratteri."));
+        return;
+    }
+    QPointer<VistaOperatori> io(this);
+    m_client.rpc(QStringLiteral("cambia_password"), {{"p_utente_id", o->value("id").toString()}, {"p_password", pw}},
+                 [io](const RispostaServer& r) {
+        if (!io)
+            return;
+        if (!r.ok())
+            mostraErroreServer(io, QStringLiteral("Password"), r);
+        else
+            QMessageBox::information(io, QStringLiteral("Password"), QStringLiteral("Password cambiata."));
+    });
 }
 
 void VistaOperatori::aggiorna()

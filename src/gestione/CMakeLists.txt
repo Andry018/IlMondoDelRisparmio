@@ -21,5 +21,7 @@ target_include_directories(mdr_gestione PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(ZLIB REQUIRED)   # per leggere i file Excel (.xlsx sono zip)
 target_link_libraries(mdr_gestione PUBLIC mdr_ui PRIVATE ZLIB::ZLIB qrcodegen)
 
-add_executable(mdr-gestione WIN32 main.cpp)
+# Logo (risorse/icona.svg, da cui icona.png e icona.ico): finestra ed eseguibile
+qt_add_resources(MDR_ICONA_GESTIONE risorse/icona.qrc)
+add_executable(mdr-gestione WIN32 main.cpp ${MDR_ICONA_GESTIONE} risorse/mdr-gestione.rc)
 target_link_libraries(mdr-gestione PRIVATE mdr_gestione)

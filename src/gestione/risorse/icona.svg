@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- mdr-gestione: cartella dei documenti con il grafico delle vendite, blu -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e88e5"/>
+      <stop offset="1" stop-color="#0d47a1"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#fondo)"/>
+  <!-- cartella -->
+  <path d="M40 78 a12 12 0 0 1 12 -12 h46 l16 16 h90 a12 12 0 0 1 12 12 v100 a12 12 0 0 1 -12 12 h-152 a12 12 0 0 1 -12 -12 z" fill="#bbdefb"/>
+  <path d="M40 104 a12 12 0 0 1 12 -12 h152 a12 12 0 0 1 12 12 v90 a12 12 0 0 1 -12 12 h-152 a12 12 0 0 1 -12 -12 z" fill="#ffffff"/>
+  <!-- grafico a barre con la linea che sale -->
+  <g fill="#1565c0">
+    <rect x="70" y="160" width="22" height="30" rx="4"/>
+    <rect x="102" y="140" width="22" height="50" rx="4"/>
+    <rect x="134" y="150" width="22" height="40" rx="4"/>
+    <rect x="166" y="122" width="22" height="68" rx="4"/>
+  </g>
+  <polyline points="72,146 108,124 142,134 182,104" fill="none" stroke="#ff8f00" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="182" cy="104" r="9" fill="#ff8f00"/>
+</svg>

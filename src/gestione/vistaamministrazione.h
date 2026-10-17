@@ -39,6 +39,8 @@ public:
 private:
     void modifica(const QJsonObject& operatore);
     void impostaPin();
+    void nuovoUtente();      // account di accesso + operatore (crea_utente)
+    void cambiaPassword();   // per chi l'ha dimenticata (cambia_password)
 
     TabellaServer* m_tabella = nullptr;
 };

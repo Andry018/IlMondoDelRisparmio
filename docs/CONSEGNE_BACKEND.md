@@ -20,6 +20,7 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261016000200_scontrino_codice_fiscale` | `vendite.codice_fiscale_cliente`, `registra_vendita` con `codice_fiscale`, `dispositivo_medico` in fondo a `v_articoli_cassa` | `test_scontrino_cf.sql`, `test_flussi.sql`, `test_api_http.py` |
 | `20261016000300_storico_prezzi` | `articoli_prezzi` scritta dal trigger su prezzo/costo, `v_storico_prezzi` con le variazioni | `test_storico_prezzi.sql` |
 | `20261017000000_crea_articolo` | `crea_articolo` (articolo nuovo dal palmare durante il carico) | `test_crea_articolo.sql` |
+| `20261017000100_utenti` | `crea_utente`, `cambia_password`, `email_operatori` (utenti dalla gestione; lo stub di test ha ora `auth.identities` e `pgcrypto`) | `test_utenti.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

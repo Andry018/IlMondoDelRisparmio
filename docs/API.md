@@ -794,6 +794,25 @@ operatore collegato con il proprio login può cambiare il suo. PIN di 4-8 cifre.
 Errori: `42501`; `P0001` `Il PIN deve avere da 4 a 8 cifre`, `Operatore <id> inesistente`.
 
 <a id="verifica_pin"></a>
+### `crea_utente`, `cambia_password`, `email_operatori`
+
+Utenti creati dalla gestione (scheda Operatori → *Nuovo utente*), senza Supabase Studio. Solo
+amministratore (migrazione `20261017000100_utenti.sql`). Il negozio è familiare: di solito un solo
+amministratore per tutti.
+
+```
+POST /rest/v1/rpc/crea_utente   { "p": { "email": "mario@negozio.lan", "password": "almeno6",
+    "nome": "Mario", "ruolo": "amministratore", "codice": "10", "pin": "1234" } }   → uuid
+POST /rest/v1/rpc/cambia_password   { "p_utente_id": "<uuid>", "p_password": "..." }
+POST /rest/v1/rpc/email_operatori   {}   → [{ id, email }]   (vuoto per chi non è amministratore)
+```
+
+`ruolo` predefinito `amministratore`; `codice` e `pin` facoltativi (alla cassa). L'utente si scrive
+in `auth.users`/`auth.identities` come lo crea GoTrue (bcrypt, email confermata, token vuoti):
+provato il 17/10/2026 su Supabase self-hosted (GoTrue 2.196) con accesso, ruolo e PIN.
+Errori: `Email non valida`, `almeno 6 caratteri`, `Esiste già un utente …`, `Codice cassa … già usato`,
+`Ruolo non valido`.
+
 ### `verifica_pin`
 
 `{"p_codice": "11", "p_pin": "1234"}` → uuid dell'operatore attivo. Errore `P0001`
