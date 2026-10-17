@@ -126,13 +126,15 @@ try {
     # Il risultato nel database
     $controllo = @"
 select 'inventario ' || stato || ' ' || (riepilogo->>'articoli_contati') || ' articoli' from inventari;
-select codice || ' giacenza ' || quantita from giacenze g join articoli a on a.id = g.articolo_id where codice in ('DET-001','SPU-010') order by codice;
+select codice || ' giacenza ' || quantita from giacenze g join articoli a on a.id = g.articolo_id where codice in ('DET-001','SPU-010','PAS-500','8007770000011') order by codice;
+select 'nuovo ' || descrizione || ' ' || prezzo_vendita || ' ' || costo_ultimo from articoli where codice = '8007770000011';
 select 'fattura caricata: ' || (documento_id is not null) from fatture_passive;
 select 'etichette aperte: ' || count(*) from etichette_richieste where stampata_at is null;
 "@
     $righe = $controllo | & psql -X -A -t -d mdr_palmare
     $righe | ForEach-Object { Write-Host "  $_" }
     $atteso = @("inventario chiuso 2 articoli", "DET-001 giacenza 24000", "SPU-010 giacenza 30000",
+                "PAS-500 giacenza 70000", "8007770000011 giacenza 5000", "nuovo BORRACCIA TERMICA 500 ML 1290 610",
                 "fattura caricata: true", "etichette aperte: 1")
     foreach ($a in $atteso) { if ($righe -notcontains $a) { throw "Atteso nel database: $a" } }
     Write-Host "Screenshot in $Screenshot"

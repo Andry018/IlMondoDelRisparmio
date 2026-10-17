@@ -928,6 +928,24 @@ passive](#carichi-passive)).
 Il carico si compone dalle righe con `articolo_id` e `spuntato > 0`: `{articolo_id, quantita:
 spuntato, costo_unitario, codice_fornitore}`.
 
+### Carico dal palmare e articoli nuovi: `crea_articolo`
+
+Scheda **Carico** del palmare (merce con DDT o senza fattura elettronica): si leggono gli articoli,
+poi un unico `carico_magazzino` con `fornitore_id`, `numero_esterno` (DDT) e le righe. Un barcode
+che il gestionale non conosce si crea prima con:
+
+```
+POST /rest/v1/rpc/crea_articolo   { "p": { "id": "<uuid del palmare>", "barcode": "8008627000399",
+    "descrizione": "...", "prezzo_vendita": 150, "numero_reparto": 3,
+    "costo_ultimo": 80, "fornitore_id": "<uuid>", "codice_fornitore": "..." } }   → uuid
+```
+
+Amministratore, responsabile, magazziniere (migrazione `20261017000000_crea_articolo.sql`).
+`codice` = il barcode se non indicato; descrizione in maiuscolo; idempotente sull'`id`; rifiuta
+un barcode o codice già presente (`Codice … già presente: <descrizione>`), un reparto inesistente,
+prezzo mancante. Non tocca la giacenza: quella la porta il carico. La cassa riceve l'articolo
+con la sincronizzazione (`v_articoli_cassa`).
+
 ### Etichette da ristampare
 
 Ogni cambio di `prezzo_vendita` di un articolo attivo crea una richiesta (`motivo:

@@ -128,6 +128,7 @@ const SCHEDE = [
     { id: "inventario", nome: "Inventario", icona: "inventario", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaInventario },
     { id: "prezzi", nome: "Prezzi", icona: "prezzo", ruoli: null, vista: () => vistaPrezzi },
     { id: "ricevimento", nome: "Ricevimento", icona: "camion", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaRicevimenti },
+    { id: "carico", nome: "Carico", icona: "scatola", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaCarico },
     { id: "etichette", nome: "Etichette", icona: "etichetta", ruoli: null, vista: () => vistaEtichette },
 ];
 
@@ -337,7 +338,10 @@ $("#chiudi-fotocamera").innerHTML = icona("chiudi");
 
 // Cerca un articolo (server, oppure copia locale se il server non risponde). Con più
 // risultati fa scegliere in un pannello.
-async function trovaArticolo(testo) {
+// sconosciuto: se il server risponde che non c'è, restituisce SCONOSCIUTO invece dell'avviso
+// (la scheda Carico propone di creare l'articolo).
+const SCONOSCIUTO = Symbol("sconosciuto");
+async function trovaArticolo(testo, { sconosciuto = false } = {}) {
     let lista;
     try {
         lista = await server.rpc("cerca_articolo", { p_testo: testo, p_limite: 30 });
@@ -350,7 +354,11 @@ async function trovaArticolo(testo) {
             return null;
         }
     }
-    if (!lista.length) { avviso(`Nessun articolo per "${testo}"`, "errore"); return null; }
+    if (!lista.length) {
+        if (sconosciuto && !lista.offline) return SCONOSCIUTO;
+        avviso(`Nessun articolo per "${testo}"`, "errore");
+        return null;
+    }
     if (lista.length === 1 || lista[0].trovato_per !== "descrizione") return lista[0];
     return new Promise((risolvi) => {
         const f = apriFoglio(`<h2>Scegli l'articolo</h2><div class="sotto">${lista.length} risultati per "${esc(testo)}"</div>
@@ -899,6 +907,156 @@ async function vistaRicevimento(f) {
 // ---------------------------------------------------------------------------------------
 // Etichette
 // ---------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------
+// Carico merce senza fattura elettronica (DDT, merce portata dal fornitore): si leggono gli
+// articoli, quelli che il gestionale non conosce si creano al volo, poi un carico unico
+// (carico_magazzino). L'elenco resta nel palmare finché non si carica.
+// ---------------------------------------------------------------------------------------
+const CHIAVE_CARICO = "mdr.carico";
+const leggiCarico = () => { try { return JSON.parse(localStorage.getItem(CHIAVE_CARICO)) || []; } catch { return []; } };
+const salvaCarico = (righe) => localStorage.setItem(CHIAVE_CARICO, JSON.stringify(righe));
+const centesimiDaTesto = (t) => { const m = millesimiDaTesto(String(t || "").replace("€", "").trim()); return m === null || m % 10 ? null : m / 10; };
+
+async function vistaCarico() {
+    titolo("Carico merce");
+    const radice = vista;
+    vista.appendChild(caricamento());
+    let fornitori = [], reparti = [];
+    try {
+        [fornitori, reparti] = await Promise.all([
+            server.leggi("fornitori?select=id,ragione_sociale&attivo=eq.true&order=ragione_sociale"),
+            server.leggi("reparti?select=numero_rt,descrizione&order=numero_rt"),
+        ]);
+    } catch (e) { errore(e); return; }
+    if (!attiva(radice)) return;
+    vista.replaceChildren();
+
+    const ultimo = localStorage.getItem("mdr.carico.fornitore") || "";
+    vista.appendChild(html(`
+        <div class="scheda">
+            <label class="etichetta">Fornitore</label>
+            <select class="campo" id="car-fornitore">
+                <option value="">Scegli il fornitore…</option>
+                ${fornitori.map((f) => `<option value="${esc(f.id)}" ${f.id === ultimo ? "selected" : ""}>${esc(f.ragione_sociale)}</option>`).join("")}
+            </select>
+            <label class="etichetta">Documento (DDT o fattura cartacea, facoltativo)</label>
+            <input class="campo" id="car-doc" value="${esc(localStorage.getItem("mdr.carico.doc") || "")}" placeholder="es. DDT 125">
+        </div>`));
+    const selFornitore = $("#car-fornitore", vista);
+    const campoDoc = $("#car-doc", vista);
+    selFornitore.addEventListener("change", () => localStorage.setItem("mdr.carico.fornitore", selFornitore.value));
+    campoDoc.addEventListener("change", () => localStorage.setItem("mdr.carico.doc", campoDoc.value.trim()));
+
+    lettore(vista, async (testo) => {
+        let a = await trovaArticolo(testo, { sconosciuto: true });
+        if (a === SCONOSCIUTO) {
+            if (!/^[0-9]{6,14}$/.test(testo)) { avviso(`Nessun articolo per "${testo}"`, "errore"); return; }
+            a = await nuovoArticolo(testo, reparti, selFornitore.value || null);
+        }
+        if (!a) return;
+        const righe = leggiCarico();
+        const gia = righe.find((r) => r.articolo_id === a.id);
+        const m = await chiediQuantita(a, {
+            tasto: "Aggiungi",
+            nota: `giacenza ${quantita(a.giacenza ?? 0, a.unita)}${gia ? ` · già nel carico ${quantita(gia.quantita, a.unita)}` : ""}` });
+        if (!m) return;
+        if (gia) gia.quantita += m;
+        else righe.push({ articolo_id: a.id, codice: a.codice, descrizione: a.descrizione, unita: a.unita || "PZ",
+                          quantita: m, costo: a.costo_ultimo ?? 0 });
+        salvaCarico(righe);
+        avviso(`${a.descrizione}: ${quantita(gia ? gia.quantita : m, a.unita)} da caricare`);
+        disegnaRighe();
+    }, "Leggi gli articoli arrivati");
+
+    const elenco = document.createElement("div");
+    vista.appendChild(elenco);
+    function disegnaRighe() {
+        const righe = leggiCarico();
+        elenco.replaceChildren(html(`
+            <div class="sezione">Da caricare${righe.length ? ` · ${righe.length} articoli` : ""}</div>
+            ${righe.length ? `<ul class="elenco">${righe.map((r, i) => `
+                <li class="riga-elenco"><div class="testo"><b>${esc(r.descrizione)}</b>
+                    <small>${esc(r.codice)} · costo ${euro(r.costo)}</small></div>
+                    <span class="pastiglia ok">${quantita(r.quantita, r.unita)}</span>
+                    <button class="tasto-icona" data-togli="${i}" aria-label="Togli">${icona("chiudi")}</button></li>`).join("")}</ul>
+            <div class="tasti"><button class="tasto pieno largo" id="car-carica">${icona("scatola")}Carica in magazzino</button></div>`
+            : vuoto("scatola", "Nessun articolo", "Leggi i codici della merce arrivata: quelli nuovi si creano qui.").firstElementChild.outerHTML}`));
+        elenco.querySelectorAll("[data-togli]").forEach((b) => b.addEventListener("click", () => {
+            const r = leggiCarico();
+            r.splice(Number(b.dataset.togli), 1);
+            salvaCarico(r);
+            disegnaRighe();
+        }));
+        const bCarica = $("#car-carica", elenco);
+        if (bCarica) bCarica.addEventListener("click", carica);
+    }
+
+    async function carica() {
+        const righe = leggiCarico();
+        if (!selFornitore.value) { avviso("Scegli il fornitore", "errore"); selFornitore.focus(); return; }
+        const fornitore = selFornitore.selectedOptions[0].textContent;
+        if (!await conferma(`Caricare ${righe.length} articoli?`, `Fornitore ${esc(fornitore)}. Le giacenze aumentano subito.`, { tasto: "Carica" })) return;
+        try {
+            await server.rpc("carico_magazzino", { p: {
+                fornitore_id: selFornitore.value,
+                numero_esterno: campoDoc.value.trim() || null,
+                note: "Carico dal palmare",
+                righe: righe.map((r) => ({ articolo_id: r.articolo_id, quantita: r.quantita, costo_unitario: r.costo })),
+            } });
+            salvaCarico([]);
+            localStorage.removeItem("mdr.carico.doc");
+            campoDoc.value = "";
+            avviso(`Merce caricata: ${righe.length} articoli`);
+            sincronizzaArticoli(true);
+            disegnaRighe();
+        } catch (e) { errore(e); }
+    }
+    disegnaRighe();
+}
+
+// Articolo che il gestionale non conosce: si crea con descrizione, prezzo e reparto.
+function nuovoArticolo(barcode, reparti, fornitoreId) {
+    return new Promise((risolvi) => {
+        const f = apriFoglio(`
+            <h2>Articolo nuovo</h2>
+            <div class="sotto">Il codice ${esc(barcode)} non è in anagrafica: crealo per caricarlo.</div>
+            <form id="nuovo-art">
+                <label class="etichetta">Descrizione</label>
+                <input class="campo" name="descrizione" required minlength="3" autocapitalize="characters">
+                <label class="etichetta">Prezzo di vendita (€, IVA inclusa)</label>
+                <input class="campo" name="prezzo" inputmode="decimal" required placeholder="es. 3,90">
+                <label class="etichetta">Reparto</label>
+                <select class="campo" name="reparto">${reparti.map((r) => `<option value="${r.numero_rt}">${esc(r.numero_rt)} · ${esc(r.descrizione)}</option>`).join("")}</select>
+                <label class="etichetta">Costo d'acquisto (€ senza IVA, facoltativo)</label>
+                <input class="campo" name="costo" inputmode="decimal" placeholder="es. 1,95">
+                <div class="tasti">
+                    <button class="tasto contorno" type="button" id="nuovo-annulla">Annulla</button>
+                    <button class="tasto pieno" type="submit" id="nuovo-crea">Crea</button>
+                </div>
+            </form>`, () => risolvi(null));
+        f.querySelector("#nuovo-annulla").addEventListener("click", () => chiudiFoglio());
+        f.querySelector("[name=descrizione]").focus();
+        f.querySelector("#nuovo-art").addEventListener("submit", async (ev) => {
+            ev.preventDefault();
+            const d = new FormData(ev.target);
+            const prezzo = centesimiDaTesto(d.get("prezzo"));
+            const costo = d.get("costo") ? centesimiDaTesto(d.get("costo")) : 0;
+            if (!prezzo) { avviso("Prezzo non valido (es. 3,90)", "errore"); return; }
+            if (costo === null) { avviso("Costo non valido (es. 1,95)", "errore"); return; }
+            const p = { id: nuovoId(), barcode, descrizione: String(d.get("descrizione")).trim(), prezzo_vendita: prezzo,
+                        numero_reparto: Number(d.get("reparto")), costo_ultimo: costo, fornitore_id: fornitoreId };
+            try {
+                const id = await server.rpc("crea_articolo", { p });
+                chiusuraFoglio = null;
+                chiudiFoglio();
+                avviso(`Creato ${p.descrizione.toUpperCase()}`);
+                risolvi({ id, codice: barcode, descrizione: p.descrizione.toUpperCase(), unita: "PZ",
+                          prezzo_vendita: prezzo, costo_ultimo: costo, giacenza: 0 });
+            } catch (e) { errore(e); }
+        });
+    });
+}
+
 async function vistaEtichette() {
     titolo("Etichette", "Cartellini da ristampare");
     const radice = vista;

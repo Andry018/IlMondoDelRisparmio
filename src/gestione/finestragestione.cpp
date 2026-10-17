@@ -9,6 +9,7 @@
 #include "vistafatture.h"
 #include "vistacontrolli.h"
 #include "vistamagazzino.h"
+#include "vistapalmare.h"
 #include "vistareport.h"
 
 #include <QLabel>
@@ -70,6 +71,10 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     aggiungiScheda(m_resi, QStringLiteral("Resi da verificare"));
     aggiungiScheda(m_operatori, QStringLiteral("Operatori"));
     aggiungiScheda(m_negozio, QStringLiteral("Negozio"));
+    // QR per collegare i palmari: non serve l'accesso, solo server e chiave delle Impostazioni
+    m_palmare = new VistaPalmare(schede());
+    m_palmare->impostazioni(impostazioni);
+    aggiungiScheda(m_palmare, QStringLiteral("Palmare"));
 
     m_statoAccesso = new QLabel(this);
     statusBar()->addPermanentWidget(m_statoAccesso);
@@ -145,8 +150,9 @@ void FinestraGestione::abilita(const QString& ruolo, const QString& messaggio)
     emit accessoVerificato(ruolo);
 }
 
-void FinestraGestione::impostazioniApplicate(const Impostazioni&)
+void FinestraGestione::impostazioniApplicate(const Impostazioni& imp)
 {
+    m_palmare->impostazioni(imp);
     // Con un server gli articoli arrivano dalla sincronizzazione: qui si consultano soltanto.
     m_articoli->impostaSoloLettura(sync().configurato());
     QTimer::singleShot(0, this, &FinestraGestione::verificaAccesso);
@@ -160,7 +166,9 @@ void FinestraGestione::sincronizzazioneTerminata(bool, int, int articoli)
 
 void FinestraGestione::schedaAttivata(QWidget* scheda)
 {
-    if (scheda == m_paginaArticoli) {
+    if (scheda == m_palmare) {
+        m_palmare->aggiorna();   // la rete può essere cambiata
+    } else if (scheda == m_paginaArticoli) {
         if (m_paginaArticoli->currentWidget() == m_articoli)
             m_articoli->aggiorna();
         else if (!m_ruolo.isEmpty())

@@ -2,6 +2,10 @@
 #include "finestragestione.h"
 #include "locale/archiviolocale.h"
 #include "vistaarticoli.h"
+#include "vistapalmare.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <QComboBox>
 #include <QLineEdit>
@@ -21,6 +25,26 @@ class TestGestione : public QObject {
     std::unique_ptr<FinestraGestione> m_finestra;
 
 private slots:
+    void qr_del_palmare()
+    {
+        // Lo stesso formato che legge il palmare (aggiornamenti.js, leggiConfigurazione)
+        const QString t = testoQrPalmare("http://192.168.1.10:8000", "eyJ.chiave", "github_pat_x");
+        QVERIFY(t.startsWith("mdr:"));
+        QVERIFY(!t.contains('+') && !t.contains('/') && !t.contains('='));
+        const auto o = QJsonDocument::fromJson(QByteArray::fromBase64(t.mid(4).toLatin1(), QByteArray::Base64UrlEncoding)).object();
+        QCOMPARE(o.value("server").toString(), QStringLiteral("http://192.168.1.10:8000"));
+        QCOMPARE(o.value("apikey").toString(), QStringLiteral("eyJ.chiave"));
+        QCOMPARE(o.value("token").toString(), QStringLiteral("github_pat_x"));
+        QVERIFY(!QJsonDocument::fromJson(QByteArray::fromBase64(testoQrPalmare("http://x", "k").mid(4).toLatin1(),
+                                                                 QByteArray::Base64UrlEncoding)).object().contains("token"));
+
+        // Server su questo PC: il palmare usa l'indirizzo di rete
+        QVERIFY(serverLocale("http://localhost:8100"));
+        QCOMPARE(serverPerPalmare("http://localhost:8100", "172.19.177.194"), QStringLiteral("http://172.19.177.194:8100"));
+        QCOMPARE(serverPerPalmare("http://192.168.1.10:8000", "172.19.177.194"), QStringLiteral("http://192.168.1.10:8000"));
+        QVERIFY(!immagineQr(t, 300).isNull());
+    }
+
     void init()
     {
         m_archivio = std::make_unique<ArchivioLocale>(QStringLiteral(":memory:"));
@@ -45,17 +69,19 @@ private slots:
         for (int i = 0; i < schede->count(); ++i)
             titoli << schede->tabText(i);
         QCOMPARE(titoli, (QStringList{"Articoli", "Magazzino", "Vendite", "Fatture", "Clienti", "Fornitori",
-                                      "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Impostazioni"}));
+                                      "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Palmare",
+                                      "Impostazioni"}));
     }
 
     void senza_server_schede_del_server_spente()
     {
-        // Nessun server configurato: si lavora solo sugli articoli locali e sulle impostazioni.
+        // Nessun server configurato: si lavora solo sugli articoli locali e sulle impostazioni
+        // (la scheda Palmare resta, e spiega che prima va configurato il server).
         m_finestra->verificaAccesso();
         auto* schede = m_finestra->findChild<QTabWidget*>();
         for (int i = 0; i < schede->count(); ++i) {
             const auto t = schede->tabText(i);
-            QCOMPARE(schede->isTabEnabled(i), t == "Articoli" || t == "Impostazioni");
+            QCOMPARE(schede->isTabEnabled(i), t == "Articoli" || t == "Impostazioni" || t == "Palmare");
         }
         QVERIFY(m_finestra->ruolo().isEmpty());
     }

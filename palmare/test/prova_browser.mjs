@@ -211,6 +211,33 @@ try {
     await attendiAvviso("Merce caricata");
     passi.push(" ✔ carico in magazzino dalla fattura");
 
+    // Carico senza fattura: un articolo nuovo creato al volo e uno già in anagrafica
+    await clic('[data-tab="carico"]');
+    await attendi(`document.querySelector("#car-fornitore")`, "scheda carico");
+    await js(`(() => { const s = document.querySelector("#car-fornitore");
+                       s.value = [...s.options].find((o) => o.textContent.includes("Grossista")).value;
+                       s.dispatchEvent(new Event("change"));
+                       document.querySelector("#car-doc").value = "DDT 77"; document.querySelector("#car-doc").dispatchEvent(new Event("change")); })()`);
+    await leggi("8007770000011");
+    await attendi(`document.querySelector("#nuovo-art")`, "articolo nuovo");
+    await js(`(() => { const f = document.querySelector("#nuovo-art"); f.descrizione.value = "Borraccia termica 500 ml";
+                       f.prezzo.value = "12,90"; f.costo.value = "6,10"; })()`);
+    await foto("carico-articolo-nuovo");
+    await js(`document.querySelector("#nuovo-art").requestSubmit()`);
+    await attendiAvviso("Creato BORRACCIA");
+    await quantitaE("5");
+    await attendiAvviso("5 pz da caricare");
+    await leggi("8004444000048");
+    await quantitaE("10");
+    await attendiAvviso("10 pz da caricare");
+    await attendi(`document.querySelector("#car-carica")`, "elenco da caricare");
+    await foto("carico-elenco");
+    await clic("#car-carica");
+    await attendi(`document.querySelector("#conferma-si")`, "conferma carico");
+    await clic("#conferma-si");
+    await attendiAvviso("Merce caricata: 2 articoli");
+    passi.push(" ✔ carico dal palmare con articolo nuovo");
+
     await clic('[data-tab="etichette"]');
     await attendi(`document.querySelector(".elenco") || document.querySelector(".vuoto")`, "etichette");
     await foto("etichette");

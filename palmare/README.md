@@ -1,7 +1,8 @@
 # Palmare
 
 App per i palmari del negozio: **inventario**, **prezzi e giacenze**, **ricevimento merce** contro la
-fattura del fornitore, **etichette** da ristampare. È un'app Android (APK) costruita con
+fattura del fornitore, **carico** della merce con DDT (anche articoli nuovi creati al volo, dalla 1.1.0),
+**etichette** da ristampare. Il palmare si collega leggendo il QR della scheda **Palmare** della gestione. È un'app Android (APK) costruita con
 **Capacitor**: l'interfaccia è in `www/` (HTML, CSS, JavaScript senza compilazione) e gira identica
 anche nel browser (`infra/palmare`), che serve per le prove e da PC.
 

@@ -35,7 +35,8 @@ versione() { basename "$1" | cut -d_ -f1; }
 impronta() { sha256sum "$1" | cut -d' ' -f1; }
 
 # Registro delle migrazioni (idempotente)
-sql "create schema if not exists mdr_admin;
+sql "set client_min_messages = warning;
+     create schema if not exists mdr_admin;
      revoke all on schema mdr_admin from public;
      create table if not exists mdr_admin.migrazioni (
          versione    text primary key,

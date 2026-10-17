@@ -24,6 +24,7 @@ add_subdirectory(src/fiscal)
 add_subdirectory(src/locale)
 
 if(MDR_BUILD_DESKTOP)
+    add_subdirectory(src/third_party/qrcodegen)
     add_subdirectory(src/ui)
     add_subdirectory(src/cassa)
     add_subdirectory(src/gestione)

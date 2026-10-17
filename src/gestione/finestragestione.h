@@ -14,6 +14,7 @@ class VistaFatture;
 class VistaFornitori;
 class VistaNegozio;
 class VistaOperatori;
+class VistaPalmare;
 class VistaChiusure;
 class VistaMagazzino;
 class VistaReport;
@@ -61,6 +62,7 @@ private:
     VistaReport* m_report = nullptr;
     VistaChiusure* m_chiusure = nullptr;
     VistaResi* m_resi = nullptr;
+    VistaPalmare* m_palmare = nullptr;
     QList<VistaServer*> m_vistaServer;
     QLabel* m_statoAccesso = nullptr;
     QString m_ruolo;
