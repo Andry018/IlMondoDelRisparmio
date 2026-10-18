@@ -15,6 +15,7 @@
 #include <QDialog>
 #include <QLabel>
 #include <QDialogButtonBox>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 
@@ -189,6 +190,11 @@ private slots:
             QCOMPARE(t->item(2, 0)->checkState(), Qt::Unchecked);
             auto* ok = d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
             QVERIFY(ok->isEnabled());
+            // "Approva e carica" chiede conferma: si risponde Sì
+            QTimer::singleShot(0, d, [] {
+                if (auto* m = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+                    m->button(QMessageBox::Yes)->click();
+            });
             ok->click();
             QTRY_VERIFY_WITH_TIMEOUT(!d->isVisible(), 5000);
             fatto = true;
