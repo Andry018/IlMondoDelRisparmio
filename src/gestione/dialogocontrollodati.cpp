@@ -5,6 +5,10 @@
 #include "locale/clientserver.h"
 
 #include <QDate>
+#include <QJsonDocument>
+
+#include <functional>
+#include <memory>
 #include <QFile>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -85,9 +89,13 @@ DialogoControlloDati::DialogoControlloDati(ClientServer& client, QWidget* parent
     m_stato->setWordWrap(true);
     sotto->addWidget(m_stato, 1);
     auto* ricarica = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Ricontrolla"), this);
-    auto* esporta = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Esporta per Excel…"), this);
+    auto* esporta = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Esporta questo elenco…"), this);
+    auto* tutto = new QPushButton(style()->standardIcon(QStyle::SP_DriveHDIcon), QStringLiteral("Esporta tutto in Excel…"), this);
+    tutto->setObjectName("controllo_esporta_tutto");
+    tutto->setToolTip(QStringLiteral("Un file Excel con il riepilogo e un foglio per ogni problema, elenchi completi"));
+    connect(tutto, &QPushButton::clicked, this, &DialogoControlloDati::esportaTutto);
     auto* chiudi = new QPushButton(style()->standardIcon(QStyle::SP_DialogCloseButton), QStringLiteral("Chiudi"), this);
-    for (auto* b : {ricarica, esporta, chiudi})
+    for (auto* b : {ricarica, esporta, tutto, chiudi})
         sotto->addWidget(b);
     layout->addLayout(sotto);
 
@@ -118,6 +126,7 @@ void DialogoControlloDati::aggiorna()
 
 void DialogoControlloDati::mostraRiepilogo(const QJsonObject& c)
 {
+    m_conteggi = c;
     const int attivi = c.value("articoli_attivi").toInt();
     for (int i = 0; i < m_problemi->count(); ++i) {
         auto* item = m_problemi->item(i);
@@ -169,6 +178,89 @@ void DialogoControlloDati::mostraElenco(const QJsonArray& righe)
                                      .arg(nomeProblema(QLatin1String(p.chiave)), QString::fromUtf8(p.consiglio))
                                      .arg(righe.size() >= 1000 ? QStringLiteral(" (mostrati i primi %1)").arg(righe.size()) : QString()));
     }
+}
+
+QByteArray DialogoControlloDati::excel(const QJsonObject& conteggi, const QMap<QString, QJsonArray>& elenchi)
+{
+    QList<FoglioXlsx> fogli;
+    FoglioXlsx riepilogo{QStringLiteral("Riepilogo"), {QStringLiteral("Problema"), QStringLiteral("Articoli"), QStringLiteral("Cosa fare")}, {}};
+    for (const auto& p : problemi)
+        riepilogo.righe << QStringList{QString::fromUtf8(p.nome), QString::number(conteggi.value(QLatin1String(p.chiave)).toInt()),
+                                       QString::fromUtf8(p.consiglio)};
+    riepilogo.righe << QStringList{} << QStringList{QStringLiteral("Articoli in vendita controllati"),
+                                                    QString::number(conteggi.value("articoli_attivi").toInt()), QString()}
+                    << QStringList{QStringLiteral("Data del controllo"), QDate::currentDate().toString("dd/MM/yyyy"), QString()};
+    fogli << riepilogo;
+    for (const auto& p : problemi) {
+        const auto righe = elenchi.value(QLatin1String(p.chiave));
+        if (righe.isEmpty())
+            continue;
+        FoglioXlsx f{QString::fromUtf8(p.nome), {QStringLiteral("Codice"), QStringLiteral("Descrizione"), QStringLiteral("Dettaglio"),
+                                                  QStringLiteral("Note / correzione")}, {}};
+        for (const auto& v : righe) {
+            const auto a = v.toObject();
+            f.righe << QStringList{a.value("codice").toString(), a.value("descrizione").toString(), a.value("dettaglio").toString(), QString()};
+        }
+        fogli << f;
+    }
+    return scriviXlsx(fogli);
+}
+
+void DialogoControlloDati::esportaTutto()
+{
+    if (m_conteggi.isEmpty())
+        return;
+    const QString file = QFileDialog::getSaveFileName(
+        this, QStringLiteral("Esporta il controllo dei dati"),
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+            + QStringLiteral("/controllo-dati-%1.xlsx").arg(QDate::currentDate().toString("yyyyMMdd")),
+        QStringLiteral("Excel (*.xlsx)"));
+    if (file.isEmpty())
+        return;
+    // Ogni elenco a pagine da 1000 (limite di PostgREST), un problema dopo l'altro
+    QStringList daFare;
+    for (const auto& p : problemi)
+        if (m_conteggi.value(QLatin1String(p.chiave)).toInt() > 0)
+            daFare << QString::fromLatin1(p.chiave);
+    auto elenchi = std::make_shared<QMap<QString, QJsonArray>>();
+    auto passo = std::make_shared<std::function<void(int, int)>>();
+    QPointer<DialogoControlloDati> io(this);
+    *passo = [io, daFare, elenchi, passo, file](int indice, int offset) {
+        if (!io)
+            return;
+        if (indice >= daFare.size()) {
+            QFile f(file);
+            if (!f.open(QIODevice::WriteOnly) || f.write(excel(io->m_conteggi, *elenchi)) < 0) {
+                QMessageBox::warning(io, io->windowTitle(), QStringLiteral("File non salvato: %1").arg(f.errorString()));
+                return;
+            }
+            io->m_stato->setText(QStringLiteral("Esportato: %1 (%2 fogli)").arg(file).arg(elenchi->size() + 1));
+            *passo = nullptr;   // fine: si rompe il riferimento circolare
+            return;
+        }
+        const QString chiave = daFare[indice];
+        io->m_stato->setText(QStringLiteral("Esportazione: %1…").arg(nomeProblema(chiave)));
+        io->m_client.richiesta("POST", QStringLiteral("/rest/v1/rpc/controllo_dati_elenco?limit=1000&offset=%1").arg(offset),
+                               QJsonDocument(QJsonObject{{"p_problema", chiave}}).toJson(QJsonDocument::Compact),
+                               [io, passo, elenchi, chiave, indice, offset](const RispostaServer& r) {
+            if (!io)
+                return;
+            if (!r.ok()) {
+                io->m_stato->setText(QStringLiteral("Errore: %1").arg(r.errore));
+                *passo = nullptr;
+                return;
+            }
+            const auto pagina = r.json().array();
+            auto& elenco = (*elenchi)[chiave];
+            for (const auto& v : pagina)
+                elenco.append(v);
+            if (pagina.size() == 1000)
+                (*passo)(indice, offset + 1000);
+            else
+                (*passo)(indice + 1, 0);
+        });
+    };
+    (*passo)(0, 0);
 }
 
 void DialogoControlloDati::esporta()

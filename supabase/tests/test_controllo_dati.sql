@@ -53,6 +53,9 @@ begin
     assert (select array_agg(codice order by codice) from controllo_dati_elenco('descrizioni_doppie') where codice like 'CD-%') = '{CD-5,CD-6}', 'doppie';
     assert (select array_agg(codice order by codice) from controllo_dati_elenco('merce_ferma') where codice like 'CD-%') = '{CD-7}', 'ferma';
     assert (select count(*) from controllo_dati_elenco('sconosciuto')) = 0, 'problema sconosciuto';
+    -- Dalla 20261018000600 nessun tetto: l'elenco ha tutte le righe del conteggio
+    assert (select count(*) from controllo_dati_elenco('fornitore_mancante')) = (controllo_dati() ->> 'fornitore_mancante')::int,
+           'elenco completo';
 
     assert controllo_dati() ?& array['prezzo_zero', 'sotto_costo', 'senza_costo', 'senza_barcode', 'barcode_non_validi',
                                      'giacenza_negativa', 'fornitore_mancante', 'descrizioni_doppie', 'merce_ferma',

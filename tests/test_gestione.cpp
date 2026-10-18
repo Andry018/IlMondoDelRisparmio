@@ -9,6 +9,7 @@
 #include "vistaetichette.h"
 #include "dialogoordine.h"
 #include "dialogocontrollodati.h"
+#include "filetabella.h"
 #include "vistaordini.h"
 
 #include <QJsonArray>
@@ -256,6 +257,17 @@ private slots:
                                                     "dettaglio": "prezzo 0,00"}])").array());
         auto* articoli = d.findChild<QTableWidget*>("controllo_articoli");
         QCOMPARE(articoli->item(0, 2)->text(), QStringLiteral("prezzo 0,00"));
+        // Excel di tutto: riepilogo + un foglio per problema con articoli; si rilegge col lettore .xlsx
+        const QByteArray xlsx = DialogoControlloDati::excel(
+            QJsonDocument::fromJson(R"({"prezzo_zero": 1, "giacenza_negativa": 2, "articoli_attivi": 10})").object(),
+            {{"prezzo_zero", QJsonDocument::fromJson(R"([{"codice": "CD-2", "descrizione": "Senza prezzo & co <1>", "dettaglio": "prezzo 0,00"}])").array()}});
+        QVERIFY(xlsx.startsWith("PK\x03\x04"));
+        const auto letto = leggiXlsx(xlsx);
+        QVERIFY(letto);
+        QCOMPARE(letto->intestazioni, (QStringList{"Problema", "Articoli", "Cosa fare"}));
+        QCOMPARE(letto->righe.first().mid(0, 2), (QStringList{"Prezzo a zero", "1"}));
+        QVERIFY(xlsx.contains("Senza prezzo &amp; co &lt;1&gt;"));
+        QVERIFY(xlsx.contains("xl/worksheets/sheet2.xml") && !xlsx.contains("xl/worksheets/sheet3.xml"));
         QSignalSpy apri(&d, &DialogoControlloDati::apriArticolo);
         emit articoli->cellDoubleClicked(0, 1);
         QCOMPARE(apri.first().first().toString(), QStringLiteral("CD-2"));

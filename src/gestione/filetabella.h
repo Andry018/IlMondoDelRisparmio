@@ -26,4 +26,13 @@ std::optional<TabellaFile> leggiXlsx(const QByteArray& dati, QString* errore = n
 // Scrive un CSV con separatore ; (UTF-8 con BOM, per Excel).
 QByteArray scriviCsv(const QStringList& intestazioni, const QList<QStringList>& righe);
 
+// Foglio di un file Excel: tutte le celle sono testo (codici e barcode restano come sono).
+struct FoglioXlsx {
+    QString nome;             // al massimo 31 caratteri, senza [ ] : * ? / \ (si sistemano da soli)
+    QStringList intestazioni; // in grassetto, prima riga bloccata
+    QList<QStringList> righe;
+};
+// File .xlsx con uno o più fogli (zip senza compressione: si apre con Excel e LibreOffice).
+QByteArray scriviXlsx(const QList<FoglioXlsx>& fogli);
+
 } // namespace mdr

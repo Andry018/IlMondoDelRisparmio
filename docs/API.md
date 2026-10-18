@@ -790,8 +790,9 @@ Migrazione `20261018000300_controllo_dati.sql`; ruoli amministratore e responsab
 
 `POST /rest/v1/rpc/controllo_dati` `{}` → `{"prezzo_zero": 3, "sotto_costo": 40, …, "articoli_attivi": 14442}`;
 `POST /rest/v1/rpc/controllo_dati_elenco` `{"p_problema": "sotto_costo"}` → righe `articolo_id`,
-`codice`, `descrizione`, `dettaglio` (es. "costo 1,95 + IVA = 2,38, prezzo 1,80"), al massimo 1000
-per via del limite di PostgREST. Problemi (solo articoli attivi): `prezzo_zero`, `sotto_costo`
+`codice`, `descrizione`, `dettaglio` (es. "costo 1,95 + IVA = 2,38, prezzo 1,80"), 1000 per volta
+per via del limite di PostgREST: le successive con `?limit=1000&offset=1000` (dalla migrazione
+`20261018000600` l'elenco non ha altri tetti). Problemi (solo articoli attivi): `prezzo_zero`, `sotto_costo`
 (prezzo sotto costo + IVA del reparto), `senza_costo`, `senza_barcode`, `barcode_non_validi` (8, 12 o
 13 cifre con la cifra di controllo sbagliata; `ean_valido(text)`), `giacenza_negativa`,
 `fornitore_mancante` (o con "fittizi" nel nome), `descrizioni_doppie` (stessa descrizione senza

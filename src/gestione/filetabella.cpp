@@ -384,6 +384,157 @@ std::optional<TabellaFile> leggiTabella(const QString& percorso, QString* errore
     return leggiCsv(dati, errore);
 }
 
+namespace {
+
+QString escXml(QString t)
+{
+    t.replace(QLatin1Char('&'), QStringLiteral("&amp;")).replace(QLatin1Char('<'), QStringLiteral("&lt;"))
+        .replace(QLatin1Char('>'), QStringLiteral("&gt;")).replace(QLatin1Char('"'), QStringLiteral("&quot;"));
+    // Caratteri di controllo non ammessi in XML 1.0 (tranne tab e a capo)
+    t.removeIf([](QChar c) { return c.unicode() < 0x20 && c != QLatin1Char('\t') && c != QLatin1Char('\n'); });
+    return t;
+}
+
+QString colonnaExcel(int i)   // 0 → A, 26 → AA
+{
+    QString s;
+    for (++i; i > 0; i = (i - 1) / 26)
+        s.prepend(QChar(u'A' + (i - 1) % 26));
+    return s;
+}
+
+QString nomeFoglio(QString nome, QStringList& usati)
+{
+    for (const QChar c : QStringLiteral("[]:*?/\\"))
+        nome.replace(c, QLatin1Char(' '));
+    nome = nome.trimmed().left(31);
+    if (nome.isEmpty())
+        nome = QStringLiteral("Foglio");
+    QString finale = nome;
+    for (int n = 2; usati.contains(finale, Qt::CaseInsensitive); ++n)
+        finale = nome.left(31 - 3) + QStringLiteral(" %1").arg(n);
+    usati << finale;
+    return finale;
+}
+
+QByteArray xmlFoglio(const FoglioXlsx& f)
+{
+    QList<int> larghezze(f.intestazioni.size(), 8);
+    auto misura = [&](const QStringList& r) {
+        for (int i = 0; i < r.size() && i < larghezze.size(); ++i)
+            larghezze[i] = std::min(60, std::max(larghezze[i], int(r[i].size()) + 2));
+    };
+    misura(f.intestazioni);
+    for (const auto& r : f.righe)
+        misura(r);
+    QString x = QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                               "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+                               "<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" "
+                               "activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><cols>");
+    for (int i = 0; i < larghezze.size(); ++i)
+        x += QStringLiteral("<col min=\"%1\" max=\"%1\" width=\"%2\" customWidth=\"1\"/>").arg(i + 1).arg(larghezze[i]);
+    x += QStringLiteral("</cols><sheetData>");
+    auto riga = [&](int n, const QStringList& celle, bool grassetto) {
+        x += QStringLiteral("<row r=\"%1\">").arg(n);
+        for (int i = 0; i < celle.size(); ++i)
+            x += QStringLiteral("<c r=\"%1%2\" t=\"inlineStr\"%3><is><t xml:space=\"preserve\">%4</t></is></c>")
+                     .arg(colonnaExcel(i)).arg(n).arg(grassetto ? QStringLiteral(" s=\"1\"") : QString(), escXml(celle[i]));
+        x += QStringLiteral("</row>");
+    };
+    riga(1, f.intestazioni, true);
+    for (int i = 0; i < f.righe.size(); ++i)
+        riga(i + 2, f.righe[i], false);
+    x += QStringLiteral("</sheetData></worksheet>");
+    return x.toUtf8();
+}
+
+// Zip con i file "stored" (senza compressione): nomi UTF-8, CRC di zlib.
+QByteArray zip(const QList<QPair<QByteArray, QByteArray>>& file)
+{
+    QByteArray out, centrale;
+    auto u16 = [](QByteArray& b, quint16 v) { b.append(char(v & 0xff)).append(char(v >> 8)); };
+    auto u32 = [](QByteArray& b, quint32 v) { for (int i = 0; i < 4; ++i) b.append(char((v >> (8 * i)) & 0xff)); };
+    for (const auto& [nome, dati] : file) {
+        const quint32 crc = quint32(crc32(0, reinterpret_cast<const Bytef*>(dati.constData()), uInt(dati.size())));
+        const quint32 posizione = quint32(out.size());
+        u32(out, 0x04034b50); u16(out, 20); u16(out, 0x0800); u16(out, 0); u16(out, 0); u16(out, 0x21);
+        u32(out, crc); u32(out, quint32(dati.size())); u32(out, quint32(dati.size()));
+        u16(out, quint16(nome.size())); u16(out, 0);
+        out += nome;
+        out += dati;
+        u32(centrale, 0x02014b50); u16(centrale, 20); u16(centrale, 20); u16(centrale, 0x0800); u16(centrale, 0);
+        u16(centrale, 0); u16(centrale, 0x21); u32(centrale, crc); u32(centrale, quint32(dati.size()));
+        u32(centrale, quint32(dati.size())); u16(centrale, quint16(nome.size())); u16(centrale, 0); u16(centrale, 0);
+        u16(centrale, 0); u16(centrale, 0); u32(centrale, 0); u32(centrale, posizione);
+        centrale += nome;
+    }
+    const quint32 inizioCentrale = quint32(out.size());
+    out += centrale;
+    u32(out, 0x06054b50); u16(out, 0); u16(out, 0); u16(out, quint16(file.size())); u16(out, quint16(file.size()));
+    u32(out, quint32(centrale.size())); u32(out, inizioCentrale); u16(out, 0);
+    return out;
+}
+
+} // namespace
+
+QByteArray scriviXlsx(const QList<FoglioXlsx>& fogli)
+{
+    QList<QPair<QByteArray, QByteArray>> file;
+    QString tipi = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+        "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+        "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+        "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
+        "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>");
+    QString libro = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>");
+    QString relazioni = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+    QStringList usati;
+    for (int i = 0; i < fogli.size(); ++i) {
+        const int n = i + 1;
+        tipi += QStringLiteral("<Override PartName=\"/xl/worksheets/sheet%1.xml\" "
+                               "ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>").arg(n);
+        libro += QStringLiteral("<sheet name=\"%1\" sheetId=\"%2\" r:id=\"rId%2\"/>").arg(escXml(nomeFoglio(fogli[i].nome, usati))).arg(n);
+        relazioni += QStringLiteral("<Relationship Id=\"rId%1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" "
+                                    "Target=\"worksheets/sheet%1.xml\"/>").arg(n);
+        file << qMakePair(QStringLiteral("xl/worksheets/sheet%1.xml").arg(n).toUtf8(), xmlFoglio(fogli[i]));
+    }
+    tipi += QStringLiteral("</Types>");
+    libro += QStringLiteral("</sheets></workbook>");
+    relazioni += QStringLiteral("<Relationship Id=\"rId%1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" "
+                                "Target=\"styles.xml\"/></Relationships>").arg(fogli.size() + 1);
+    const QByteArray stili =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+        "<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font>"
+        "<font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font></fonts>"
+        "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>"
+        "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>"
+        "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>"
+        "<cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
+        "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/></cellXfs>"
+        "</styleSheet>";
+    const QByteArray radice =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" "
+        "Target=\"xl/workbook.xml\"/></Relationships>";
+    QList<QPair<QByteArray, QByteArray>> tutti{
+        {"[Content_Types].xml", tipi.toUtf8()},
+        {"_rels/.rels", radice},
+        {"xl/workbook.xml", libro.toUtf8()},
+        {"xl/_rels/workbook.xml.rels", relazioni.toUtf8()},
+        {"xl/styles.xml", stili},
+    };
+    tutti += file;
+    return zip(tutti);
+}
+
 QByteArray scriviCsv(const QStringList& intestazioni, const QList<QStringList>& righe)
 {
     const auto riga = [](const QStringList& campi) {

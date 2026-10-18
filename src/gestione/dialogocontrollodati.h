@@ -3,6 +3,7 @@
 #include <QDialog>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMap>
 
 class QLabel;
 class QListWidget;
@@ -25,6 +26,8 @@ public:
     void mostraRiepilogo(const QJsonObject& conteggi);
     void mostraElenco(const QJsonArray& righe);
     static QString nomeProblema(const QString& chiave);
+    // File Excel: foglio "Riepilogo" e un foglio per ogni problema con articoli (elenchi completi)
+    static QByteArray excel(const QJsonObject& conteggi, const QMap<QString, QJsonArray>& elenchi);
 
 signals:
     void apriArticolo(const QString& codice);
@@ -33,8 +36,10 @@ private:
     void aggiorna();
     void caricaElenco();
     void esporta();
+    void esportaTutto();
 
     ClientServer& m_client;
+    QJsonObject m_conteggi;
     QListWidget* m_problemi;
     QTableWidget* m_articoli;
     QLabel* m_stato;
