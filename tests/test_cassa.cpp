@@ -13,6 +13,7 @@
 
 #include <QBoxLayout>
 #include <QComboBox>
+#include <QShortcut>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 
@@ -316,6 +317,13 @@ private slots:
         cassa()->cambiaScontrino(0);
         QTest::qWait(50);
         m_finestra->grab().save(cartella + "/pos_cassa.png");
+        cassa()->esegui = [&cartella](QDialog& d) {
+            d.show();
+            QTest::qWait(50);
+            d.grab().save(cartella + "/pos_guida_tasti.png");
+            return int(QDialog::Accepted);
+        };
+        cassa()->guidaTasti();
 
         auto* schede = m_finestra->findChild<QTabWidget*>();
         for (int i = 1; i < schede->count(); ++i) {
@@ -452,6 +460,30 @@ private slots:
         QVERIFY(qApp->palette().color(QPalette::Window).lightness() < 100);
         applicaTema(AspettoCassa::Tema::Chiaro);
         AspettoCassa{}.salva(m_dir.filePath("mdr-cassa.ini"));   // le altre prove partono dal chiaro
+    }
+
+    void guida_dei_tasti()
+    {
+        // Ogni tasto della guida esiste davvero (pulsante o scorciatoia) e ogni tasto dei pulsanti è nella guida
+        QSet<QString> tasti;
+        for (auto* b : cassa()->findChildren<QPushButton*>())
+            if (!b->shortcut().isEmpty())
+                tasti << b->shortcut().toString(QKeySequence::PortableText);
+        for (auto* s : cassa()->findChildren<QShortcut*>())
+            tasti << s->key().toString(QKeySequence::PortableText);
+        QSet<QString> nellaGuida;
+        for (const auto& v : VistaCassa::vociGuida())
+            nellaGuida << v.tasto;
+        QCOMPARE(nellaGuida, tasti);
+
+        // Il pulsante "?" apre la guida
+        QString testoGuida;
+        cassa()->esegui = [&testoGuida](QDialog& d) {
+            testoGuida = d.findChild<QLabel*>("guida_testo")->text();
+            return int(QDialog::Accepted);
+        };
+        clic("guida_tasti");
+        QVERIFY(testoGuida.contains("Paga in contanti") && testoGuida.contains("3*1001"));
     }
 
     void sconto_sul_totale()

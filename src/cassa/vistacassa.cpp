@@ -43,7 +43,21 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     m_codice->setPlaceholderText(QStringLiteral("Barcode, codice o prezzo + reparto"));
     m_codice->setToolTip(QStringLiteral("3*1001 = 3 pezzi dell'articolo 1001; 250 + reparto = 2,50"));
     caratteri(m_codice, 16);
-    sinistra->addWidget(m_codice);
+    auto* rigaCodice = new QHBoxLayout;
+    rigaCodice->addWidget(m_codice, 1);
+    auto* guida = new QPushButton(QStringLiteral("?"), this);
+    guida->setObjectName("guida_tasti");
+    guida->setToolTip(QStringLiteral("Guida dei tasti (Ctrl+G)"));
+    guida->setFocusPolicy(Qt::NoFocus);
+    guida->setFixedWidth(44);
+    guida->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    guida->setFont(fontGrande(font(), 14, true));
+    caratteri(guida, 14);
+    connect(guida, &QPushButton::clicked, this, &VistaCassa::guidaTasti);
+    auto* scorciatoiaGuida = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_G), this);
+    connect(scorciatoiaGuida, &QShortcut::activated, this, &VistaCassa::guidaTasti);
+    rigaCodice->addWidget(guida);
+    sinistra->addLayout(rigaCodice);
 
     auto* scontrini = new QHBoxLayout;
     for (int i = 0; i < 2; ++i) {
@@ -540,6 +554,54 @@ void VistaCassa::vendiTastoRapido(int indice)
         }
     }
     messaggio(QStringLiteral("Tasto %1: articolo %2 non in archivio e nessun reparto al 22%").arg(t.etichetta, t.codice), true);
+}
+
+QList<VistaCassa::VoceGuida> VistaCassa::vociGuida()
+{
+    return {
+        {QStringLiteral("F1"), QStringLiteral("Operatore: codice e PIN di chi vende")},
+        {QStringLiteral("F2"), QStringLiteral("Articolo libero con descrizione, prezzo e reparto")},
+        {QStringLiteral("F3"), QStringLiteral("Sconto: % sulla riga, % o € sul totale, arrotonda a…")},
+        {QStringLiteral("F4"), QStringLiteral("Storna la riga scelta")},
+        {QStringLiteral("F5"), QStringLiteral("Paga in contanti (calcola il resto)")},
+        {QStringLiteral("F6"), QStringLiteral("Paga con carta")},
+        {QStringLiteral("F7"), QStringLiteral("Paga con bancomat")},
+        {QStringLiteral("F8"), QStringLiteral("Annulla lo scontrino in corso")},
+        {QStringLiteral("F9"), QStringLiteral("Cambia la quantità della riga scelta")},
+        {QStringLiteral("F10"), QStringLiteral("Chiusura Z di fine giornata")},
+        {QStringLiteral("F11"), QStringLiteral("Passa all'altro scontrino (due clienti insieme)")},
+        {QStringLiteral("F12"), QStringLiteral("Verifica prezzo: mostra il prezzo senza vendere")},
+        {QStringLiteral("Ctrl+P"), QStringLiteral("Ristampa l'ultimo scontrino")},
+        {QStringLiteral("Ctrl+F"), QStringLiteral("Codice fiscale del cliente sullo scontrino")},
+        {QStringLiteral("Ctrl+G"), QStringLiteral("Questa guida")},
+    };
+}
+
+void VistaCassa::guidaTasti()
+{
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Guida dei tasti"));
+    auto* layout = new QVBoxLayout(&d);
+    QString html = QStringLiteral("<table cellspacing=0 cellpadding=5>");
+    for (const auto& v : vociGuida())
+        html += QStringLiteral("<tr><td><b>%1</b></td><td>%2</td></tr>").arg(v.tasto.toHtmlEscaped(), v.cosa.toHtmlEscaped());
+    html += QStringLiteral("</table><h3>Nel campo del barcode</h3><table cellspacing=0 cellpadding=5>"
+                           "<tr><td><b>3*1001</b></td><td>3 pezzi dell'articolo 1001 (anche col barcode); <b>X</b> sul tastierino scrive *</td></tr>"
+                           "<tr><td><b>250</b> + reparto</td><td>articolo libero da 2,50 € (con la virgola: 2,50)</td></tr>"
+                           "<tr><td><b>3</b> + tasto rapido</td><td>3 pezzi del tasto rapido (es. 3 shopper)</td></tr>"
+                           "<tr><td><b>Invio</b></td><td>legge il codice scritto</td></tr></table>");
+    auto* testo = new QLabel(html, &d);
+    testo->setObjectName("guida_testo");
+    testo->setTextFormat(Qt::RichText);
+    testo->setFont(fontGrande(font(), m_aspetto.punti(12)));
+    layout->addWidget(testo);
+    auto* chiudi = new QPushButton(QStringLiteral("Chiudi"), &d);
+    chiudi->setMinimumHeight(44);
+    chiudi->setDefault(true);
+    connect(chiudi, &QPushButton::clicked, &d, &QDialog::accept);
+    layout->addWidget(chiudi);
+    esegui(d);
+    attiva();
 }
 
 void VistaCassa::ristampaUltimo()

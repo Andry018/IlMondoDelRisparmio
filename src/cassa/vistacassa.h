@@ -5,6 +5,7 @@
 #include "locale/operazionicassa.h"
 
 #include <QPointer>
+#include <QDialog>
 #include <QWidget>
 #include <array>
 #include <functional>
@@ -63,11 +64,21 @@ public:
     bool applicaSconto(ModoSconto modo, Money valore);
     // Copia dell'ultimo documento emesso (Ctrl+P).
     void ristampaUltimo();
+    // Guida dei tasti (pulsante "?" e Ctrl+G): tasti funzione e modi di scrivere nel campo.
+    void guidaTasti();
+    // Voci della guida: tasto e cosa fa (anche per i test, che le confrontano con i pulsanti)
+    struct VoceGuida {
+        QString tasto;
+        QString cosa;
+    };
+    static QList<VoceGuida> vociGuida();
     // Codice fiscale o partita IVA del cliente sullo scontrino (spese sanitarie detraibili).
     // Testo vuoto: lo toglie. false se non è valido (lo scontrino resta com'era).
     bool impostaCodiceFiscale(const QString& testo);
     // Tasto "Codice fiscale" (F11): lo chiede, anche letto dalla tessera sanitaria.
     void chiediCodiceFiscale();
+    // Apre le finestre (exec); sostituibile nei test.
+    std::function<int(QDialog&)> esegui = [](QDialog& d) { return d.exec(); };
     // Finestra che chiede il codice fiscale; nullopt = annullato. Sostituibile nei test.
     std::function<std::optional<QString>(const QString& spiegazione)> richiestaCodiceFiscale;
 
