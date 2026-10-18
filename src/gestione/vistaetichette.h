@@ -37,6 +37,7 @@ private:
     void aggiungiArticolo();
     void anteprima();
     void salvaPdf();
+    void paginaDiProva();
     void segnaStampate(bool chiedi);
     void aggiornaStato();
 

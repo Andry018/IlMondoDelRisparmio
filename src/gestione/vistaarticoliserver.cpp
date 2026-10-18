@@ -270,8 +270,10 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     m_scheda = new SchedaArticolo(client, divisore);
     m_scheda->setObjectName("scheda_articolo");
-    divisore->setStretchFactor(0, 4);
-    divisore->setStretchFactor(1, 5);
+    // L'elenco ha la parte più larga: le descrizioni sono lunghe, la scheda si legge anche stretta
+    divisore->setStretchFactor(0, 11);
+    divisore->setStretchFactor(1, 9);
+    divisore->setSizes({550, 450});
     auto* barra = new QHBoxLayout;
     m_cerca = new QLineEdit(this);
     m_cerca->setPlaceholderText(QStringLiteral("Cerca per codice, descrizione o barcode"));
@@ -280,6 +282,9 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     m_soloAttivi = new QCheckBox(QStringLiteral("Solo in vendita"), this);
     m_soloAttivi->setChecked(true);
     barra->addWidget(m_soloAttivi);
+    layout->addLayout(barra);
+    // Pulsanti su una seconda riga: la ricerca resta larga anche a 1024 pixel
+    auto* comandi = new QHBoxLayout;
     auto* nuovo = new QPushButton(style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("Nuovo"), this);
     nuovo->setObjectName("nuovo_articolo");
     nuovo->setToolTip(QStringLiteral("Nuovo articolo"));
@@ -295,8 +300,15 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     auto* controllo = new QPushButton(style()->standardIcon(QStyle::SP_MessageBoxInformation), QStringLiteral("Controllo dati…"), this);
     controllo->setObjectName("controllo_dati");
     controllo->setToolTip(QStringLiteral("Articoli con prezzo a zero, sotto costo, barcode sbagliati, doppioni, giacenze negative…"));
-    for (auto* b : {nuovo, m_modifica, m_attivo, importa, prezzi, controllo})
-        barra->addWidget(b);
+    // Due righe da tre: con la scheda accanto la pagina resta sotto i 1024 pixel
+    for (auto* b : {nuovo, m_modifica, m_attivo})
+        comandi->addWidget(b);
+    comandi->addStretch();
+    layout->addLayout(comandi);
+    comandi = new QHBoxLayout;
+    for (auto* b : {importa, prezzi, controllo})
+        comandi->addWidget(b);
+    comandi->addStretch();
     // Non modale: si corregge l'articolo nella scheda tenendo aperto l'elenco
     connect(controllo, &QPushButton::clicked, this, [this] {
         auto* d = new DialogoControlloDati(m_client, this);
@@ -308,7 +320,7 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
         });
         d->show();
     });
-    layout->addLayout(barra);
+    layout->addLayout(comandi);
 
     // Dopo i carichi: articoli il cui costo è salito e il prezzo è rimasto sotto il ricarico
     m_avvisoPrezzi = new QPushButton(style()->standardIcon(QStyle::SP_MessageBoxWarning), QString(), this);

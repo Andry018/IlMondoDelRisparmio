@@ -136,8 +136,23 @@ void TabellaServer::mostra(const QJsonArray& righe)
             m_tabella->setItem(i, c, item);
         }
     }
+    // Si allarga la prima colonna di testo "lunga" (descrizione, ragione sociale, fornitore...),
+    // non l'ultima: altrimenti i numeri finiscono in fondo a destra e le descrizioni restano strette
+    static const QRegularExpression lunghe(QStringLiteral("descrizione|ragione_sociale|fornitore|articolo|nome|cliente|note|messaggio"));
+    int elastica = int(m_colonne.size()) - 1;
+    for (int c = 0; c < m_colonne.size(); ++c)
+        if (m_colonne[c].tipo == ColonnaServer::Testo && lunghe.match(m_colonne[c].campo).hasMatch()) {
+            elastica = c;
+            break;
+        }
+    auto* intestazione = m_tabella->horizontalHeader();
+    intestazione->setStretchLastSection(false);
+    intestazione->setSectionResizeMode(QHeaderView::Interactive);
     m_tabella->resizeColumnsToContents();
-    m_tabella->horizontalHeader()->setStretchLastSection(true);
+    for (int c = 0; c < m_colonne.size(); ++c)
+        if (c != elastica && m_tabella->columnWidth(c) > 320)
+            m_tabella->setColumnWidth(c, 320);   // testi lunghi in una colonna stretta: il resto nel suggerimento
+    intestazione->setSectionResizeMode(elastica, QHeaderView::Stretch);
     m_stato->setStyleSheet(QString());
     if (righe.isEmpty())
         m_stato->setText(testoVuoto);

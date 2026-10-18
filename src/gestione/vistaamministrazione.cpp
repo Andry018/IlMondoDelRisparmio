@@ -116,6 +116,10 @@ VistaFornitori::VistaFornitori(ClientServer& client, QWidget* parent)
         {"comune", QStringLiteral("Comune")},
         {"telefono", QStringLiteral("Telefono")},
         {"email", QStringLiteral("Email")},
+        {"giorni_ordine", QStringLiteral("Ordina ogni"), ColonnaServer::Testo,
+         [](const QJsonObject& f) {
+             return f.value("giorni_ordine").isNull() ? QString() : QStringLiteral("%1 giorni").arg(f.value("giorni_ordine").toInt());
+         }},
         {"attivo", QStringLiteral("Attivo"), ColonnaServer::SiNo},
     }, this);
     m_tabella->setObjectName("fornitori");

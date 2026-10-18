@@ -308,9 +308,10 @@ private slots:
                 QTest::qWait(100);
             QTest::qWait(200);
             const auto titolo = schede()->tabText(i);
-            qInfo().noquote() << QStringLiteral("%1: %2x%3, caricata in %4 ms%5")
+            qInfo().noquote() << QStringLiteral("%1: %2x%3 (minimo della scheda %6), caricata in %4 ms%5")
                                      .arg(titolo).arg(m_finestra->width()).arg(m_finestra->height())
-                                     .arg(tempo.elapsed()).arg(caricando() ? " (ANCORA IN CARICAMENTO)" : "");
+                                     .arg(tempo.elapsed()).arg(caricando() ? " (ANCORA IN CARICAMENTO)" : "")
+                                     .arg(schede()->currentWidget()->minimumSizeHint().width());
             auto nome = titolo.toLower();
             nome.replace(QRegularExpression("[^a-z0-9]+"), "_");
             m_finestra->grab().save(cartella + QStringLiteral("/gestione_%1_%2.png").arg(i, 2, 10, QChar('0')).arg(nome));

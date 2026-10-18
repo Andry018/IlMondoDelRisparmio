@@ -215,6 +215,10 @@ VistaVendite::VistaVendite(ArchivioLocale& archivio, OperazioniCassa& operazioni
     m_reso = new QPushButton(QStringLiteral("Reso…"), this);
     barra->addWidget(m_annulla);
     barra->addWidget(m_reso);
+    // Sul POS si tocca col dito: comandi alti come gli altri tasti della cassa
+    for (QWidget* w : {static_cast<QWidget*>(oggi), static_cast<QWidget*>(m_cerca), static_cast<QWidget*>(m_annulla),
+                       static_cast<QWidget*>(m_reso), static_cast<QWidget*>(m_giorno)})
+        w->setMinimumHeight(40);
     layout->addLayout(barra);
 
     auto* divisore = new QSplitter(Qt::Vertical, this);

@@ -29,7 +29,7 @@ namespace {
 
 QString motivoLeggibile(const QString& m)
 {
-    if (m == QLatin1String("prezzo"))
+    if (m == QLatin1String("prezzo_cambiato") || m == QLatin1String("prezzo"))
         return QStringLiteral("Prezzo cambiato");
     if (m == QLatin1String("richiesta"))
         return QStringLiteral("Richiesta");
@@ -68,6 +68,8 @@ VistaEtichette::VistaEtichette(ClientServer& client, QWidget* parent)
     m_tabella->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_tabella->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     m_tabella->horizontalHeader()->setSectionResizeMode(Descrizione, QHeaderView::Stretch);
+    m_tabella->horizontalHeader()->setSectionResizeMode(Copie, QHeaderView::Fixed);   // il selettore delle copie
+    m_tabella->setColumnWidth(Copie, 64);
     layout->addWidget(m_tabella, 1);
 
     auto* stampa = new QHBoxLayout;
@@ -83,17 +85,26 @@ VistaEtichette::VistaEtichette(ClientServer& client, QWidget* parent)
     auto* bAnteprima = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogContentsView), QStringLiteral("Anteprima e stampa…"), this);
     bAnteprima->setObjectName("etichette_stampa");
     auto* bPdf = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Salva PDF…"), this);
+    auto* bProva = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogInfoView), QStringLiteral("Pagina di prova…"), this);
+    bProva->setObjectName("etichette_prova");
+    bProva->setToolTip(QStringLiteral("Contorni numerati del formato scelto, su carta normale: si sovrappongono al foglio "
+                                      "adesivo per controllare formato e margini prima di usarlo"));
+    connect(bProva, &QPushButton::clicked, this, &VistaEtichette::paginaDiProva);
     auto* bStampate = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("Segna come stampate"), this);
     bStampate->setToolTip(QStringLiteral("Toglie dall'elenco le etichette spuntate (anche senza stamparle)"));
     stampa->addWidget(new QLabel(QStringLiteral("Foglio"), this));
     stampa->addWidget(m_formato, 1);
     stampa->addWidget(m_salta);
     stampa->addWidget(m_bordi);
-    stampa->addStretch();
-    stampa->addWidget(bAnteprima);
-    stampa->addWidget(bPdf);
-    stampa->addWidget(bStampate);
     layout->addLayout(stampa);
+    // Pulsanti su una riga a parte: tutto sta anche a 1024 pixel
+    auto* pulsanti = new QHBoxLayout;
+    pulsanti->addWidget(bProva);
+    pulsanti->addStretch();
+    pulsanti->addWidget(bAnteprima);
+    pulsanti->addWidget(bPdf);
+    pulsanti->addWidget(bStampate);
+    layout->addLayout(pulsanti);
     m_stato = new QLabel(this);
     m_stato->setObjectName("etichette_stato");
     layout->addWidget(m_stato);
@@ -258,6 +269,18 @@ void VistaEtichette::anteprima()
     });
     if (d.exec() == QDialog::Accepted)
         segnaStampate(true);
+}
+
+void VistaEtichette::paginaDiProva()
+{
+    QPrinter stampante(QPrinter::HighResolution);
+    stampante.setFullPage(true);
+    QPrintPreviewDialog d(&stampante, this);
+    d.setWindowTitle(QStringLiteral("Etichette — pagina di prova"));
+    d.resize(900, 700);
+    const auto formato = formatiEtichette().value(m_formato->currentIndex());
+    connect(&d, &QPrintPreviewDialog::paintRequested, this, [&](QPrinter* p) { stampaProvaFoglio(*p, formato); });
+    d.exec();
 }
 
 void VistaEtichette::salvaPdf()

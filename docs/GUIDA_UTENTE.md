@@ -126,8 +126,8 @@ segnalata subito a chi segue il server.
 ### Ordini
 
 1. **Nuovo dalla proposta…**: si correggono le quantità e **Crea ordini** fa una bozza per fornitore.
-2. Si manda l'ordine come si fa di solito (**Stampa…** o **Esporta per Excel…** se serve: WhatsApp,
-   email, all'agente, oppure si va a comprare di persona) e poi **Segna come inviato…** dicendo come.
+2. Si fa l'ordine come di solito, a mano o sul portale del fornitore (**Stampa…** o **Esporta per
+   Excel…** aiutano a copiarlo), poi **Segna come inviato…** dicendo come.
    Da lì la merce è "ordinata" e la proposta d'ordine non la propone di nuovo.
 3. All'arrivo non serve fare niente in più: i carichi da quel fornitore (fattura approvata o carico dal
    palmare) riempiono la colonna **Arrivato**; **Manca** dice cosa non è arrivato.
@@ -139,7 +139,9 @@ segnalata subito a chi segue il server.
 L'elenco delle etichette da stampare (prezzi cambiati, richieste dal palmare o dalla scheda). Si
 sceglie il **foglio adesivo** (A4 3×8, 3×7, 4×10, 5×13, 2×7) e **da quale posizione** partire per
 riusare un foglio già in parte usato; **Copie** per articolo. **Anteprima e stampa…** o **Salva PDF…**,
-poi **Segna come stampate**. Per provare gli allineamenti: **Bordi** su carta normale.
+poi **Segna come stampate**. Prima di usare un foglio nuovo: **Pagina di prova…** stampa su carta normale
+i contorni numerati del formato scelto (al 100%, senza "adatta alla pagina"); controluce sopra il foglio
+adesivo si vede subito se il formato è giusto e se la stampante sposta la stampa.
 
 ### Altre schede
 

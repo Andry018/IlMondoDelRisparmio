@@ -160,6 +160,13 @@ private slots:
         pdf.setResolution(150);
         QCOMPARE(stampaEtichette(pdf, formatiEtichette().first(), elenco, 4), 2);
         QVERIFY(QFileInfo(m_dir.filePath("etichette.pdf")).size() > 1000);
+        // Pagina di prova di ogni formato
+        for (const auto& formato : formatiEtichette()) {
+            QPdfWriter prova(m_dir.filePath("prova.pdf"));
+            prova.setResolution(150);
+            stampaProvaFoglio(prova, formato);
+        }
+        QVERIFY(QFileInfo(m_dir.filePath("prova.pdf")).size() > 1000);
 
         // Scheda: copie e spunte
         ClientServer client;
@@ -319,6 +326,20 @@ private slots:
         QCOMPARE(titoli, (QStringList{"Cruscotto", "Articoli", "Magazzino", "Ordini", "Etichette", "Vendite", "Fatture", "Clienti", "Fornitori",
                                       "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Palmare",
                                       "Impostazioni"}));
+    }
+
+    void ogni_scheda_sta_in_1024()
+    {
+        // Cassa e gestione stanno su ogni PC, anche sul POS a 1024x768
+        auto* schede = m_finestra->findChild<QTabWidget*>();
+        QStringList troppo;
+        for (int i = 0; i < schede->count(); ++i) {
+            const int larga = schede->widget(i)->minimumSizeHint().width();
+            if (larga > 1000)
+                troppo << QStringLiteral("%1=%2").arg(schede->tabText(i)).arg(larga);
+        }
+        QVERIFY2(troppo.isEmpty(), qPrintable(troppo.join(", ")));
+        QVERIFY2(m_finestra->minimumSizeHint().width() <= 1024, qPrintable(QString::number(m_finestra->minimumSizeHint().width())));
     }
 
     void senza_server_schede_del_server_spente()

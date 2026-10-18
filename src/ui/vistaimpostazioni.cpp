@@ -432,7 +432,13 @@ void VistaImpostazioni::aggiorna()
                         .arg(m_infoPostazione)
                         .arg(m_archivio.contaArticoli())
                         .arg(m_archivio.contaDaInviare())
-                        .arg(m_archivio.ultimoSync().isEmpty() ? QStringLiteral("mai") : m_archivio.ultimoSync())
+                        .arg([this] {
+                            // Marcatore del server (ISO con i microsecondi): all'italiana, ora locale
+                            const auto quando = Sincronizzatore::leggiMarcatore(m_archivio.ultimoSync());
+                            return m_archivio.ultimoSync().isEmpty() ? QStringLiteral("mai")
+                                   : quando.isValid() ? quando.toLocalTime().toString(QStringLiteral("dd/MM/yyyy HH:mm"))
+                                                      : m_archivio.ultimoSync();
+                        }())
                         .arg(m_archivio.contaDaVerificare()));
 
     const auto reparti = m_archivio.reparti();

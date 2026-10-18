@@ -48,4 +48,9 @@ bool disegnaEan(QPainter& p, const QRectF& r, const QString& codice);
 int stampaEtichette(QPagedPaintDevice& dispositivo, const FormatoEtichette& formato, const QList<Etichetta>& etichette,
                     int salta = 0, bool bordi = false);
 
+// Pagina di prova su carta normale: il contorno di ogni etichetta del formato, numerata, con
+// le misure. Messa controluce sopra un foglio adesivo dice se il formato è quello giusto e se
+// la stampante sposta la stampa (margini).
+void stampaProvaFoglio(QPagedPaintDevice& dispositivo, const FormatoEtichette& formato);
+
 } // namespace mdr

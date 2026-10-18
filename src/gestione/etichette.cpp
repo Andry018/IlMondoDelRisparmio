@@ -211,6 +211,36 @@ void disegnaEtichetta(QPainter& p, const QRectF& r, const Etichetta& e)
     p.restore();
 }
 
+void stampaProvaFoglio(QPagedPaintDevice& dispositivo, const FormatoEtichette& formato)
+{
+    dispositivo.setPageLayout(QPageLayout(QPageSize(QPageSize::A4), QPageLayout::Portrait, QMarginsF(0, 0, 0, 0),
+                                          QPageLayout::Millimeter, QMarginsF(0, 0, 0, 0)));
+    QPainter p(&dispositivo);
+    const double perMm = dispositivo.logicalDpiX() / 25.4;
+    const double perMmY = dispositivo.logicalDpiY() / 25.4;
+    QFont f = p.font();
+    for (int i = 0; i < formato.perFoglio(); ++i) {
+        const QRectF mm = formato.posizioneMm(i);
+        const QRectF r(mm.left() * perMm, mm.top() * perMmY, mm.width() * perMm, mm.height() * perMmY);
+        p.setPen(QPen(Qt::black, std::max(1.0, perMm * 0.2)));
+        p.drawRect(r);
+        // Croce al centro: si vede subito di quanto la stampa è spostata
+        p.setPen(QPen(Qt::gray, std::max(1.0, perMm * 0.1)));
+        p.drawLine(QPointF(r.center().x() - 3 * perMm, r.center().y()), QPointF(r.center().x() + 3 * perMm, r.center().y()));
+        p.drawLine(QPointF(r.center().x(), r.center().y() - 3 * perMmY), QPointF(r.center().x(), r.center().y() + 3 * perMmY));
+        f.setPixelSize(std::max(6, int(r.height() * 0.18)));
+        p.setFont(f);
+        p.setPen(Qt::black);
+        p.drawText(r.adjusted(perMm, perMmY, -perMm, -perMmY), Qt::AlignLeft | Qt::AlignTop, QString::number(i + 1));
+    }
+    f.setPixelSize(int(3.5 * perMmY));
+    p.setFont(f);
+    p.drawText(QRectF(0, 0, 210 * perMm, 297 * perMmY).adjusted(5 * perMm, 0, -5 * perMm, -1 * perMmY),
+               Qt::AlignBottom | Qt::AlignHCenter,
+               QStringLiteral("Prova %1 — stampare al 100 per cento (senza «adatta alla pagina») e sovrapporre al foglio adesivo")
+                   .arg(formato.nome));
+}
+
 int stampaEtichette(QPagedPaintDevice& dispositivo, const FormatoEtichette& formato, const QList<Etichetta>& etichette,
                     int salta, bool bordi)
 {

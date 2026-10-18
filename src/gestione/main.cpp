@@ -11,6 +11,7 @@
 #include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QThread>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -41,7 +42,10 @@ int main(int argc, char* argv[])
     QDir dati(opzioni.isSet(cartella)
                   ? opzioni.value(cartella)
                   : QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
-    dati.mkpath(QStringLiteral("."));
+    // Cassa e gestione avviate insieme la prima volta creano la stessa cartella madre: mkpath può
+    // fallire per la corsa, e l'archivio non si aprirebbe. Si riprova.
+    for (int tentativo = 0; tentativo < 5 && !dati.mkpath(QStringLiteral(".")); ++tentativo)
+        QThread::msleep(100);
     const QString fileArchivio = dati.absoluteFilePath(QStringLiteral("gestione.sqlite"));
     const QString fileImpostazioni = dati.absoluteFilePath(QStringLiteral("mdr-gestione.ini"));
 

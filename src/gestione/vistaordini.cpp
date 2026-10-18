@@ -31,13 +31,14 @@ namespace {
 
 const QList<QPair<QString, QString>>& modiInvio()
 {
+    // In negozio si ordina soprattutto a mano e a volte sul portale del fornitore (18/10/2026): prima questi
     static const QList<QPair<QString, QString>> m{
+        {QStringLiteral("di_persona"), QStringLiteral("A mano / di persona")},
+        {QStringLiteral("portale"), QStringLiteral("Portale del fornitore")},
+        {QStringLiteral("telefono"), QStringLiteral("Al telefono")},
+        {QStringLiteral("agente"), QStringLiteral("All'agente")},
         {QStringLiteral("whatsapp"), QStringLiteral("WhatsApp")},
         {QStringLiteral("email"), QStringLiteral("Email")},
-        {QStringLiteral("agente"), QStringLiteral("All'agente")},
-        {QStringLiteral("telefono"), QStringLiteral("Al telefono")},
-        {QStringLiteral("di_persona"), QStringLiteral("Comprato di persona")},
-        {QStringLiteral("portale"), QStringLiteral("Portale del fornitore")},
         {QStringLiteral("altro"), QStringLiteral("Altro")},
     };
     return m;
