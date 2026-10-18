@@ -82,7 +82,7 @@ const QList<QPair<QString, QString>> campiFornitore = {
     {"codice", "Codice"}, {"ragione_sociale", "Ragione sociale"}, {"partita_iva", "Partita IVA"},
     {"codice_fiscale", "Codice fiscale"}, {"indirizzo", "Indirizzo"}, {"cap", "CAP"}, {"comune", "Comune"},
     {"provincia", "Provincia"}, {"telefono", "Telefono"}, {"email", "Email"}, {"pec", "PEC"}, {"iban", "IBAN"},
-    {"note", "Note"},
+    {"giorni_ordine", "Si ordina ogni (giorni)"}, {"note", "Note"},
 };
 
 } // namespace
@@ -164,6 +164,16 @@ void VistaFornitori::modifica(const QJsonObject& fornitore)
     v.insert("partita_iva", v.value("partita_iva").toString().toUpper().remove(QRegularExpression(QStringLiteral("^IT|\\s"))));
     if (v.value("partita_iva").toString().isEmpty())
         v.insert("partita_iva", QJsonValue());
+    // Giorni da coprire nella proposta d'ordine: numero intero da 1 a 120, vuoto = 14
+    if (const QString g = v.value("giorni_ordine").toString(); !g.isEmpty()) {
+        bool ok = false;
+        const int giorni = g.toInt(&ok);
+        if (!ok || giorni < 1 || giorni > 120) {
+            QMessageBox::warning(this, QStringLiteral("Fornitori"), QStringLiteral("«Si ordina ogni» va da 1 a 120 giorni (vuoto = 14)."));
+            return;
+        }
+        v.insert("giorni_ordine", giorni);
+    }
     QPointer<VistaFornitori> io(this);
     auto dopo = [io](const RispostaServer& r) {
         if (io && scritturaRiuscita(io, QStringLiteral("Fornitori"), r))

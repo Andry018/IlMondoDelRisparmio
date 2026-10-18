@@ -758,7 +758,9 @@ eccesso ai pezzi interi e ai colli (`pezzi_collo`), a peso o volume resta esatto
 negative importate da SystemApp le proposte sono gonfiate finché non si fa l'inventario.
 PostgREST restituisce al massimo 1000 righe: per l'elenco completo filtrare per fornitore.
 Dalla migrazione `20261018000400` la proposta toglie la merce già ordinata e non ancora arrivata
-(colonna `ordinato`, da `v_ordinato`).
+(colonna `ordinato`, da `v_ordinato`). Dalla `20261018000500` `giorni` è facoltativo: senza (o 0) vale
+`fornitori.giorni_ordine` del fornitore dell'articolo ("si ordina ogni", 1–120), poi 14; la colonna
+`giorni` dice quelli usati per la riga.
 
 <a id="ordini_fornitori"></a>
 ### Ordini ai fornitori: `salva_ordine`, `invia_ordine`, `chiudi_ordine`

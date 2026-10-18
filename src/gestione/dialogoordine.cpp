@@ -49,10 +49,12 @@ DialogoOrdine::DialogoOrdine(ClientServer& client, QWidget* parent)
                 [](const QJsonObject& f) { return f.value("ragione_sociale").toString(); }, QStringLiteral("id"), {}, true);
     m_giorni = new QSpinBox(this);
     m_giorni->setObjectName("ordine_giorni");
-    m_giorni->setRange(1, 120);
-    m_giorni->setValue(14);
+    m_giorni->setRange(0, 120);
+    m_giorni->setValue(0);
     m_giorni->setSuffix(QStringLiteral(" giorni"));
-    m_giorni->setToolTip(QStringLiteral("Fino al prossimo ordine (o all'arrivo della merce dopo)"));
+    m_giorni->setSpecialValueText(QStringLiteral("quelli del fornitore"));
+    m_giorni->setToolTip(QStringLiteral("Fino al prossimo ordine. «Quelli del fornitore»: «Si ordina ogni» dell'anagrafica "
+                                        "fornitori (14 se vuoto); un numero vale per tutti"));
     m_periodo = new QComboBox(this);
     for (const int g : {30, 60, 90, 365})
         m_periodo->addItem(QStringLiteral("ultimi %1 giorni").arg(g), g);
@@ -127,7 +129,9 @@ DialogoOrdine::DialogoOrdine(ClientServer& client, QWidget* parent)
 
 void DialogoOrdine::cerca()
 {
-    QJsonObject p{{"giorni", m_giorni->value()}, {"periodo", m_periodo->currentData().toInt()}};
+    QJsonObject p{{"periodo", m_periodo->currentData().toInt()}};
+    if (m_giorni->value() > 0)
+        p.insert("giorni", m_giorni->value());
     if (m_fornitore->currentData().isValid())
         p.insert("fornitore_id", m_fornitore->currentData().toString());
     if (!m_testo->text().trimmed().isEmpty())
@@ -166,6 +170,8 @@ void DialogoOrdine::mostra(const QJsonArray& righe)
         m_tabella->setItem(i, Giacenza, giacenza);
         m_tabella->setItem(i, Venduti, cella(q("venduto"), true));
         m_tabella->setItem(i, AlGiorno, cella(q("media_giorno"), true));
+        if (a.contains("giorni"))
+            m_tabella->item(i, AlGiorno)->setToolTip(QStringLiteral("Copertura: %1 giorni").arg(a.value("giorni").toInt()));
         m_tabella->setItem(i, Ordinato, cella(a.value("ordinato").toInteger() > 0 ? q("ordinato") : QString(), true));
         m_tabella->setItem(i, Collo, cella(a.value("pezzi_collo").toInt() > 1 ? QString::number(a.value("pezzi_collo").toInt()) : QString(), true));
         auto* ordina = new QTableWidgetItem(q("da_ordinare"));
@@ -266,10 +272,11 @@ void DialogoOrdine::componi(QTextDocument& documento) const
     QMap<QString, QList<QStringList>> perFornitore;
     for (const auto& r : righeEsportate())
         perFornitore[r[0].isEmpty() ? QStringLiteral("Senza fornitore") : r[0]] << r;
-    QString html = QStringLiteral("<h2>Proposta d'ordine del %1</h2><p>Copertura %2 giorni, vendite degli %3.</p>")
-                       .arg(QDate::currentDate().toString("dd/MM/yyyy"))
-                       .arg(m_giorni->value())
-                       .arg(m_periodo->currentText());
+    QString html = QStringLiteral("<h2>Proposta d'ordine del %1</h2><p>Copertura %2, vendite degli %3.</p>")
+                       .arg(QDate::currentDate().toString("dd/MM/yyyy"),
+                            m_giorni->value() > 0 ? QStringLiteral("%1 giorni").arg(m_giorni->value())
+                                                  : QStringLiteral("secondo la frequenza di ogni fornitore"),
+                            m_periodo->currentText());
     for (auto it = perFornitore.cbegin(); it != perFornitore.cend(); ++it) {
         Money totale;
         html += QStringLiteral("<h3>%1</h3><table border=1 cellspacing=0 cellpadding=3 width=100%>"
@@ -304,7 +311,8 @@ QList<QJsonObject> DialogoOrdine::ordiniDaCreare() const
     for (auto it = perFornitore.cbegin(); it != perFornitore.cend(); ++it)
         ordini << QJsonObject{{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
                               {"fornitore_id", it.key()},
-                              {"note", QStringLiteral("Dalla proposta d'ordine (%1 giorni)").arg(m_giorni->value())},
+                              {"note", m_giorni->value() > 0 ? QStringLiteral("Dalla proposta d'ordine (%1 giorni)").arg(m_giorni->value())
+                                                             : QStringLiteral("Dalla proposta d'ordine")},
                               {"righe", it.value()}};
     return ordini;
 }

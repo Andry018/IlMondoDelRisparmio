@@ -117,7 +117,8 @@ segnalata subito a chi segue il server.
 - **Carico merce…**: carico a mano con DDT.
 - **Inventario…** e **Giacenze da file…** (conta da Excel).
 - **Proposta d'ordine…**: per fornitore, quanto ordinare per coprire i prossimi giorni dalle vendite
-  recenti, arrotondato ai colli e tolta la merce già ordinata. Le quantità si correggono a mano;
+  recenti, arrotondato ai colli e tolta la merce già ordinata. I giorni sono quelli di **«Si ordina
+  ogni»** nella scheda del fornitore (14 se vuoto), oppure quelli scelti nella finestra. Le quantità si correggono a mano;
   **Crea ordini** (scheda Ordini), **Esporta per Excel** o **Stampa**.
 - Dopo un carico, se il costo di qualche articolo è salito sotto il ricarico, la gestione propone di
   rivedere i prezzi.
