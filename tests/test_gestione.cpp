@@ -9,6 +9,10 @@
 #include "vistaetichette.h"
 #include "dialogoordine.h"
 #include "dialogocontrollodati.h"
+#include "vistaordini.h"
+
+#include <QJsonArray>
+#include <QUuid>
 
 #include <QListWidget>
 
@@ -204,7 +208,8 @@ private slots:
         DialogoOrdine d(client);
         d.mostra(QJsonDocument::fromJson(R"json([
             {"articolo_id": "a1", "codice": "ORD-1", "descrizione": "Detersivo", "fornitore": "Fornitore A",
-             "codice_fornitore": "DET-9", "unita": "PZ", "giacenza": 10000, "scorta_minima": 0, "venduto": 30000,
+             "fornitore_id": "f-a", "codice_fornitore": "DET-9", "unita": "PZ", "giacenza": 10000, "scorta_minima": 0,
+             "venduto": 30000, "ordinato": 2000,
              "media_giorno": 1000, "pezzi_collo": 6, "da_ordinare": 6000, "costo_ultimo": 100, "valore": 600},
             {"articolo_id": "a2", "codice": "ORD-4", "descrizione": "Spugna", "fornitore": "Fornitore B",
              "codice_fornitore": null, "unita": "PZ", "giacenza": -2000, "scorta_minima": 0, "venduto": 1000,
@@ -213,12 +218,28 @@ private slots:
         QCOMPARE(d.righeEsportate().size(), 1);
         QCOMPARE(d.righeEsportate().first(), (QStringList{"Fornitore A", "ORD-1", "DET-9", "Detersivo", "6", "1,00", "6,00"}));
         // Correzione a mano: 3 spugne
-        d.findChild<QTableWidget*>("ordine_tabella")->item(1, 8)->setText("3");
+        d.findChild<QTableWidget*>("ordine_tabella")->item(1, 9)->setText("3");
         QCOMPARE(d.righeEsportate().size(), 2);
         QVERIFY(d.findChild<QLabel*>("ordine_totale")->text().contains("7,20"));
         QTextDocument doc;
         d.componi(doc);
         QVERIFY(doc.toPlainText().contains("Fornitore A") && doc.toPlainText().contains("Fornitore B"));
+        QCOMPARE(d.findChild<QTableWidget*>("ordine_tabella")->item(0, 7)->text(), QStringLiteral("2"));   // ordinato
+        // Ordini da creare: solo le righe con un fornitore in anagrafica (la spugna non ha fornitore_id)
+        const auto ordini = d.ordiniDaCreare();
+        QCOMPARE(ordini.size(), 1);
+        QCOMPARE(ordini.first().value("fornitore_id").toString(), QStringLiteral("f-a"));
+        QCOMPARE(ordini.first().value("righe").toArray().first().toObject().value("quantita").toInteger(), 6000);
+        QVERIFY(!QUuid::fromString(ordini.first().value("id").toString()).isNull());
+
+        // Testo dell'ordine da stampare o mandare
+        QTextDocument ordine;
+        VistaOrdini::componi(ordine, QJsonObject{{"numero", 7}, {"fornitore", "Fornitore A"}, {"note", "consegna martedì"}},
+                             QJsonDocument::fromJson(R"([{"codice": "ORD-1", "codice_fornitore": "DET-9", "descrizione": "Detersivo",
+                                                          "quantita": 6000}])").array());
+        const QString testo = ordine.toPlainText();
+        QVERIFY2(testo.contains("Ordine n. 7") && testo.contains("DET-9") && testo.contains("consegna martedì") && testo.contains("6"),
+                 qPrintable(testo));
     }
 
     void controllo_dati()
@@ -283,7 +304,7 @@ private slots:
         QStringList titoli;
         for (int i = 0; i < schede->count(); ++i)
             titoli << schede->tabText(i);
-        QCOMPARE(titoli, (QStringList{"Cruscotto", "Articoli", "Magazzino", "Etichette", "Vendite", "Fatture", "Clienti", "Fornitori",
+        QCOMPARE(titoli, (QStringList{"Cruscotto", "Articoli", "Magazzino", "Ordini", "Etichette", "Vendite", "Fatture", "Clienti", "Fornitori",
                                       "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Palmare",
                                       "Impostazioni"}));
     }

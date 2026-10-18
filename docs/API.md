@@ -757,6 +757,29 @@ fornitore: `articolo_id`, `codice`, `descrizione`, `fornitore_id`, `fornitore`, 
 eccesso ai pezzi interi e ai colli (`pezzi_collo`), a peso o volume resta esatto. Con le giacenze
 negative importate da SystemApp le proposte sono gonfiate finché non si fa l'inventario.
 PostgREST restituisce al massimo 1000 righe: per l'elenco completo filtrare per fornitore.
+Dalla migrazione `20261018000400` la proposta toglie la merce già ordinata e non ancora arrivata
+(colonna `ordinato`, da `v_ordinato`).
+
+<a id="ordini_fornitori"></a>
+### Ordini ai fornitori: `salva_ordine`, `invia_ordine`, `chiudi_ordine`
+
+Migrazione `20261018000400_ordini_fornitori.sql`; ruoli amministratore, responsabile, magazziniere.
+Il programma non manda gli ordini (il negozio ordina in modo misto, anche di persona): li tiene.
+
+| Funzione | Corpo | Effetto |
+|---|---|---|
+| `salva_ordine` | `{"p": {"id": "<uuid della gestione>", "fornitore_id": "…", "note": "…", "righe": [{"articolo_id": "…", "quantita": 6000, "costo_previsto": 100}]}}` | crea o riscrive la **bozza** (solo bozze); `costo_previsto` facoltativo (costo ultimo) |
+| `invia_ordine` | `{"p_id": "…", "p_modo": "whatsapp"}` (`email`, `whatsapp`, `agente`, `telefono`, `di_persona`, `portale`, `altro`) | **inviato**: la merce diventa ordinata |
+| `chiudi_ordine` | `{"p_id": "…", "p_annulla": false}` | **chiuso** (il mancante non si aspetta più) o **annullato** (anche una bozza) |
+
+Errori `P0001`: `Ordine senza id o senza fornitore`, `Ordine senza righe`, `Ordine già inviato: non si
+modifica`, `Ordine inesistente o già inviato`, `Ordine inesistente o già chiuso`, `Quantità non valida…`.
+
+Letture: `v_ordini_fornitori` (`id`, `numero`, `fornitore`, `stato`, `modo_invio`, `note`, `creato_at`,
+`creato_da`, `inviato_at`, `chiuso_at`, `righe`, `valore`, `righe_arrivate`, `mancante`);
+`v_ordini_righe` (`ordine_id`, `codice`, `codice_fornitore`, `descrizione`, `quantita`, `costo_previsto`,
+`valore`, `arrivato`, `mancante`): **arrivato** = carichi (`carico_fornitore`) da quel fornitore dopo
+l'invio (e prima della chiusura), al massimo l'ordinato; `v_ordinato` (`articolo_id`, `ordinato`).
 
 <a id="controllo_dati"></a>
 ### Controllo dei dati: `controllo_dati`, `controllo_dati_elenco`

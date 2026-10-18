@@ -4,6 +4,7 @@
 
 #include <QDialog>
 #include <QJsonArray>
+#include <QJsonObject>
 
 class QCheckBox;
 class QComboBox;
@@ -30,15 +31,22 @@ public:
     QList<QStringList> righeEsportate() const;   // righe con quantità > 0, come nel CSV
     // Documento da stampare (anche per i test)
     void componi(QTextDocument& documento) const;
+    // Un ordine (corpo di salva_ordine, con id nuovo) per ogni fornitore con righe da ordinare
+    QList<QJsonObject> ordiniDaCreare() const;
+
+signals:
+    void ordiniCreati(int quanti);   // bozze salvate: la scheda Ordini si aggiorna
 
 private:
-    enum Colonna { Fornitore, Codice, CodiceFornitore, Descrizione, Giacenza, Venduti, AlGiorno, Collo, DaOrdinare, Costo, Valore, NumeroColonne };
+    enum Colonna { Fornitore, Codice, CodiceFornitore, Descrizione, Giacenza, Venduti, AlGiorno, Ordinato, Collo, DaOrdinare,
+                   Costo, Valore, NumeroColonne };
 
     void cerca();
     void ricalcolaTotale();
     std::optional<Quantita> quantitaRiga(int riga) const;
     void esporta();
     void stampa();
+    void creaOrdini();
 
     ClientServer& m_client;
     QJsonArray m_righe;

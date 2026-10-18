@@ -27,6 +27,7 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261018000100_salute_server` | `manutenzione_server` (solo server), `salute_server()`, `registra_manutenzione` (backup.sh, prova_ripristino.sh) | `test_salute_server.sql` |
 | `20261018000200_proposta_ordine` | `proposta_ordine(p)`: quanto ordinare per fornitore dalle vendite recenti, arrotondato ai colli (sola lettura) | `test_proposta_ordine.sql` |
 | `20261018000300_controllo_dati` | `controllo_dati()`, `controllo_dati_elenco(problema)`, `ean_valido`, `testo_euro`, `testo_quantita` (articoli da pulire prima dell'avvio) | `test_controllo_dati.sql` |
+| `20261018000400_ordini_fornitori` | `ordini_fornitori`, `ordini_fornitori_righe`, `salva_ordine`, `invia_ordine`, `chiudi_ordine`, `v_ordini_fornitori`, `v_ordini_righe`, `v_ordinato`; `proposta_ordine` con la colonna `ordinato` | `test_ordini_fornitori.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

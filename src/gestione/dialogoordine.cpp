@@ -21,6 +21,9 @@
 #include <QPrinter>
 #include <QPushButton>
 #include <QSet>
+#include <QUuid>
+
+#include <memory>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -82,8 +85,10 @@ DialogoOrdine::DialogoOrdine(ClientServer& client, QWidget* parent)
     m_tabella->setObjectName("ordine_tabella");
     m_tabella->setHorizontalHeaderLabels({QStringLiteral("Fornitore"), QStringLiteral("Codice"), QStringLiteral("Cod. fornitore"),
                                           QStringLiteral("Descrizione"), QStringLiteral("Giacenza"), QStringLiteral("Venduti"),
-                                          QStringLiteral("Al giorno"), QStringLiteral("Collo"), QStringLiteral("Da ordinare"),
+                                          QStringLiteral("Al giorno"), QStringLiteral("Ordinato"), QStringLiteral("Collo"),
+                                          QStringLiteral("Da ordinare"),
                                           QStringLiteral("Costo €"), QStringLiteral("Valore €")});
+    m_tabella->horizontalHeaderItem(Ordinato)->setToolTip(QStringLiteral("Già ordinato e non ancora arrivato: è tolto dal da ordinare"));
     m_tabella->verticalHeader()->hide();
     m_tabella->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_tabella->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::AnyKeyPressed);
@@ -96,10 +101,14 @@ DialogoOrdine::DialogoOrdine(ClientServer& client, QWidget* parent)
     m_totale->setObjectName("ordine_totale");
     m_totale->setFont(fontGrande(font(), 12, true));
     sotto->addWidget(m_totale, 1);
+    auto* crea = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogNewFolder), QStringLiteral("Crea ordini"), this);
+    crea->setObjectName("ordine_crea");
+    crea->setToolTip(QStringLiteral("Una bozza per ogni fornitore (scheda Ordini): si controlla, si manda e si segna come inviata"));
     auto* esporta = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Esporta per Excel…"), this);
     auto* stampa = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogContentsView), QStringLiteral("Stampa…"), this);
     auto* chiudi = new QPushButton(style()->standardIcon(QStyle::SP_DialogCloseButton), QStringLiteral("Chiudi"), this);
-    for (auto* b : {esporta, stampa, chiudi})
+    connect(crea, &QPushButton::clicked, this, &DialogoOrdine::creaOrdini);
+    for (auto* b : {crea, esporta, stampa, chiudi})
         sotto->addWidget(b);
     layout->addLayout(sotto);
 
@@ -157,6 +166,7 @@ void DialogoOrdine::mostra(const QJsonArray& righe)
         m_tabella->setItem(i, Giacenza, giacenza);
         m_tabella->setItem(i, Venduti, cella(q("venduto"), true));
         m_tabella->setItem(i, AlGiorno, cella(q("media_giorno"), true));
+        m_tabella->setItem(i, Ordinato, cella(a.value("ordinato").toInteger() > 0 ? q("ordinato") : QString(), true));
         m_tabella->setItem(i, Collo, cella(a.value("pezzi_collo").toInt() > 1 ? QString::number(a.value("pezzi_collo").toInt()) : QString(), true));
         auto* ordina = new QTableWidgetItem(q("da_ordinare"));
         ordina->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -275,6 +285,62 @@ void DialogoOrdine::componi(QTextDocument& documento) const
                     .arg(totale.toString());
     }
     documento.setHtml(html);
+}
+
+QList<QJsonObject> DialogoOrdine::ordiniDaCreare() const
+{
+    QMap<QString, QJsonArray> perFornitore;
+    for (int i = 0; i < m_tabella->rowCount(); ++i) {
+        const auto q = quantitaRiga(i);
+        const auto a = m_righe[i].toObject();
+        const QString fornitore = a.value("fornitore_id").toString();
+        if (!q || *q <= Quantita() || fornitore.isEmpty())
+            continue;
+        perFornitore[fornitore].append(QJsonObject{{"articolo_id", a.value("articolo_id")},
+                                                   {"quantita", qint64(q->millesimi())},
+                                                   {"costo_previsto", a.value("costo_ultimo")}});
+    }
+    QList<QJsonObject> ordini;
+    for (auto it = perFornitore.cbegin(); it != perFornitore.cend(); ++it)
+        ordini << QJsonObject{{"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+                              {"fornitore_id", it.key()},
+                              {"note", QStringLiteral("Dalla proposta d'ordine (%1 giorni)").arg(m_giorni->value())},
+                              {"righe", it.value()}};
+    return ordini;
+}
+
+void DialogoOrdine::creaOrdini()
+{
+    const auto ordini = ordiniDaCreare();
+    if (ordini.isEmpty()) {
+        QMessageBox::information(this, windowTitle(), QStringLiteral("Nessuna riga da ordinare con un fornitore."));
+        return;
+    }
+    if (QMessageBox::question(this, windowTitle(),
+                              QStringLiteral("Creare %1 ordini in bozza (uno per fornitore)?\n\n"
+                                             "Si controllano e si mandano dalla scheda Ordini.").arg(ordini.size()))
+        != QMessageBox::Yes)
+        return;
+    QPointer<DialogoOrdine> io(this);
+    auto fatti = std::make_shared<int>(0);
+    auto errori = std::make_shared<QStringList>();
+    const int totale = int(ordini.size());
+    for (const auto& o : ordini) {
+        m_client.rpc(QStringLiteral("salva_ordine"), {{"p", o}}, [io, fatti, errori, totale](const RispostaServer& r) {
+            if (!io)
+                return;
+            if (r.ok())
+                ++*fatti;
+            else
+                *errori << r.errore;
+            if (*fatti + errori->size() < totale)
+                return;
+            if (!errori->isEmpty())
+                QMessageBox::warning(io, io->windowTitle(), QStringLiteral("Ordini non salvati:\n%1").arg(errori->join('\n')));
+            io->m_totale->setText(QStringLiteral("Creati %1 ordini in bozza: scheda Ordini.").arg(*fatti));
+            emit io->ordiniCreati(*fatti);
+        });
+    }
 }
 
 void DialogoOrdine::stampa()

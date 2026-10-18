@@ -8,6 +8,7 @@
 #include "vistaclienti.h"
 #include "vistacruscotto.h"
 #include "vistaetichette.h"
+#include "vistaordini.h"
 #include "vistafatture.h"
 #include "vistacontrolli.h"
 #include "vistamagazzino.h"
@@ -56,6 +57,7 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_paginaArticoli->addWidget(m_articoliServer);
     m_magazzino = new VistaMagazzino(client(), schede());
     m_etichette = new VistaEtichette(client(), schede());
+    m_ordini = new VistaOrdini(client(), schede());
     m_report = new VistaReport(client(), schede());
     m_fatture = new VistaFatture(client(), schede());
     m_clienti = new VistaClienti(client(), schede());
@@ -64,11 +66,12 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_resi = new VistaResi(client(), schede());
     m_operatori = new VistaOperatori(client(), schede());
     m_negozio = new VistaNegozio(client(), schede());
-    m_vistaServer = {m_cruscotto, m_magazzino, m_etichette, m_report, m_fatture, m_clienti, m_fornitori, m_chiusure, m_resi,
+    m_vistaServer = {m_cruscotto, m_magazzino, m_ordini, m_etichette, m_report, m_fatture, m_clienti, m_fornitori, m_chiusure, m_resi,
                      m_operatori, m_negozio};
     aggiungiScheda(m_cruscotto, QStringLiteral("Cruscotto"));
     aggiungiScheda(m_paginaArticoli, QStringLiteral("Articoli"));
     aggiungiScheda(m_magazzino, QStringLiteral("Magazzino"));
+    aggiungiScheda(m_ordini, QStringLiteral("Ordini"));
     aggiungiScheda(m_etichette, QStringLiteral("Etichette"));
     aggiungiScheda(m_report, QStringLiteral("Vendite"));
     aggiungiScheda(m_fatture, QStringLiteral("Fatture"));
@@ -111,6 +114,10 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
         const int i = schede()->indexOf(m_paginaArticoli);
         schede()->setTabText(i, n ? QStringLiteral("Articoli (%1)").arg(n) : QStringLiteral("Articoli"));
         schede()->setTabToolTip(i, n ? QStringLiteral("%1 prezzi da rivedere: il costo è salito con un carico").arg(n) : QString());
+    });
+    connect(m_ordini, &VistaOrdini::cambiato, this, [this](int n) {
+        schede()->setTabText(schede()->indexOf(m_ordini), n ? QStringLiteral("Ordini (%1)").arg(n) : QStringLiteral("Ordini"));
+        schede()->setTabToolTip(schede()->indexOf(m_ordini), n ? QStringLiteral("%1 ordini da mandare o in arrivo").arg(n) : QString());
     });
     connect(m_etichette, &VistaEtichette::cambiato, this, [this](int n) {
         schede()->setTabText(schede()->indexOf(m_etichette), n ? QStringLiteral("Etichette (%1)").arg(n) : QStringLiteral("Etichette"));
@@ -202,7 +209,7 @@ void FinestraGestione::abilita(const QString& ruolo, const QString& messaggio)
     const bool tutto = ruolo == QLatin1String("amministratore") || ruolo == QLatin1String("responsabile");
     const bool magazzino = tutto || ruolo == QLatin1String("magazziniere");
     for (auto* v : std::as_const(m_vistaServer)) {
-        const bool attiva = v == m_magazzino ? magazzino
+        const bool attiva = v == m_magazzino || v == m_ordini ? magazzino
                           : v == m_operatori ? ruolo == QLatin1String("amministratore")
                                              : tutto;
         const int i = schede()->indexOf(v);

@@ -23,6 +23,7 @@ add_library(mdr_gestione STATIC
     vistaetichette.h     vistaetichette.cpp
     dialogoordine.h      dialogoordine.cpp
     dialogocontrollodati.h dialogocontrollodati.cpp
+    vistaordini.h        vistaordini.cpp
 )
 target_include_directories(mdr_gestione PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Qt6 REQUIRED COMPONENTS PrintSupport)   # etichette prezzi

@@ -117,9 +117,21 @@ segnalata subito a chi segue il server.
 - **Carico merce…**: carico a mano con DDT.
 - **Inventario…** e **Giacenze da file…** (conta da Excel).
 - **Proposta d'ordine…**: per fornitore, quanto ordinare per coprire i prossimi giorni dalle vendite
-  recenti, arrotondato ai colli. Le quantità si correggono a mano; **Esporta per Excel** o **Stampa**.
+  recenti, arrotondato ai colli e tolta la merce già ordinata. Le quantità si correggono a mano;
+  **Crea ordini** (scheda Ordini), **Esporta per Excel** o **Stampa**.
 - Dopo un carico, se il costo di qualche articolo è salito sotto il ricarico, la gestione propone di
   rivedere i prezzi.
+
+### Ordini
+
+1. **Nuovo dalla proposta…**: si correggono le quantità e **Crea ordini** fa una bozza per fornitore.
+2. Si manda l'ordine come si fa di solito (**Stampa…** o **Esporta per Excel…** se serve: WhatsApp,
+   email, all'agente, oppure si va a comprare di persona) e poi **Segna come inviato…** dicendo come.
+   Da lì la merce è "ordinata" e la proposta d'ordine non la propone di nuovo.
+3. All'arrivo non serve fare niente in più: i carichi da quel fornitore (fattura approvata o carico dal
+   palmare) riempiono la colonna **Arrivato**; **Manca** dice cosa non è arrivato.
+4. **Chiudi (arrivato)** quando l'ordine è finito: quello che manca torna nella proposta.
+   **Annulla ordine** per un ordine sbagliato.
 
 ### Etichette
 

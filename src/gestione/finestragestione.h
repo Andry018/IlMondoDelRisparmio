@@ -12,6 +12,7 @@ class VistaArticoliServer;
 class VistaClienti;
 class VistaCruscotto;
 class VistaEtichette;
+class VistaOrdini;
 class VistaFatture;
 class VistaFornitori;
 class VistaNegozio;
@@ -64,6 +65,7 @@ private:
     VistaNegozio* m_negozio = nullptr;
     VistaMagazzino* m_magazzino = nullptr;
     VistaEtichette* m_etichette = nullptr;
+    VistaOrdini* m_ordini = nullptr;   // ordini ai fornitori (anche il magazziniere)
     VistaReport* m_report = nullptr;
     VistaChiusure* m_chiusure = nullptr;
     VistaResi* m_resi = nullptr;
