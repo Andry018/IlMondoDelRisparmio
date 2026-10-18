@@ -21,6 +21,12 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261016000300_storico_prezzi` | `articoli_prezzi` scritta dal trigger su prezzo/costo, `v_storico_prezzi` con le variazioni | `test_storico_prezzi.sql` |
 | `20261017000000_crea_articolo` | `crea_articolo` (articolo nuovo dal palmare durante il carico) | `test_crea_articolo.sql` |
 | `20261017000100_utenti` | `crea_utente`, `cambia_password`, `email_operatori` (utenti dalla gestione; lo stub di test ha ora `auth.identities` e `pgcrypto`) | `test_utenti.sql` |
+| `20261017000200_carichi_da_approvare` | `carichi_proposti`, `proponi_carico`, `approva_carico`, `rifiuta_carico`, `v_carichi_da_approvare`; `carico_proposto_id` in fondo a `v_fatture_passive_da_caricare` | `test_carichi_approvazione.sql` |
+| `20261017000300_ricalcolo_prezzi` | `prezzo_da_ricarico`, `proposta_prezzi`, `applica_prezzi`, `v_prezzi_da_rivedere`; origine `confermato` in `articoli_prezzi` | `test_ricalcolo_prezzi.sql` |
+| `20261018000000_cruscotto` | `cruscotto(p_giorno)`: incassi del giorno/mese, 14 giorni, ore, pagamenti, più venduti, da fare, casse | `test_cruscotto.sql` |
+| `20261018000100_salute_server` | `manutenzione_server` (solo server), `salute_server()`, `registra_manutenzione` (backup.sh, prova_ripristino.sh) | `test_salute_server.sql` |
+| `20261018000200_proposta_ordine` | `proposta_ordine(p)`: quanto ordinare per fornitore dalle vendite recenti, arrotondato ai colli (sola lettura) | `test_proposta_ordine.sql` |
+| `20261018000300_controllo_dati` | `controllo_dati()`, `controllo_dati_elenco(problema)`, `ean_valido`, `testo_euro`, `testo_quantita` (articoli da pulire prima dell'avvio) | `test_controllo_dati.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

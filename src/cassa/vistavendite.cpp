@@ -10,7 +10,9 @@
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonArray>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -39,7 +41,8 @@ QTableWidget* nuovaTabella(const QStringList& colonne, int stretch, QWidget* par
     return t;
 }
 
-// Finestra di reso: per ogni riga della vendita la quantità da rendere e il rimborso.
+// Finestra di reso, pensata per il touch: per ogni riga i tasti − / + e "Tutto", in alto "Rendi
+// tutto"; il rimborso parte dal pagamento dello scontrino.
 class DialogoReso : public QDialog {
 public:
     DialogoReso(const VenditaLocale& v, const QList<Quantita>& rendibili, QWidget* parent)
@@ -48,50 +51,106 @@ public:
         , m_rendibili(rendibili)
     {
         setWindowTitle(QStringLiteral("Reso del documento %1").arg(numeroDocumento(v)));
-        resize(700, 400);
+        resize(820, 520);
         auto* layout = new QVBoxLayout(this);
-        layout->addWidget(new QLabel(QStringLiteral("Indicare la quantità da rendere per ogni riga "
-                                                    "(doppio clic sulla colonna «Da rendere»)."), this));
+        auto* testa = new QHBoxLayout;
+        auto* spiega = new QLabel(QStringLiteral("Scegliere quanto rendere di ogni riga con − e +, oppure «Tutto»."), this);
+        spiega->setWordWrap(true);
+        testa->addWidget(spiega, 1);
+        auto* tutto = new QPushButton(QStringLiteral("Rendi tutto"), this);
+        tutto->setObjectName("reso_tutto");
+        tutto->setMinimumHeight(44);
+        testa->addWidget(tutto);
+        layout->addLayout(testa);
 
         m_tabella = nuovaTabella({QStringLiteral("Descrizione"), QStringLiteral("Venduta"),
                                   QStringLiteral("Rendibile"), QStringLiteral("Totale riga"),
                                   QStringLiteral("Da rendere")}, 0, this);
-        m_tabella->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed
-                                   | QAbstractItemView::AnyKeyPressed);
-        m_tabella->setRowCount(m_righe.size());
+        m_tabella->setObjectName("reso_righe");
+        m_tabella->setSelectionMode(QAbstractItemView::NoSelection);
+        m_tabella->verticalHeader()->setDefaultSectionSize(48);
+        m_tabella->setRowCount(int(m_righe.size()));
         for (int i = 0; i < m_righe.size(); ++i) {
             const auto& r = m_righe[i];
+            m_quanti << Quantita();
             m_tabella->setItem(i, 0, cella(r.descrizione));
             m_tabella->setItem(i, 1, cella(r.quantita.toString(), true));
             m_tabella->setItem(i, 2, cella(m_rendibili.value(i).toString(), true));
             m_tabella->setItem(i, 3, cella(r.totale().toString(), true));
-            auto* q = new QTableWidgetItem(QStringLiteral("0"));
-            q->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            if (m_rendibili.value(i) <= Quantita())
-                q->setFlags(q->flags() & ~Qt::ItemIsEditable);
-            m_tabella->setItem(i, 4, q);
+            auto* comandi = new QWidget(m_tabella);
+            auto* lc = new QHBoxLayout(comandi);
+            lc->setContentsMargins(2, 2, 2, 2);
+            auto* meno = new QPushButton(QStringLiteral("−"), comandi);
+            auto* valore = new QLabel(QStringLiteral("0"), comandi);
+            auto* piu = new QPushButton(QStringLiteral("+"), comandi);
+            auto* riga = new QPushButton(QStringLiteral("Tutto"), comandi);
+            meno->setObjectName(QStringLiteral("reso_meno_%1").arg(i));
+            piu->setObjectName(QStringLiteral("reso_piu_%1").arg(i));
+            riga->setObjectName(QStringLiteral("reso_riga_%1").arg(i));
+            valore->setObjectName(QStringLiteral("reso_quanti_%1").arg(i));
+            valore->setMinimumWidth(56);
+            valore->setAlignment(Qt::AlignCenter);
+            valore->setFont(fontGrande(font(), 13, true));
+            for (auto* b : {meno, piu, riga}) {
+                b->setMinimumSize(44, 38);
+                b->setFocusPolicy(Qt::NoFocus);
+                b->setEnabled(m_rendibili.value(i) > Quantita());
+            }
+            lc->addWidget(meno);
+            lc->addWidget(valore);
+            lc->addWidget(piu);
+            lc->addWidget(riga);
+            m_valori << valore;
+            m_tabella->setCellWidget(i, 4, comandi);
+            // Un pezzo alla volta; per peso o volume il + arriva al rendibile
+            connect(meno, &QPushButton::clicked, this, [this, i] {
+                const auto q = m_quanti[i] - Quantita::pezzi(1);
+                imposta(i, q < Quantita() ? Quantita() : q);
+            });
+            connect(piu, &QPushButton::clicked, this, [this, i] {
+                const auto q = m_quanti[i] + Quantita::pezzi(1);
+                imposta(i, q > m_rendibili.value(i) ? m_rendibili.value(i) : q);
+            });
+            connect(riga, &QPushButton::clicked, this, [this, i] {
+                imposta(i, m_quanti[i] == m_rendibili.value(i) ? Quantita() : m_rendibili.value(i));
+            });
         }
+        m_tabella->resizeColumnsToContents();
+        m_tabella->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         layout->addWidget(m_tabella, 1);
 
         auto* sotto = new QHBoxLayout;
         sotto->addWidget(new QLabel(QStringLiteral("Rimborso in"), this));
         m_rimborso = new QComboBox(this);
+        m_rimborso->setObjectName("reso_rimborso");
+        m_rimborso->setMinimumHeight(40);
         for (auto t : {TipoPagamento::Contanti, TipoPagamento::Carta, TipoPagamento::Bancomat,
                        TipoPagamento::Satispay})
             m_rimborso->addItem(nomePagamento(t), int(t));
+        // Di solito si rimborsa come si è pagato
+        if (const auto pagamenti = pagamentiDaPayload(v.payload); !pagamenti.isEmpty())
+            m_rimborso->setCurrentIndex(std::max(0, m_rimborso->findData(int(pagamenti.first().tipo))));
         sotto->addWidget(m_rimborso);
         sotto->addStretch();
         m_totale = new QLabel(this);
-        m_totale->setFont(fontGrande(font(), 14, true));
+        m_totale->setObjectName("reso_totale");
+        m_totale->setFont(fontGrande(font(), 16, true));
         sotto->addWidget(m_totale);
         layout->addLayout(sotto);
 
         m_bottoni = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
         m_bottoni->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Emetti reso"));
+        m_bottoni->button(QDialogButtonBox::Ok)->setObjectName("reso_emetti");
+        for (auto* b : m_bottoni->buttons())
+            b->setMinimumHeight(44);
         layout->addWidget(m_bottoni);
+        connect(tutto, &QPushButton::clicked, this, [this] {
+            for (int i = 0; i < m_righe.size(); ++i)
+                m_quanti[i] = m_rendibili.value(i);
+            ricalcola();
+        });
         connect(m_bottoni, &QDialogButtonBox::accepted, this, &QDialog::accept);
         connect(m_bottoni, &QDialogButtonBox::rejected, this, &QDialog::reject);
-        connect(m_tabella, &QTableWidget::itemChanged, this, [this] { ricalcola(); });
         connect(m_rimborso, &QComboBox::currentIndexChanged, this, [this] { ricalcola(); });
         ricalcola();
     }
@@ -99,30 +158,29 @@ public:
     Carrello carrello() const { return m_carrello; }
 
 private:
+    void imposta(int riga, Quantita q)
+    {
+        m_quanti[riga] = q;
+        ricalcola();
+    }
+
     void ricalcola()
     {
-        const QSignalBlocker blocco(m_tabella);   // setForeground emetterebbe itemChanged
         m_carrello.svuota();
-        bool valido = true;
         for (int i = 0; i < m_righe.size(); ++i) {
-            auto* item = m_tabella->item(i, 4);
-            const auto q = Quantita::parse(item->text());
-            const bool ok = q && *q >= Quantita() && *q <= m_rendibili.value(i);
-            item->setForeground(ok ? palette().text() : QBrush(Qt::red));
-            if (!ok) {
-                valido = false;
-                continue;
-            }
-            if (*q > Quantita())
-                m_carrello.aggiungiRiga(OperazioniCassa::rigaReso(m_righe[i], *q));
+            m_valori[i]->setText(m_quanti[i].toString());
+            if (m_quanti[i] > Quantita())
+                m_carrello.aggiungiRiga(OperazioniCassa::rigaReso(m_righe[i], m_quanti[i]));
         }
         m_carrello.aggiungiPagamento({TipoPagamento(m_rimborso->currentData().toInt()), m_carrello.totale()});
         m_totale->setText(QStringLiteral("Da rimborsare %1").arg(euro(m_carrello.totale())));
-        m_bottoni->button(QDialogButtonBox::Ok)->setEnabled(valido && !m_carrello.vuoto());
+        m_bottoni->button(QDialogButtonBox::Ok)->setEnabled(!m_carrello.vuoto());
     }
 
     QList<RigaCarrello> m_righe;
     QList<Quantita> m_rendibili;
+    QList<Quantita> m_quanti;
+    QList<QLabel*> m_valori;
     Carrello m_carrello;
     QTableWidget* m_tabella = nullptr;
     QComboBox* m_rimborso = nullptr;
@@ -147,7 +205,12 @@ VistaVendite::VistaVendite(ArchivioLocale& archivio, OperazioniCassa& operazioni
     barra->addWidget(m_giorno);
     auto* oggi = new QPushButton(QStringLiteral("Oggi"), this);
     barra->addWidget(oggi);
-    barra->addStretch();
+    m_cerca = new QLineEdit(this);
+    m_cerca->setObjectName("vendite_cerca");
+    m_cerca->setPlaceholderText(QStringLiteral("Numero documento o barcode di un articolo"));
+    m_cerca->setToolTip(QStringLiteral("Es. 12 o 0003-0012; leggendo il barcode di un articolo restano gli scontrini che lo contengono"));
+    m_cerca->setClearButtonEnabled(true);
+    barra->addWidget(m_cerca, 1);
     m_annulla = new QPushButton(QStringLiteral("Annulla vendita"), this);
     m_reso = new QPushButton(QStringLiteral("Reso…"), this);
     barra->addWidget(m_annulla);
@@ -182,6 +245,7 @@ VistaVendite::VistaVendite(ArchivioLocale& archivio, OperazioniCassa& operazioni
     connect(m_giorno, &QDateEdit::dateChanged, this, &VistaVendite::aggiorna);
     connect(oggi, &QPushButton::clicked, this, [this] { m_giorno->setDate(QDate::currentDate()); aggiorna(); });
     connect(m_tabella, &QTableWidget::itemSelectionChanged, this, &VistaVendite::mostraDettaglio);
+    connect(m_cerca, &QLineEdit::textChanged, this, &VistaVendite::filtra);
     connect(m_annulla, &QPushButton::clicked, this, &VistaVendite::annulla);
     connect(m_reso, &QPushButton::clicked, this, &VistaVendite::reso);
     aggiorna();
@@ -237,7 +301,40 @@ void VistaVendite::aggiorna()
     m_totali->setText(QStringLiteral("Vendite %1    Resi %2    Netto %3    Annullate %4")
                           .arg(euro(vendite), euro(resi), euro(vendite - resi))
                           .arg(annullate));
+    filtra();
     mostraDettaglio();
+}
+
+void VistaVendite::filtra()
+{
+    const QString testo = m_cerca->text().trimmed();
+    // Un barcode o codice di articolo: gli scontrini che lo contengono
+    QString articolo;
+    if (testo.size() >= 4)
+        if (const auto a = m_archivio.cerca(testo))
+            articolo = a->id.toString(QUuid::WithoutBraces);
+    int visibili = 0, primo = -1;
+    for (int i = 0; i < m_vendite.size(); ++i) {
+        const auto& v = m_vendite[i];
+        bool mostra = testo.isEmpty();
+        if (!mostra) {
+            const QString numero = numeroDocumento(v);
+            mostra = numero == testo || numero.endsWith(QLatin1Char('-') + testo.rightJustified(4, QLatin1Char('0')));
+        }
+        if (!mostra && !articolo.isEmpty())
+            for (const auto& r : v.payload.value("righe").toArray())
+                if (r.toObject().value("articolo_id").toString() == articolo)
+                    mostra = true;
+        m_tabella->setRowHidden(i, !mostra);
+        if (mostra) {
+            ++visibili;
+            if (primo < 0)
+                primo = i;
+        }
+    }
+    // Un solo risultato: già scelto, pronto per il reso
+    if (!testo.isEmpty() && visibili == 1)
+        m_tabella->selectRow(primo);
 }
 
 std::optional<VenditaLocale> VistaVendite::selezionata() const
@@ -322,7 +419,7 @@ void VistaVendite::reso()
     }
 
     DialogoReso dialogo(*v, rendibili, this);
-    if (dialogo.exec() != QDialog::Accepted)
+    if (esegui(dialogo) != QDialog::Accepted)
         return;
 
     const auto esito = m_op.reso(v->id, dialogo.carrello());
@@ -330,12 +427,19 @@ void VistaVendite::reso()
         QMessageBox::warning(this, QStringLiteral("Reso"), esito.errore);
         return;
     }
+    // Rimborso in contanti: si apre il cassetto
+    if (dialogo.carrello().pagamenti().value(0).tipo == TipoPagamento::Contanti)
+        m_op.rt().aperturaCassetto();
     if (!esito.salvata)
         QMessageBox::critical(this, QStringLiteral("Archivio locale"),
                               QStringLiteral("Reso emesso dall'RT ma NON salvato:\n%1").arg(esito.errore));
-    else
-        QMessageBox::information(this, QStringLiteral("Reso"),
-                                 QStringLiteral("Reso emesso: rimborsare %1.").arg(euro(dialogo.carrello().totale())));
+    else {
+        QMessageBox fatto(QMessageBox::Information, QStringLiteral("Reso"),
+                          QStringLiteral("<h2>Reso emesso</h2><p>Rimborsare <b>%1</b> in %2.</p>")
+                              .arg(euro(dialogo.carrello().totale()), nomePagamento(dialogo.carrello().pagamenti().value(0).tipo).toLower()),
+                          QMessageBox::Ok, this);
+        esegui(fatto);
+    }
     emit documentoEmesso();
     aggiorna();
 }

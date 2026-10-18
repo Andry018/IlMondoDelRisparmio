@@ -1,13 +1,20 @@
 #include "dialogocontanti.h"
 #include "dialogooperatore.h"
 #include "dimostrativi.h"
+#include "italiano.h"
 #include "finestracassa.h"
 #include "fiscal/simulatore.h"
 #include "locale/payloadvendita.h"
+#include "aspettocassa.h"
+#include "schermocliente.h"
+#include "vistaaspetto.h"
 #include "vistacassa.h"
 #include "vistavendite.h"
 
+#include <QBoxLayout>
 #include <QComboBox>
+#include <QDialogButtonBox>
+#include <QMessageBox>
 
 #include <QCryptographicHash>
 #include <QFontDatabase>
@@ -54,6 +61,17 @@ private slots:
         // piattaforma offscreen Qt sceglierebbe il primo font che trova (QT_QPA_FONTDIR).
         if (!qEnvironmentVariableIsEmpty("MDR_SCREENSHOT"))
             QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
+        usaItaliano(*qApp);   // come main.cpp
+    }
+
+    void pulsanti_standard_in_italiano()
+    {
+        QDialogButtonBox bottoni(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Yes | QDialogButtonBox::No);
+        QCOMPARE(bottoni.button(QDialogButtonBox::Cancel)->text().remove('&'), QStringLiteral("Annulla"));
+        QCOMPARE(bottoni.button(QDialogButtonBox::Yes)->text().remove('&'), QStringLiteral("Sì"));
+        QCOMPARE(QString::fromUtf8(testoItaliano("&Save")), QStringLiteral("&Salva"));
+        QCOMPARE(QString::fromUtf8(testoItaliano("sconosciuto")), QString());
+        QCOMPARE(QLocale().toString(1234.5, 'f', 2), QStringLiteral("1234,50"));
     }
 
     void init()
@@ -307,6 +325,41 @@ private slots:
             QTest::qWait(50);
             m_finestra->grab().save(cartella + QStringLiteral("/pos_scheda%1.png").arg(i));
         }
+
+        // Varianti dell'aspetto: scuro con i tasti a sinistra e testo grande; alto contrasto senza tastierino
+        schede->setCurrentIndex(0);
+        AspettoCassa a;
+        a.tema = AspettoCassa::Tema::Scuro;
+        a.testo = AspettoCassa::Testo::Grande;
+        a.tastierinoASinistra = true;
+        a.tastiRapidi << TastoRapido{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt}
+                      << TastoRapido{QStringLiteral("Pane"), QStringLiteral("3002"), QStringLiteral("marrone"), std::nullopt};
+        applicaTema(a.tema);
+        cassa()->applicaAspetto(a);
+        QTest::qWait(50);
+        m_finestra->grab().save(cartella + "/pos_aspetto_scuro.png");
+        a.tema = AspettoCassa::Tema::Contrasto;
+        a.testo = AspettoCassa::Testo::MoltoGrande;
+        a.tastierinoASinistra = false;
+        a.mostraTastierino = false;
+        a.mostraGiornale = false;
+        applicaTema(a.tema);
+        cassa()->applicaAspetto(a);
+        QTest::qWait(50);
+        m_finestra->grab().save(cartella + "/pos_aspetto_contrasto.png");
+        applicaTema(AspettoCassa::Tema::Chiaro);
+
+        // Schermata cliente (monitor da 10" 1024x600)
+        auto* cliente = m_finestra->schermoCliente();
+        cliente->resize(1024, 600);
+        cliente->show();
+        cliente->mostra(cassa()->carrello());
+        QTest::qWait(50);
+        cliente->grab().save(cartella + "/pos_cliente.png");
+        cliente->mostraFine(Money::fromCents(716), Money::fromCents(284));
+        QTest::qWait(50);
+        cliente->grab().save(cartella + "/pos_cliente_resto.png");
+        cliente->hide();
     }
 
     void verifica_prezzo()
@@ -326,23 +379,144 @@ private slots:
         QCOMPARE(cassa()->carrello().righe().size(), 2);
     }
 
+    void aspetto_salvato_e_riletto()
+    {
+        const QString file = m_dir.filePath("aspetto.ini");
+        QCOMPARE(AspettoCassa::carica(file), AspettoCassa{});   // senza file: shopper predefiniti
+        AspettoCassa a;
+        a.tema = AspettoCassa::Tema::Contrasto;
+        a.testo = AspettoCassa::Testo::Grande;
+        a.tastierinoASinistra = true;
+        a.mostraTastierino = false;
+        a.mostraGiornale = false;
+        a.reparti = {2, 1};
+        a.tastiRapidi = {{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt},
+                         {QStringLiteral("Busta"), QStringLiteral("9999"), QStringLiteral("rosso"), Money::fromCents(20)}};
+        a.salva(file);
+        QCOMPARE(AspettoCassa::carica(file), a);
+        // Nessun tasto rapido è una scelta: non tornano gli shopper
+        a.tastiRapidi.clear();
+        a.salva(file);
+        QVERIFY(AspettoCassa::carica(file).tastiRapidi.isEmpty());
+        QCOMPARE(a.punti(10), 12);   // +15%, arrotondato
+    }
+
+    void aspetto_applicato_alla_cassa()
+    {
+        AspettoCassa a;
+        a.tastierinoASinistra = true;
+        a.mostraTastierino = false;
+        a.reparti = {2, 3};
+        a.testo = AspettoCassa::Testo::MoltoGrande;
+        a.tastiRapidi = {{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt},
+                         {QStringLiteral("Busta"), QStringLiteral("9999"), QStringLiteral("rosso"), Money::fromCents(20)},
+                         {QStringLiteral("Niente"), QStringLiteral("9998"), QStringLiteral("grigio"), std::nullopt}};
+        const int prima = cassa()->findChild<QLineEdit*>("codice")->font().pointSize();
+        cassa()->applicaAspetto(a);
+
+        QVERIFY(!cassa()->findChild<QWidget*>("tastierino")->isVisible());
+        QVERIFY(cassa()->findChild<QWidget*>("giornale")->isVisible());
+        QCOMPARE(qobject_cast<QBoxLayout*>(cassa()->layout())->direction(), QBoxLayout::RightToLeft);
+        QVERIFY(cassa()->findChild<QLineEdit*>("codice")->font().pointSize() > prima);
+        // Reparti scelti a mano, al posto di 1 (22%) e 4 (5%)
+        QVERIFY(cassa()->findChild<QPushButton*>("reparto_2"));
+        QVERIFY(cassa()->findChild<QPushButton*>("reparto_3"));
+        QVERIFY(!cassa()->findChild<QPushButton*>("reparto_1"));
+        QVERIFY(!cassa()->findChild<QPushButton*>("rapido_3"));
+
+        // Tasto su un articolo in archivio, quantità digitata prima
+        clic("tasto_2");
+        clic("rapido_0");
+        QCOMPARE(cassa()->carrello().righe().last().descrizione, QStringLiteral("Latte intero 1L"));
+        QCOMPARE(cassa()->carrello().righe().last().quantita, Quantita::pezzi(2));
+        // Non in archivio con prezzo: articolo libero al 22%
+        clic("rapido_1");
+        QCOMPARE(cassa()->carrello().righe().last().descrizione, QStringLiteral("BUSTA"));
+        QCOMPARE(cassa()->carrello().righe().last().prezzoUnitario.cents(), 20);
+        // Non in archivio senza prezzo: lo dice e non vende
+        clic("rapido_2");
+        QCOMPARE(cassa()->carrello().righe().size(), 2);
+        QVERIFY(testo("messaggio").contains("9998"));
+    }
+
+    void scheda_aspetto_salva()
+    {
+        auto* vista = m_finestra->aspetto();
+        QVERIFY(vista);
+        auto* tema = vista->findChild<QComboBox*>("aspetto_tema");
+        tema->setCurrentIndex(tema->findData(int(AspettoCassa::Tema::Scuro)));
+        vista->findChild<QPushButton*>("aspetto_salva")->click();
+        QCOMPARE(cassa()->aspetto().tema, AspettoCassa::Tema::Scuro);
+        QCOMPARE(AspettoCassa::carica(m_dir.filePath("mdr-cassa.ini")).tema, AspettoCassa::Tema::Scuro);
+        QCOMPARE(cassa()->aspetto().tastiRapidi, AspettoCassa::predefiniti());
+        QVERIFY(qApp->palette().color(QPalette::Window).lightness() < 100);
+        applicaTema(AspettoCassa::Tema::Chiaro);
+        AspettoCassa{}.salva(m_dir.filePath("mdr-cassa.ini"));   // le altre prove partono dal chiaro
+    }
+
+    void sconto_sul_totale()
+    {
+        cassa()->leggi("1001");     // 1,89
+        cassa()->leggi("2*1002");   // 4,98
+        using M = VistaCassa::ModoSconto;
+        // 0,87 diviso in proporzione: 0,24 sul detersivo e 0,63 sulla carta
+        QVERIFY(cassa()->applicaSconto(M::EuroTotale, Money::fromCents(87)));
+        QCOMPARE(cassa()->carrello().totale().cents(), 600);
+        QCOMPARE(cassa()->carrello().righe()[0].sconto.cents(), 24);
+        QCOMPARE(cassa()->carrello().righe()[1].sconto.cents(), 63);
+        // Arrotonda a 5,00, poi 10% del totale
+        QVERIFY(cassa()->applicaSconto(M::NuovoTotale, Money::fromCents(500)));
+        QCOMPARE(cassa()->carrello().totale().cents(), 500);
+        QVERIFY(cassa()->applicaSconto(M::PercentualeTotale, Money::fromCents(1000)));
+        QCOMPARE(cassa()->carrello().totale().cents(), 450);
+        // Sconto pari o oltre il totale: rifiutato, niente cambia
+        QVERIFY(!cassa()->applicaSconto(M::EuroTotale, Money::fromCents(450)));
+        QVERIFY(!cassa()->applicaSconto(M::PercentualeTotale, Money::fromCents(10100)));
+        QCOMPARE(cassa()->carrello().totale().cents(), 450);
+        // Si vende normalmente: la somma delle righe è il totale pagato
+        cassa()->paga(TipoPagamento::Carta);
+        QVERIFY(cassa()->carrello().vuoto());
+        QCOMPARE(m_rt->totaleGiorno().cents(), 450);
+    }
+
+    void schermo_cliente()
+    {
+        // Senza secondo monitor resta nascosta, ma segue lo scontrino
+        auto* cliente = m_finestra->schermoCliente();
+        QVERIFY(cliente && !cliente->isVisible());
+        auto testoCliente = [cliente](const char* nome) { return cliente->findChild<QLabel*>(nome)->text(); };
+        QCOMPARE(testoCliente("cliente_titolo"), QStringLiteral("Benvenuti al Mondo del Risparmio"));
+        cassa()->leggi("2*1001");
+        QCOMPARE(cliente->findChild<QTableWidget*>("cliente_righe")->rowCount(), 1);
+        QVERIFY(testoCliente("cliente_totale").contains("3,78"));
+        QVERIFY(testoCliente("cliente_titolo").contains("Detersivo"));
+        // Pagato 5,00 in contanti: resto 1,22, e resta a video anche con lo scontrino vuoto
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(500));
+        QVERIFY(testoCliente("cliente_totale").contains("RESTO"));
+        QVERIFY(testoCliente("cliente_totale").contains("1,22"));
+        QVERIFY(testoCliente("cliente_titolo").contains("Grazie"));
+        // Nuovo cliente: si torna alle righe
+        cassa()->leggi("1002");
+        QVERIFY(testoCliente("cliente_totale").contains("TOTALE"));
+    }
+
     void shopper()
     {
         // Tasto: l'articolo shopper del catalogo.
-        clic("shopper_1");
+        clic("rapido_1");
         QCOMPARE(cassa()->carrello().righe().size(), 1);
         QCOMPARE(cassa()->carrello().righe()[0].descrizione, QStringLiteral("SHOPPER 0.10"));
         QCOMPARE(cassa()->carrello().totale().cents(), 10);
         // "3" sul tastierino e poi il tasto: 3 sacchetti.
         clic("tasto_3");
-        clic("shopper_0");
+        clic("rapido_0");
         QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(3));
         QCOMPARE(cassa()->carrello().totale().cents(), 25);
         // Testo che non è un numero: non vende e lo dice.
         cassa()->findChild<QLineEdit*>("codice")->setText("abc");
-        clic("shopper_0");
+        clic("rapido_0");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
-        QVERIFY(testo("messaggio").contains("numero di sacchetti"));
+        QVERIFY(testo("messaggio").contains("numero di pezzi"));
 
         // Articolo non più in vendita: articolo libero "SHOPPER" a 0,05 sul reparto al 22%.
         auto a = m_archivio->cerca("8000000000001");
@@ -350,9 +524,9 @@ private slots:
         a->attivo = false;
         QVERIFY(m_archivio->salvaArticolo(*a));
         cassa()->findChild<QLineEdit*>("codice")->setText("2");
-        clic("shopper_0");
+        clic("rapido_0");
         const auto& r = cassa()->carrello().righe().last();
-        QCOMPARE(r.descrizione, QStringLiteral("SHOPPER"));
+        QCOMPARE(r.descrizione, QStringLiteral("SHOPPER 0,05"));
         QCOMPARE(r.iva.basisPoints, 2200);
         QCOMPARE(r.prezzoUnitario.cents(), 5);
         QCOMPARE(r.quantita, Quantita::pezzi(2));
@@ -418,6 +592,62 @@ private slots:
         QCOMPARE(prezzoDaTastierino("00")->cents(), 0);
         QVERIFY(!prezzoDaTastierino(""));
         QVERIFY(!prezzoDaTastierino("12a"));
+    }
+
+    void reso_guidato()
+    {
+        cassa()->leggi("3*1001");
+        cassa()->paga(TipoPagamento::Carta);
+        cassa()->leggi("1003");
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(99));
+        auto* vendite = m_finestra->vendite();
+        m_finestra->findChild<QTabWidget*>()->setCurrentWidget(vendite);
+        auto* tabella = vendite->findChild<QTableWidget*>("vendite");
+
+        // Codice (o barcode) del detersivo: resta solo lo scontrino che lo contiene, già scelto
+        vendite->findChild<QLineEdit*>("vendite_cerca")->setText("1001");
+        int visibili = 0;
+        for (int i = 0; i < tabella->rowCount(); ++i)
+            visibili += !tabella->isRowHidden(i);
+        QCOMPARE(visibili, 1);
+        QVERIFY(!tabella->selectedItems().isEmpty());
+
+        bool aperta = false;
+        vendite->esegui = [&](QDialog& d) {
+            if (!d.findChild<QTableWidget*>("reso_righe"))
+                return int(QMessageBox::Ok);   // conferma finale
+            aperta = true;
+            auto tocca = [&](const char* nome) { d.findChild<QPushButton*>(nome)->click(); };
+            auto quanti = [&] { return d.findChild<QLabel*>("reso_quanti_0")->text(); };
+            tocca("reso_piu_0");
+            tocca("reso_piu_0");
+            tocca("reso_piu_0");
+            tocca("reso_piu_0");   // non oltre il venduto
+            [&] { QCOMPARE(quanti(), QStringLiteral("3")); }();
+            tocca("reso_meno_0");
+            tocca("reso_meno_0");
+            [&] { QCOMPARE(quanti(), QStringLiteral("1")); }();
+            // Rimborso come il pagamento dello scontrino
+            [&] { QCOMPARE(d.findChild<QComboBox*>("reso_rimborso")->currentText(), nomePagamento(TipoPagamento::Carta)); }();
+            [&] { QVERIFY(d.findChild<QLabel*>("reso_totale")->text().contains("1,89")); }();
+            if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+                d.show();
+                QTest::qWait(50);
+                d.grab().save(cartella + "/pos_reso.png");
+            }
+            return int(QDialog::Accepted);
+        };
+        vendite->reso();
+        QVERIFY(aperta);
+        const auto detersivo = m_archivio->vendite(QDate::currentDate()).last();
+        QCOMPARE(m_op->quantitaRendibili(detersivo.id).first(), Quantita::pezzi(2));
+
+        // Per numero di documento
+        vendite->findChild<QLineEdit*>("vendite_cerca")->setText("2");
+        visibili = 0;
+        for (int i = 0; i < tabella->rowCount(); ++i)
+            visibili += !tabella->isRowHidden(i);
+        QCOMPARE(visibili, 1);
     }
 
     void giornale_vendite_reso_e_annullo()
@@ -568,7 +798,7 @@ private slots:
         QStringList titoli;
         for (int i = 0; i < schede->count(); ++i)
             titoli << schede->tabText(i);
-        QCOMPARE(titoli, (QStringList{"Cassa", "Vendite", "Impostazioni"}));
+        QCOMPARE(titoli, (QStringList{"Cassa", "Vendite", "Aspetto", "Impostazioni"}));
     }
 
     void registratore_in_rete_salvato()

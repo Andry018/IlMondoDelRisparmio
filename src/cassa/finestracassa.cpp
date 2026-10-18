@@ -1,8 +1,11 @@
 #include "finestracassa.h"
 
+#include "aspettocassa.h"
 #include "locale/archiviolocale.h"
 #include "locale/clientserver.h"
 #include "locale/sincronizzatore.h"
+#include "schermocliente.h"
+#include "vistaaspetto.h"
 #include "vistacassa.h"
 #include "vistavendite.h"
 
@@ -18,9 +21,10 @@ namespace mdr {
 
 FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, Impostazioni impostazioni,
                              QString fileImpostazioni, QString infoPostazione, QWidget* parent)
-    : FinestraBase(Postazione::Cassa, archivio, impostazioni, std::move(fileImpostazioni),
+    : FinestraBase(Postazione::Cassa, archivio, impostazioni, fileImpostazioni,
                    std::move(infoPostazione), parent)
     , m_op(operazioni)
+    , m_fileImpostazioni(std::move(fileImpostazioni))
 {
     setWindowTitle(QStringLiteral("Mondo del Risparmio — Cassa"));
     m_op.impostaTerminale(impostazioni.terminale);
@@ -30,6 +34,19 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
     m_vendite = new VistaVendite(archivio, operazioni, schede());
     aggiungiScheda(m_cassa, QStringLiteral("Cassa"));
     aggiungiScheda(m_vendite, QStringLiteral("Vendite"));
+
+    // Aspetto della postazione: tema, testo, disposizione, tasti reparto e tasti rapidi
+    const auto aspetto = AspettoCassa::carica(m_fileImpostazioni);
+    m_schermoCliente = new SchermoCliente(this);
+    connect(m_cassa, &VistaCassa::scontrinoCambiato, m_schermoCliente, &SchermoCliente::mostra);
+    connect(m_cassa, &VistaCassa::venditaConclusa, m_schermoCliente, &SchermoCliente::mostraFine);
+    applicaAspetto(aspetto);
+    m_aspetto = new VistaAspetto(archivio, aspetto, schede());
+    aggiungiScheda(m_aspetto, QStringLiteral("Aspetto"));
+    connect(m_aspetto, &VistaAspetto::aspettoCambiato, this, [this](const AspettoCassa& a) {
+        applicaAspetto(a);
+        a.salva(m_fileImpostazioni);
+    });
 
     m_statoTerminale = new QLabel(this);
     m_statoCoda = new QLabel(this);
@@ -57,6 +74,18 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
 
     completa();
     m_cassa->attiva();
+}
+
+void FinestraCassa::applicaAspetto(const AspettoCassa& a)
+{
+    applicaTema(a.tema);
+    m_cassa->applicaAspetto(a);
+    m_schermoCliente->impostaMessaggio(a.messaggioCliente);
+    m_schermoCliente->mostra(m_cassa->carrello());
+    if (!a.schermoCliente)
+        m_schermoCliente->hide();
+    else if (!m_schermoCliente->apriSulSecondoSchermo())
+        m_cassa->log(QStringLiteral("Schermata cliente: collegare un secondo monitor"));
 }
 
 void FinestraCassa::impostazioniApplicate(const Impostazioni& imp)
@@ -139,6 +168,8 @@ void FinestraCassa::schedaAttivata(QWidget* scheda)
         m_cassa->attiva();
     else if (scheda == m_vendite)
         m_vendite->aggiorna();
+    else if (scheda == m_aspetto)
+        m_aspetto->mostra(m_cassa->aspetto());   // reparti aggiornati dalla sincronizzazione
 }
 
 void FinestraCassa::closeEvent(QCloseEvent* e)

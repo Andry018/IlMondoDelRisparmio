@@ -123,6 +123,27 @@ try {
     & node (Join-Path $PSScriptRoot "prova_browser.mjs") "http://127.0.0.1:$PortaApp/" $Screenshot $chrome
     Verifica "prova nel browser"
 
+    # Ricevimento della fattura: proposta da approvare (giacenze ferme); carico senza fattura: subito
+    $prima = @"
+select 'in attesa: ' || count(*) from carichi_proposti where stato = 'da_approvare';
+select codice || ' giacenza ' || quantita from giacenze g join articoli a on a.id = g.articolo_id where codice in ('DET-001','SPU-010','PAS-500','8007770000011') order by codice;
+select 'fattura caricata: ' || (documento_id is not null) from fatture_passive;
+"@
+    $righe = $prima | & psql -X -A -t -d mdr_palmare
+    $righe | ForEach-Object { Write-Host "  prima dell'approvazione: $_" }
+    foreach ($a in @("in attesa: 1", "DET-001 giacenza 12000", "SPU-010 giacenza 10000", "PAS-500 giacenza 70000", "8007770000011 giacenza 5000", "fattura caricata: false")) {
+        if ($righe -notcontains $a) { throw "Atteso prima dell'approvazione: $a" }
+    }
+    # Il responsabile approva dalla gestione (qui con la stessa funzione)
+    @"
+begin;
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-00aa-0000000000a1", "role": "authenticated"}', true);
+set local role authenticated;
+select approva_carico(id) from carichi_proposti where stato = 'da_approvare';
+commit;
+"@ | & psql -X -q -A -t -v ON_ERROR_STOP=1 -d mdr_palmare | Out-Null
+    Verifica "approvazione dei carichi"
+
     # Il risultato nel database
     $controllo = @"
 select 'inventario ' || stato || ' ' || (riepilogo->>'articoli_contati') || ' articoli' from inventari;

@@ -1,5 +1,7 @@
 #include "carrello.h"
 
+#include <algorithm>
+
 namespace mdr {
 
 void Carrello::aggiungi(const Articolo& a, Quantita q)
@@ -50,6 +52,29 @@ void Carrello::scontoPercentualeRiga(int indice, int basisPoints)
         auto& r = m_righe[indice];
         r.sconto = (r.prezzoUnitario * r.quantita).percentuale(basisPoints);
     }
+}
+
+bool Carrello::scontoTotale(Money importo)
+{
+    const Money totale = this->totale();
+    if (importo <= Money() || importo >= totale)
+        return false;
+    QList<int64_t> quote;
+    int64_t assegnato = 0;
+    int piuGrande = 0;
+    for (int i = 0; i < m_righe.size(); ++i) {
+        const int64_t base = std::max<int64_t>(m_righe[i].totale().cents(), 0);
+        quote << dividiArrotondando(importo.cents() * base, totale.cents());
+        assegnato += quote.last();
+        if (base > m_righe[piuGrande].totale().cents())
+            piuGrande = i;
+    }
+    quote[piuGrande] += importo.cents() - assegnato;
+    if (quote[piuGrande] > m_righe[piuGrande].totale().cents())
+        return false;   // non succede con importo < totale, ma una riga non va mai sotto zero
+    for (int i = 0; i < m_righe.size(); ++i)
+        m_righe[i].sconto += Money::fromCents(quote[i]);
+    return true;
 }
 
 void Carrello::svuota()

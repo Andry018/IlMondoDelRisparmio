@@ -19,6 +19,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -185,12 +186,12 @@ VistaOperatori::VistaOperatori(ClientServer& client, QWidget* parent)
     nota->setWordWrap(true);
     layout->addWidget(nota);
     auto* barra = new QHBoxLayout;
-    auto* nuovo = new QPushButton(QStringLiteral("Nuovo utente…"), this);
+    auto* nuovo = new QPushButton(style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("Nuovo utente…"), this);
     nuovo->setObjectName("nuovo_utente");
     auto* modifica = new QPushButton(QStringLiteral("Modifica"), this);
     auto* pin = new QPushButton(QStringLiteral("Imposta PIN…"), this);
-    auto* password = new QPushButton(QStringLiteral("Cambia password…"), this);
-    auto* aggiorna = new QPushButton(QStringLiteral("Aggiorna"), this);
+    auto* password = new QPushButton(style()->standardIcon(QStyle::SP_DialogResetButton), QStringLiteral("Cambia password…"), this);
+    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
     barra->addWidget(nuovo);
     barra->addWidget(modifica);
     barra->addWidget(pin);

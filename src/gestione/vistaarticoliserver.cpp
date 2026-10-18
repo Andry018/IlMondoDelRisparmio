@@ -1,10 +1,13 @@
 ﻿#include "vistaarticoliserver.h"
 
 #include "dialogoimportazione.h"
+#include "dialogoprezzi.h"
+#include "dialogocontrollodati.h"
 
 #include "comune.h"
 #include "core/barcode.h"
 #include "core/quantita.h"
+#include "schedaarticolo.h"
 #include "tabellaserver.h"
 
 #include <QCheckBox>
@@ -21,6 +24,8 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSplitter>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -256,7 +261,17 @@ private:
 VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     : VistaServer(client, parent)
 {
-    auto* layout = new QVBoxLayout(this);
+    // Come l'anagrafica di SystemApp: elenco a sinistra, scheda dell'articolo scelto a destra
+    auto* principale = new QVBoxLayout(this);
+    auto* divisore = new QSplitter(Qt::Horizontal, this);
+    principale->addWidget(divisore);
+    auto* sinistra = new QWidget(divisore);
+    auto* layout = new QVBoxLayout(sinistra);
+    layout->setContentsMargins(0, 0, 0, 0);
+    m_scheda = new SchedaArticolo(client, divisore);
+    m_scheda->setObjectName("scheda_articolo");
+    divisore->setStretchFactor(0, 4);
+    divisore->setStretchFactor(1, 5);
     auto* barra = new QHBoxLayout;
     m_cerca = new QLineEdit(this);
     m_cerca->setPlaceholderText(QStringLiteral("Cerca per codice, descrizione o barcode"));
@@ -265,40 +280,51 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
     m_soloAttivi = new QCheckBox(QStringLiteral("Solo in vendita"), this);
     m_soloAttivi->setChecked(true);
     barra->addWidget(m_soloAttivi);
-    auto* nuovo = new QPushButton(QStringLiteral("Nuovo articolo"), this);
+    auto* nuovo = new QPushButton(style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("Nuovo"), this);
     nuovo->setObjectName("nuovo_articolo");
-    m_modifica = new QPushButton(QStringLiteral("Modifica"), this);
+    nuovo->setToolTip(QStringLiteral("Nuovo articolo"));
+    m_modifica = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogInfoView), QStringLiteral("Anagrafica…"), this);
+    m_modifica->setToolTip(QStringLiteral("Codice, reparto, unità, fornitore, barcode dell'articolo scelto"));
     m_attivo = new QPushButton(QStringLiteral("Disattiva"), this);
-    auto* importa = new QPushButton(QStringLiteral("Importa da file…"), this);
+    auto* importa = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Importa…"), this);
     importa->setObjectName("importa_articoli");
     importa->setToolTip(QStringLiteral("Articoli nuovi o aggiornamento di prezzi, costi, barcode da CSV o Excel"));
-    for (auto* b : {nuovo, m_modifica, m_attivo, importa})
+    auto* prezzi = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Prezzi…"), this);
+    prezzi->setObjectName("ricalcolo_prezzi");
+    prezzi->setToolTip(QStringLiteral("Ricalcolo dei prezzi dal ricarico per fornitore, reparto o categoria"));
+    auto* controllo = new QPushButton(style()->standardIcon(QStyle::SP_MessageBoxInformation), QStringLiteral("Controllo dati…"), this);
+    controllo->setObjectName("controllo_dati");
+    controllo->setToolTip(QStringLiteral("Articoli con prezzo a zero, sotto costo, barcode sbagliati, doppioni, giacenze negative…"));
+    for (auto* b : {nuovo, m_modifica, m_attivo, importa, prezzi, controllo})
         barra->addWidget(b);
+    // Non modale: si corregge l'articolo nella scheda tenendo aperto l'elenco
+    connect(controllo, &QPushButton::clicked, this, [this] {
+        auto* d = new DialogoControlloDati(m_client, this);
+        d->setAttribute(Qt::WA_DeleteOnClose);
+        connect(d, &DialogoControlloDati::apriArticolo, this, [this](const QString& codice) {
+            m_soloAttivi->setChecked(true);
+            m_cerca->setText(codice);
+            aggiorna();
+        });
+        d->show();
+    });
     layout->addLayout(barra);
 
+    // Dopo i carichi: articoli il cui costo è salito e il prezzo è rimasto sotto il ricarico
+    m_avvisoPrezzi = new QPushButton(style()->standardIcon(QStyle::SP_MessageBoxWarning), QString(), this);
+    m_avvisoPrezzi->setObjectName("avviso_prezzi");
+    m_avvisoPrezzi->setStyleSheet(QStringLiteral("QPushButton { background: #ffe0b2; text-align: left; padding: 4px 8px; }"));
+    m_avvisoPrezzi->setToolTip(QStringLiteral("Il costo è salito con un carico e il prezzo è sotto quello del ricarico voluto"));
+    m_avvisoPrezzi->hide();
+    layout->addWidget(m_avvisoPrezzi);
+
+    // Elenco stretto (codice, descrizione, prezzo, giacenza): il resto è nella scheda a destra
     m_tabella = new TabellaServer({
         {"codice", QStringLiteral("Codice")},
         {"descrizione", QStringLiteral("Descrizione")},
-        {"reparti.numero_rt", QStringLiteral("Rep."), ColonnaServer::Intero},
-        {"unita", QStringLiteral("Unità")},
         {"prezzo_vendita", QStringLiteral("Prezzo €"), ColonnaServer::Euro},
-        {"costo_ultimo", QStringLiteral("Costo €"), ColonnaServer::Euro},
-        {"ricarico", QStringLiteral("Ricarico"), ColonnaServer::Testo,
-         [](const QJsonObject& a) {
-             // Sul netto: il prezzo è IVA inclusa, il costo no. Indicativo (IVA del reparto non scorporata).
-             const qint64 costo = a.value("costo_ultimo").toInteger();
-             if (costo <= 0)
-                 return QString();
-             const double r = (a.value("prezzo_vendita").toInteger() - costo) * 100.0 / costo;
-             return QStringLiteral("%1%").arg(r, 0, 'f', 0);
-         }},
         {"giacenze.quantita", QStringLiteral("Giacenza"), ColonnaServer::Quantita},
-        {"scorta_minima", QStringLiteral("Scorta min."), ColonnaServer::Quantita},
-        {"fornitori.ragione_sociale", QStringLiteral("Fornitore")},
-        {"barcode", QStringLiteral("Barcode"), ColonnaServer::Testo,
-         [](const QJsonObject& a) { return barcodeDi(a).join(QStringLiteral(", ")); }},
-        {"attivo", QStringLiteral("Stato"), ColonnaServer::Testo,
-         [](const QJsonObject& a) { return a.value("attivo").toBool() ? QStringLiteral("In vendita") : QStringLiteral("Disattivato"); }},
+        {"reparti.numero_rt", QStringLiteral("Rep."), ColonnaServer::Intero},
     }, this);
     m_tabella->setObjectName("articoli_server");
     m_tabella->testoVuoto = QStringLiteral("Nessun articolo trovato");
@@ -320,6 +346,8 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
         if (const auto a = m_tabella->selezionata())
             modifica(*a);
     });
+    connect(prezzi, &QPushButton::clicked, this, [this] { ricalcolaPrezzi(); });
+    connect(m_avvisoPrezzi, &QPushButton::clicked, this, [this] { ricalcolaPrezzi({{"solo_da_rivedere", true}}); });
     connect(m_tabella, &TabellaServer::attivata, this, &VistaArticoliServer::modifica);
     connect(m_attivo, &QPushButton::clicked, this, &VistaArticoliServer::cambiaAttivo);
     connect(m_tabella, &TabellaServer::selezioneCambiata, this, [this] {
@@ -327,6 +355,12 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
         m_modifica->setEnabled(a.has_value());
         m_attivo->setEnabled(a.has_value());
         m_attivo->setText(a && !a->value("attivo").toBool() ? QStringLiteral("Riattiva") : QStringLiteral("Disattiva"));
+        m_scheda->mostra(a ? a->value("id").toString() : QString());
+    });
+    connect(m_scheda, &SchedaArticolo::salvato, this, &VistaArticoliServer::aggiorna);
+    connect(m_scheda, &SchedaArticolo::modificaAnagrafica, this, [this](const QString&) {
+        if (const auto a = m_tabella->selezionata())
+            modifica(*a);
     });
     m_modifica->setEnabled(false);
     m_attivo->setEnabled(false);
@@ -334,6 +368,7 @@ VistaArticoliServer::VistaArticoliServer(ClientServer& client, QWidget* parent)
 
 void VistaArticoliServer::aggiorna()
 {
+    contaDaRivedere();
     const QString testo = m_cerca->text().trimmed();
     QString risorsa = QStringLiteral("articoli?select=%1&order=descrizione&limit=500").arg(campi);
     if (m_soloAttivi->isChecked())
@@ -370,6 +405,33 @@ void VistaArticoliServer::modifica(const QJsonObject& articolo)
     DialogoArticoloServer d(m_client, articolo, this);
     if (d.exec() == QDialog::Accepted)
         aggiorna();
+}
+
+void VistaArticoliServer::ricalcolaPrezzi(const QJsonObject& filtro)
+{
+    DialogoRicalcoloPrezzi d(m_client, filtro, this);
+    d.exec();
+    if (d.applicati() > 0) {
+        aggiorna();
+        if (!m_scheda->articoloId().isEmpty())
+            m_scheda->mostra(m_scheda->articoloId());
+    } else {
+        contaDaRivedere();
+    }
+}
+
+void VistaArticoliServer::contaDaRivedere()
+{
+    QPointer<VistaArticoliServer> io(this);
+    m_client.leggi(QStringLiteral("v_prezzi_da_rivedere?select=articolo_id"), [io](const RispostaServer& r) {
+        if (!io || !r.ok())
+            return;
+        const int n = int(r.json().array().size());
+        io->m_avvisoPrezzi->setText(n == 1 ? QStringLiteral("1 prezzo da rivedere: il costo è salito con l'ultimo carico — Rivedi…")
+                                           : QStringLiteral("%1 prezzi da rivedere: il costo è salito con gli ultimi carichi — Rivedi…").arg(n));
+        io->m_avvisoPrezzi->setVisible(n > 0);
+        emit io->prezziDaRivedere(n);
+    });
 }
 
 void VistaArticoliServer::cambiaAttivo()

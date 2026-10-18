@@ -1,0 +1,163 @@
+# Guida per il negozio
+
+Come si usano ogni giorno la **cassa**, la **gestione** e il **palmare**. Per l'installazione e
+il server vedere `README.md` e `infra/supabase/README.md`.
+
+---
+
+## 1. La cassa (`mdr-cassa`)
+
+### Inizio giornata
+
+1. Accendere il registratore telematico, poi aprire la cassa.
+2. Premere **Operatore (F1)** e inserire codice e PIN. Senza operatore la cassa non vende.
+3. In basso a destra si vede lo stato: operazioni in coda verso il server, terminale, registratore.
+   Se compare **OROLOGIO DELLA CASSA SBAGLIATO** sistemare l'ora di Windows prima di vendere.
+
+La cassa vende anche se il server non risponde: le vendite restano in coda e partono da sole
+quando la rete torna (in basso: "N operazioni da inviare").
+
+### Vendere
+
+| Cosa | Come |
+|---|---|
+| Articolo | leggere il barcode, o scrivere il codice e premere Invio |
+| Più pezzi | `3*` prima del codice (es. `3*1001`), oppure il tasto **X** del tastierino |
+| Articolo a peso | si legge l'articolo e la cassa chiede i kg (`0,350`) |
+| Articolo libero | prezzo sul tastierino e poi il **tasto del reparto**: `250` + reparto = 2,50 € (con la virgola: `2,50`) |
+| Articolo libero con descrizione | **Articolo libero (F2)** |
+| Tasti rapidi (shopper, ecc.) | un tocco; un numero prima è la quantità (`3` + Shopper = 3 sacchetti) |
+| Cambiare quantità | scegliere la riga, **Quantità riga (F9)** |
+| Togliere una riga | scegliere la riga, **Storna riga (F4)** |
+| Sconto | **Sconto (F3)**: % sulla riga, % sul totale, € sul totale, oppure **Arrotonda a…** (es. 5,23 → 5,00) |
+| Prezzo di un articolo senza venderlo | **Verifica prezzo (F12)** e poi leggere l'articolo |
+| Codice fiscale sullo scontrino | **Cod. fiscale (Ctrl+F)**, anche letto dalla tessera sanitaria. Con un dispositivo medico la cassa lo chiede da sola |
+| Annullare lo scontrino in corso | **Annulla scontrino (F8)** |
+
+### Due clienti insieme
+
+I due tasti gialli in alto sono due scontrini separati: si mette in attesa il primo (cliente che
+cerca il portafoglio), si serve il secondo, poi si torna al primo. **F11** passa dall'uno all'altro.
+
+### Pagare
+
+**Contanti (F5)** apre la finestra dei tagli: toccare le banconote ricevute, la cassa mostra il
+resto. **Carta (F6)**, **Bancomat (F7)**, **Altri pagamenti** (Satispay, buoni pasto, non riscosso).
+Si possono combinare: parte in contanti e il resto con la carta; lo scontrino esce quando il
+totale è coperto. **Ristampa (Ctrl+P)** fa una copia dell'ultimo scontrino.
+
+### Resi e annulli (scheda Vendite)
+
+1. Scheda **Vendite**: scrivere il numero dello scontrino (es. `12`) o **leggere il barcode
+   dell'articolo reso**: restano solo gli scontrini che lo contengono.
+2. **Reso…**: con **−** e **+** si sceglie quanto rendere di ogni riga, oppure **Tutto**.
+   Il rimborso è proposto come il pagamento dello scontrino; in contanti si apre il cassetto.
+3. **Annulla vendita** annulla tutto lo scontrino (solo se non ci sono già resi).
+
+### Fine giornata
+
+**Chiusura Z (F10)**: la cassa mostra il riepilogo (vendite, resi, incassi per pagamento, IVA) e
+chiede conferma. Prima vanno chiusi gli scontrini in attesa. Dopo la Z la cassa installa gli
+aggiornamenti, se ce ne sono.
+
+### Aspetto della cassa (scheda Aspetto)
+
+Ogni cassa ha il suo aspetto, salvato su quel PC:
+
+- **Tema**: chiaro, scuro, alto contrasto (per luce forte o vista stanca);
+- **Testo**: normale, grande, molto grande;
+- **Disposizione**: tasti a destra o a sinistra (mancini, posizione dello scanner);
+- tastierino e giornale del registratore si possono nascondere;
+- **Tasti reparto**: quali reparti mostrare;
+- **Tasti rapidi** (fino a 12): scritta, codice dell'articolo, colore, prezzo se l'articolo non c'è;
+- **Schermata per il cliente** sul secondo monitor: righe, totale e resto, con il messaggio di benvenuto.
+
+**Salva e applica** cambia subito la cassa.
+
+---
+
+## 2. La gestione (`mdr-gestione`)
+
+Si accede dalla scheda **Impostazioni** con l'utente del negozio. Le schede in alto con un numero
+tra parentesi hanno qualcosa da fare.
+
+### Cruscotto
+
+La prima schermata: incasso del giorno (e il confronto con lo stesso giorno della settimana prima),
+scontrini, scontrino medio, incasso del mese, gli ultimi 14 giorni, le ore di punta, i pagamenti,
+gli articoli più venduti e lo stato delle casse. Si può guardare un giorno passato.
+
+**Da fare**: ogni riga porta alla scheda giusta (carichi da approvare, fatture da controllare, prezzi
+da rivedere, sottoscorta, etichette, resi da verificare, chiusure che non quadrano).
+
+In alto lo **stato del server**: ultimo backup e ultima prova di ripristino. Una riga rossa con ⚠ va
+segnalata subito a chi segue il server.
+
+### Articoli
+
+- A sinistra l'elenco (cerca per codice, descrizione o barcode), a destra la **scheda**: prezzo,
+  costo, ricarico e margine, giacenza, ultimo carico. **Salva** (dischetto) per le modifiche;
+  **Anagrafica…** per codice, reparto, barcode, fornitore.
+- **Movimenti**, **Storico prezzi**, **Etichetta** (mette l'articolo tra quelle da stampare).
+- **Prezzi…**: ricalcolo in blocco dal ricarico per fornitore, reparto o categoria; si spuntano gli
+  articoli e si applica. **Lascia i prezzi attuali** conferma un prezzo senza cambiarlo.
+- La barra arancione **"N prezzi da rivedere"** compare quando un carico ha alzato il costo e il
+  prezzo è rimasto sotto il ricarico voluto.
+- **Controllo dati…**: articoli da sistemare (prezzo a zero, sotto costo, barcode sbagliati,
+  doppioni, giacenze negative, fornitore mancante, merce ferma). Doppio clic apre l'articolo;
+  **Esporta per Excel** per correggerli in blocco e reimportarli con **Importa…**.
+
+### Magazzino
+
+- **Fatture in entrata da controllare**: le fatture dei fornitori arrivano da sole dallo SDI.
+  **Controlla fattura…**: si abbinano le righe agli articoli, si correggono confezioni e quantità,
+  poi **Approva e carica**. Solo allora le giacenze cambiano.
+- **Carichi da approvare**: la merce ricevuta col palmare contro una fattura; si controlla e si
+  approva (o si rifiuta con un motivo).
+- **Carico merce…**: carico a mano con DDT.
+- **Inventario…** e **Giacenze da file…** (conta da Excel).
+- **Proposta d'ordine…**: per fornitore, quanto ordinare per coprire i prossimi giorni dalle vendite
+  recenti, arrotondato ai colli. Le quantità si correggono a mano; **Esporta per Excel** o **Stampa**.
+- Dopo un carico, se il costo di qualche articolo è salito sotto il ricarico, la gestione propone di
+  rivedere i prezzi.
+
+### Etichette
+
+L'elenco delle etichette da stampare (prezzi cambiati, richieste dal palmare o dalla scheda). Si
+sceglie il **foglio adesivo** (A4 3×8, 3×7, 4×10, 5×13, 2×7) e **da quale posizione** partire per
+riusare un foglio già in parte usato; **Copie** per articolo. **Anteprima e stampa…** o **Salva PDF…**,
+poi **Segna come stampate**. Per provare gli allineamenti: **Bordi** su carta normale.
+
+### Altre schede
+
+**Vendite** (report), **Fatture** (emesse ai clienti), **Clienti**, **Fornitori**, **Chiusure**
+(confronto con il registratore), **Resi da verificare**, **Operatori** (utenti, PIN, password),
+**Negozio** (dati per le fatture), **Palmare** (QR per collegare i palmari), **Impostazioni**.
+
+---
+
+## 3. Il palmare
+
+Si collega leggendo il **QR della scheda Palmare** della gestione. Schede in basso:
+
+- **Prezzi**: legge un articolo, mostra prezzo e giacenza, richiede l'etichetta.
+- **Inventario**: conta per reparto o per tutto il negozio; più palmari possono contare insieme
+  lo stesso inventario. Alla chiusura le giacenze si correggono.
+- **Ricevimento merce**: si spunta la merce arrivata contro la fattura del fornitore; il carico va
+  poi **approvato in gestione**.
+- **Carico merce**: carico diretto con DDT, anche di articoli nuovi creati sul momento.
+- **Etichette**: i cartellini da ristampare.
+
+Senza Wi-Fi il palmare continua a contare e spuntare: invia tutto quando la rete torna.
+
+---
+
+## 4. Se qualcosa non va
+
+| Problema | Cosa fare |
+|---|---|
+| In cassa "Articolo non trovato" ma in gestione c'è | aspettare la sincronizzazione (pochi minuti) o controllare che la cassa sia collegata (Impostazioni) |
+| "N operazioni da inviare" che non scende | il server non risponde: la cassa continua a vendere; avvisare chi segue il server |
+| Operazioni **RIFIUTATE** (in rosso) | scheda Vendite della cassa: il server ha rifiutato i dati, avvisare il responsabile |
+| Registratore non disponibile | controllare che sia acceso e in rete, poi Impostazioni > prova registratore |
+| ⚠ nello stato del server (Cruscotto) | backup non riuscito o vecchio: avvisare subito chi segue il server |

@@ -686,6 +686,93 @@ scarica al ciclo successivo), `XML non leggibile: …`.
 Il collegamento fattura-carico si scrive solo con `carico_magazzino`: `fatture_passive` è di sola
 lettura per i client.
 
+<a id="prezzi-ricarico"></a>
+### Prezzi dal ricarico: `proposta_prezzi`, `applica_prezzi`, `v_prezzi_da_rivedere`
+
+Migrazione `20261017000300_ricalcolo_prezzi.sql`. Prezzo dal ricarico = costo × (1 + ricarico) ×
+(1 + IVA del reparto), al centesimo, metà lontano da zero: `prezzo_da_ricarico(costo, ricarico_bp,
+aliquota_bp)`, identico a `prezzoDaRicarico` della gestione.
+
+**Anteprima** `POST /rest/v1/rpc/proposta_prezzi` `{"p": {…}}`, tutti i campi facoltativi:
+`fornitore_id` (fornitore abituale), `numero_reparto`, `categoria_id`, `testo` (codice o
+descrizione), `articoli` (array di uuid), `ricarico_predefinito_bp` (per chi non ha `ricarico_bp`),
+`solo_da_rivedere`, `limite` (2000, al massimo 5000). Solo articoli attivi con costo e un ricarico.
+Righe: `articolo_id`, `codice`, `descrizione`, `fornitore`, `numero_reparto`, `aliquota_bp`,
+`costo_ultimo`, `ricarico_bp` (dell'articolo, può essere null), `ricarico_usato_bp`,
+`prezzo_attuale`, `prezzo_proposto`, `differenza`, `da_rivedere`.
+
+**Applicazione** `POST /rest/v1/rpc/applica_prezzi`
+`{"p": [{"articolo_id": "…", "prezzo_vendita": 397, "ricarico_bp": 3000}]}` → numero di articoli.
+Tutto o niente; `ricarico_bp` facoltativo (se c'è, resta salvato nell'articolo). I prezzi cambiati
+finiscono in `articoli_prezzi` e tra le etichette da ristampare; un prezzo uguale all'attuale
+lascia una riga `origine = 'confermato'` (il prezzo è stato guardato e va bene così).
+Errori `P0001`: `Elenco dei prezzi mancante`, `Prezzo non valido per l'articolo …`,
+`Articolo … inesistente`. Ruoli di entrambe: amministratore, responsabile.
+
+**Prezzi da rivedere** `GET /rest/v1/v_prezzi_da_rivedere`: articoli con `ricarico_bp` il cui costo
+è salito (un carico o una modifica) dopo l'ultima volta che il prezzo è stato cambiato o confermato,
+e che ora stanno sotto il prezzo del ricarico. Colonne: `articolo_id`, `codice`, `descrizione`,
+`fornitore`, `numero_reparto`, `costo_ultimo`, `ricarico_bp`, `prezzo_attuale`, `prezzo_proposto`,
+`costo_salito_at`. La gestione la legge dopo ogni carico (`articolo_id=in.(…)`) e per l'avviso
+sulla pagina Articoli.
+
+<a id="cruscotto"></a>
+### Cruscotto: `cruscotto`, `salute_server`
+
+Migrazioni `20261018000000_cruscotto.sql` e `20261018000100_salute_server.sql`; ruoli amministratore e
+responsabile.
+
+`POST /rest/v1/rpc/cruscotto` `{"p_giorno": "2026-10-18"}` (null = oggi, ora di Roma) → un oggetto:
+`giorno`; `oggi` `{incasso, scontrini, resi, medio}` (centesimi, resi sottratti); `settimana_scorsa`
+(incasso dello stesso giorno 7 giorni prima); `mese`, `mese_scontrini`; `giorni` (14 elementi
+`{giorno, incasso}`, anche a zero); `ore` (`{ora, incasso}` solo le ore con vendite); `pagamenti`
+(`{tipo, importo}`, contanti al netto del resto); `articoli` (8 più venduti `{descrizione, quantita,
+totale}`); `da_fare` `{fatture_da_controllare, carichi_da_approvare, prezzi_da_rivedere, sottoscorta,
+etichette_da_stampare, resi_da_verificare, chiusure_da_controllare}`; `casse` (`{id, descrizione,
+ultimo_contatto, incasso}`). Legge `vendite` per intervallo di `data_ora` (indicizzato): sui dati
+importati da SystemApp risponde in circa 0,1 s.
+
+`POST /rest/v1/rpc/salute_server` `{}` → `ora_server`, `backup` e `ripristino` (ultimo esito
+`{at, esito, dettaglio, dimensione}` o null), `ultimo_backup_riuscito`, `dimensione_database` (byte),
+`vendite_in_ritardo` (di oggi arrivate più di un'ora dopo l'emissione), `avvisi` (testi da mostrare:
+backup mancante o più vecchio di 36 ore, backup o prova di ripristino non riusciti, prova di
+ripristino più vecchia di 40 giorni). Gli esiti li scrivono `infra/supabase/backup.sh` e
+`prova_ripristino.sh` con `registra_manutenzione` (solo utente postgres); `manutenzione_server` non è
+leggibile dai client.
+
+<a id="proposta_ordine"></a>
+### Proposta d'ordine: `proposta_ordine`
+
+Migrazione `20261018000200_proposta_ordine.sql`; ruoli amministratore, responsabile, magazziniere.
+Sola lettura: non crea ordini (come mandarli e ogni quanto ordinare lo deciderà il negozio).
+
+`POST /rest/v1/rpc/proposta_ordine` `{"p": {"fornitore_id": "…", "giorni": 14, "periodo": 30, "testo": "…", "tutti": false}}`
+(tutti facoltativi; `giorni` da coprire, `periodo` di vendite da cui fare la media, `tutti` anche chi
+non serve ordinare). Articoli attivi con vendite nel periodo o una scorta minima. Righe ordinate per
+fornitore: `articolo_id`, `codice`, `descrizione`, `fornitore_id`, `fornitore`, `codice_fornitore`,
+`unita`, `giacenza`, `scorta_minima`, `venduto` (netto dei resi, millesimi), `media_giorno`,
+`pezzi_collo`, `da_ordinare`, `costo_ultimo`, `valore`, `ultima_vendita`.
+
+`da_ordinare` = ⌈venduto × giorni / periodo⌉ + scorta minima − giacenza; a pezzi si arrotonda per
+eccesso ai pezzi interi e ai colli (`pezzi_collo`), a peso o volume resta esatto. Con le giacenze
+negative importate da SystemApp le proposte sono gonfiate finché non si fa l'inventario.
+PostgREST restituisce al massimo 1000 righe: per l'elenco completo filtrare per fornitore.
+
+<a id="controllo_dati"></a>
+### Controllo dei dati: `controllo_dati`, `controllo_dati_elenco`
+
+Migrazione `20261018000300_controllo_dati.sql`; ruoli amministratore e responsabile; sola lettura.
+
+`POST /rest/v1/rpc/controllo_dati` `{}` → `{"prezzo_zero": 3, "sotto_costo": 40, …, "articoli_attivi": 14442}`;
+`POST /rest/v1/rpc/controllo_dati_elenco` `{"p_problema": "sotto_costo"}` → righe `articolo_id`,
+`codice`, `descrizione`, `dettaglio` (es. "costo 1,95 + IVA = 2,38, prezzo 1,80"), al massimo 1000
+per via del limite di PostgREST. Problemi (solo articoli attivi): `prezzo_zero`, `sotto_costo`
+(prezzo sotto costo + IVA del reparto), `senza_costo`, `senza_barcode`, `barcode_non_validi` (8, 12 o
+13 cifre con la cifra di controllo sbagliata; `ean_valido(text)`), `giacenza_negativa`,
+`fornitore_mancante` (o con "fittizi" nel nome), `descrizioni_doppie` (stessa descrizione senza
+maiuscole e spazi ai lati), `merce_ferma` (giacenza, nessuna vendita da un anno, articolo più vecchio
+di un anno). Sui dati di SystemApp il riepilogo impiega circa 1,4 s.
+
 <a id="rettifica_inventario"></a>
 ### `rettifica_inventario`
 
@@ -946,6 +1033,32 @@ passive](#carichi-passive)).
 
 Il carico si compone dalle righe con `articolo_id` e `spuntato > 0`: `{articolo_id, quantita:
 spuntato, costo_unitario, codice_fornitore}`.
+
+### Carichi da approvare: `proponi_carico`, `approva_carico`, `rifiuta_carico`
+
+Dal 17/10/2026 (richiesta dell'utente) le **fatture in entrata** cambiano le giacenze solo dopo un
+controllo e un'approvazione: dalla gestione (*Controlla fattura…* → *Approva e carica*) oppure, se la
+merce è stata ricevuta col palmare, approvando la proposta del ricevimento (Magazzino → *Carichi da
+approvare*). La scheda **Carico** del palmare (merce senza fattura elettronica) invece carica subito
+con `carico_magazzino` (migrazione `20261017000200_carichi_da_approvare.sql`; l'origine
+`carico_palmare` resta accettata dal server ma l'app non la usa).
+
+```
+POST /rest/v1/rpc/proponi_carico   { "p": { "id": "<uuid>", "origine": "ricevimento" | "carico_palmare",
+    "fattura_passiva_id"?: "<uuid>", "fornitore_id"?: "<uuid>", "numero_esterno"?: "DDT 5",
+    "righe": [{ "articolo_id", "quantita", "costo_unitario", "codice_fornitore"?, "atteso"? }] } }   → uuid
+POST /rest/v1/rpc/approva_carico   { "p_id": "<uuid>", "p_righe"?: [ ...righe corrette... ] }  → documento di carico
+POST /rest/v1/rpc/rifiuta_carico   { "p_id": "<uuid>", "p_motivo": "..." }
+GET  /rest/v1/v_carichi_da_approvare?order=proposto_at
+```
+
+Proporre: amministratore, responsabile, magazziniere. Approvare e rifiutare: amministratore,
+responsabile. Una sola proposta aperta per fattura; `v_fatture_passive_da_caricare.carico_proposto_id`
+dice se una fattura è già in attesa. `atteso` = quantità in fattura, per vedere le differenze.
+La vista dà le righe con `codice`, `descrizione`, `unita`, `giacenza` attuale, `fornitore`,
+`fattura_numero`, `numero_righe`, `totale_costo`, `proposto_da`.
+Il carico fatto dalla gestione (*Carico da fattura*, *Carico merce*) è già un'approvazione: chiede
+conferma e registra subito.
 
 ### Carico dal palmare e articoli nuovi: `crea_articolo`
 

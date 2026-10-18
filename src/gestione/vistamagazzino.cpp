@@ -1,6 +1,7 @@
 #include "vistamagazzino.h"
 
 #include "dialogoimportazione.h"
+#include "dialogoordine.h"
 
 #include "comune.h"
 #include "core/quantita.h"
@@ -9,6 +10,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -22,6 +24,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSplitter>
+#include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -37,8 +40,20 @@ QTableWidgetItem* modificabile(const QString& testo)
 }
 
 // Carico merce a mano: righe con articolo, quantità e costo unitario netto (rpc carico_magazzino).
+QStringList articoliDi(const QJsonArray& righe)
+{
+    QStringList out;
+    for (const auto& r : righe) {
+        const QString id = r.toObject().value("articolo_id").toString();
+        if (!id.isEmpty() && !out.contains(id))
+            out << id;
+    }
+    return out;
+}
+
 class DialogoCarico : public QDialog {
 public:
+    QStringList caricati;   // articoli del carico registrato
     DialogoCarico(ClientServer& client, QWidget* parent)
         : QDialog(parent)
         , m_client(client)
@@ -183,7 +198,7 @@ private:
             p.insert("note", m_note->text().trimmed());
         m_ok->setEnabled(false);
         QPointer<DialogoCarico> io(this);
-        m_client.rpc(QStringLiteral("carico_magazzino"), {{"p", p}}, [io](const RispostaServer& risposta) {
+        m_client.rpc(QStringLiteral("carico_magazzino"), {{"p", p}}, [io, inviate = *r](const RispostaServer& risposta) {
             if (!io)
                 return;
             if (!risposta.ok()) {
@@ -191,6 +206,7 @@ private:
                 io->m_ok->setEnabled(true);
                 return;
             }
+            io->caricati = articoliDi(inviate);
             io->accept();
         });
     }
@@ -212,6 +228,11 @@ private:
 // che non sono merce e corregge le confezioni. carico_magazzino collega la fattura al carico.
 class DialogoCaricoFattura : public QDialog {
     enum Colonna { Carica, InFattura, QtaFattura, Articolo, Quantita_, Costo, Abbinamento, NumeroColonne };
+
+public:
+    QStringList caricati;   // articoli del carico registrato
+
+private:
 
     struct Riga {
         QString articoloId;
@@ -282,7 +303,8 @@ public:
 
         auto* bottoni = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
         m_ok = bottoni->button(QDialogButtonBox::Ok);
-        m_ok->setText(QStringLiteral("Registra il carico"));
+        m_ok->setText(QStringLiteral("Approva e carica"));
+        m_ok->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
         m_ok->setEnabled(false);
         layout->addWidget(bottoni);
 
@@ -457,12 +479,20 @@ private:
         const auto r = righe(&totale);
         if (!r || r->isEmpty())
             return;
+        // Approvazione esplicita: le giacenze cambiano solo da qui
+        if (QMessageBox::question(this, windowTitle(),
+                                  QStringLiteral("Approvare il carico della fattura %1: %2 righe, %3 al costo?\n\n"
+                                                 "Le giacenze aumentano subito.")
+                                      .arg(m_fattura.value("numero").toString()).arg(r->size())
+                                      .arg(euro(Money::fromCents(totale))))
+            != QMessageBox::Yes)
+            return;
         QJsonObject p{{"fattura_passiva_id", m_fattura.value("id").toString()}, {"righe", *r}};
         if (m_fornitore->currentData().isValid())
             p.insert("fornitore_id", m_fornitore->currentData().toString());
         m_ok->setEnabled(false);
         QPointer<DialogoCaricoFattura> io(this);
-        m_client.rpc(QStringLiteral("carico_magazzino"), {{"p", p}}, [io](const RispostaServer& risposta) {
+        m_client.rpc(QStringLiteral("carico_magazzino"), {{"p", p}}, [io, inviate = *r](const RispostaServer& risposta) {
             if (!io)
                 return;
             if (!risposta.ok()) {
@@ -470,6 +500,7 @@ private:
                 io->m_ok->setEnabled(true);
                 return;
             }
+            io->caricati = articoliDi(inviate);
             io->accept();
         });
     }
@@ -481,6 +512,198 @@ private:
     QLabel* m_totale;
     QPushButton* m_ok;
     QList<Riga> m_righe;
+};
+
+// Carico proposto dal palmare (ricevimento contro la fattura o scheda Carico): chi approva controlla
+// le righe, corregge quantità e costi o toglie le righe, poi approva (approva_carico: solo allora le
+// giacenze cambiano) oppure rifiuta con un motivo.
+class DialogoApprovaCarico : public QDialog {
+    enum Colonna { Carica, Articolo, InFattura, Quantita_, Costo, Giacenza, NumeroColonne };
+
+public:
+    QStringList caricati;   // articoli del carico approvato (vuoto se rifiutato)
+
+private:
+
+public:
+    DialogoApprovaCarico(ClientServer& client, const QJsonObject& carico, QWidget* parent)
+        : QDialog(parent)
+        , m_client(client)
+        , m_id(carico.value("id").toString())
+    {
+        const bool ricevimento = carico.value("origine").toString() == QLatin1String("ricevimento");
+        setWindowTitle(QStringLiteral("Carico da approvare — %1").arg(carico.value("fornitore").toString()));
+        resize(980, 600);
+        auto* layout = new QVBoxLayout(this);
+        const auto quando = QDateTime::fromString(carico.value("proposto_at").toString(), Qt::ISODate).toLocalTime();
+        QString documento = ricevimento ? QStringLiteral("Ricevimento della fattura <b>%1</b>").arg(carico.value("fattura_numero").toString())
+                                        : QStringLiteral("Carico dal palmare%1").arg(carico.value("numero_esterno").toString().isEmpty()
+                                                                                     ? QString()
+                                                                                     : QStringLiteral(", documento <b>%1</b>")
+                                                                                           .arg(carico.value("numero_esterno").toString()));
+        auto* intestazione = new QLabel(QStringLiteral("%1 — fornitore <b>%2</b><br>Proposto da %3 il %4. Le giacenze cambiano "
+                                                       "solo quando si approva.")
+                                            .arg(documento, carico.value("fornitore").toString().toHtmlEscaped(),
+                                                 carico.value("proposto_da").toString().toHtmlEscaped(),
+                                                 quando.toString(QStringLiteral("dd/MM/yyyy HH:mm"))), this);
+        intestazione->setWordWrap(true);
+        layout->addWidget(intestazione);
+        if (ricevimento) {
+            auto* spiega = new QLabel(QStringLiteral("In arancione le righe dove l'arrivato è diverso dalla fattura."), this);
+            spiega->setStyleSheet(QStringLiteral("color: #e65100;"));
+            layout->addWidget(spiega);
+        }
+
+        m_tabella = new QTableWidget(0, NumeroColonne, this);
+        m_tabella->setObjectName("righe_approvazione");
+        m_tabella->setHorizontalHeaderLabels({QStringLiteral("Carica"), QStringLiteral("Articolo"), QStringLiteral("In fattura"),
+                                              QStringLiteral("Quantità"), QStringLiteral("Costo netto €"),
+                                              QStringLiteral("Giacenza ora")});
+        m_tabella->horizontalHeader()->setSectionResizeMode(Articolo, QHeaderView::Stretch);
+        m_tabella->verticalHeader()->setVisible(false);
+        layout->addWidget(m_tabella, 1);
+        for (const auto& v : carico.value("righe").toArray())
+            aggiungiRiga(v.toObject());
+
+        auto* sotto = new QHBoxLayout;
+        auto* rifiuta = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("Rifiuta…"), this);
+        rifiuta->setObjectName("rifiuta_carico");
+        sotto->addWidget(rifiuta);
+        sotto->addStretch();
+        m_totale = new QLabel(this);
+        m_totale->setFont(fontGrande(font(), 12, true));
+        sotto->addWidget(m_totale);
+        layout->addLayout(sotto);
+
+        auto* bottoni = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+        m_ok = bottoni->button(QDialogButtonBox::Ok);
+        m_ok->setText(QStringLiteral("Approva e carica"));
+        m_ok->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+        m_ok->setObjectName("approva_carico");
+        layout->addWidget(bottoni);
+
+        connect(m_tabella, &QTableWidget::itemChanged, this, [this] { ricalcola(); });
+        connect(rifiuta, &QPushButton::clicked, this, &DialogoApprovaCarico::rifiuta);
+        connect(bottoni, &QDialogButtonBox::accepted, this, &DialogoApprovaCarico::approva);
+        connect(bottoni, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        ricalcola();
+    }
+
+private:
+    void aggiungiRiga(const QJsonObject& p)
+    {
+        const QSignalBlocker blocco(m_tabella);
+        const int r = m_tabella->rowCount();
+        m_tabella->insertRow(r);
+        m_articoli.append(p.value("articolo_id").toString());
+        m_codiciFornitore.append(p.value("codice_fornitore").toString());
+        auto* carica = new QTableWidgetItem;
+        carica->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        carica->setCheckState(Qt::Checked);
+        m_tabella->setItem(r, Carica, carica);
+        m_tabella->setItem(r, Articolo, cella(QStringLiteral("%1 — %2").arg(p.value("codice").toString(), p.value("descrizione").toString())));
+        const bool conAtteso = p.contains("atteso") && !p.value("atteso").isNull();
+        m_tabella->setItem(r, InFattura, cella(conAtteso ? Quantita::fromMillesimi(p.value("atteso").toInteger()).toString() : QString(), true));
+        m_tabella->setItem(r, Quantita_, modificabile(Quantita::fromMillesimi(p.value("quantita").toInteger()).toString()));
+        m_tabella->setItem(r, Costo, modificabile(Money::fromCents(p.value("costo_unitario").toInteger()).toString()));
+        m_tabella->setItem(r, Giacenza, cella(Quantita::fromMillesimi(p.value("giacenza").toInteger()).toString(), true));
+        if (conAtteso && p.value("atteso").toInteger() != p.value("quantita").toInteger())
+            for (int c = 0; c < NumeroColonne; ++c)
+                m_tabella->item(r, c)->setBackground(QColor(230, 81, 0, 60));
+    }
+
+    std::optional<QJsonArray> righe(qint64* totale)
+    {
+        QJsonArray out;
+        bool valide = true;
+        *totale = 0;
+        const QSignalBlocker blocco(m_tabella);
+        for (int r = 0; r < m_tabella->rowCount(); ++r) {
+            if (m_tabella->item(r, Carica)->checkState() != Qt::Checked)
+                continue;
+            const auto q = Quantita::parse(m_tabella->item(r, Quantita_)->text());
+            const auto c = Money::parse(m_tabella->item(r, Costo)->text());
+            const bool ok = q && *q > Quantita() && c && *c >= Money();
+            m_tabella->item(r, Quantita_)->setForeground(ok ? palette().text() : QBrush(Qt::red));
+            m_tabella->item(r, Costo)->setForeground(ok ? palette().text() : QBrush(Qt::red));
+            if (!ok) {
+                valide = false;
+                continue;
+            }
+            QJsonObject riga{{"articolo_id", m_articoli[r]}, {"quantita", qint64(q->millesimi())},
+                             {"costo_unitario", qint64(c->cents())}};
+            if (!m_codiciFornitore[r].isEmpty())
+                riga.insert("codice_fornitore", m_codiciFornitore[r]);
+            out.append(riga);
+            *totale += (*c * *q).cents();
+        }
+        if (!valide)
+            return std::nullopt;
+        return out;
+    }
+
+    void ricalcola()
+    {
+        qint64 totale = 0;
+        const auto r = righe(&totale);
+        m_totale->setText(!r ? QStringLiteral("Quantità o costi non validi (in rosso)")
+                             : QStringLiteral("%1 righe — %2 al costo").arg(r->size()).arg(euro(Money::fromCents(totale))));
+        m_ok->setEnabled(r && !r->isEmpty());
+    }
+
+    void approva()
+    {
+        qint64 totale = 0;
+        const auto r = righe(&totale);
+        if (!r || r->isEmpty())
+            return;
+        if (QMessageBox::question(this, windowTitle(),
+                                  QStringLiteral("Approvare il carico di %1 articoli (%2 al costo)?\n\nLe giacenze aumentano subito.")
+                                      .arg(r->size()).arg(euro(Money::fromCents(totale))))
+            != QMessageBox::Yes)
+            return;
+        m_ok->setEnabled(false);
+        QPointer<DialogoApprovaCarico> io(this);
+        m_client.rpc(QStringLiteral("approva_carico"), {{"p_id", m_id}, {"p_righe", *r}}, [io, inviate = *r](const RispostaServer& risposta) {
+            if (!io)
+                return;
+            if (!risposta.ok()) {
+                mostraErroreServer(io, io->windowTitle(), risposta);
+                io->m_ok->setEnabled(true);
+                return;
+            }
+            io->caricati = articoliDi(inviate);
+            io->accept();
+        });
+    }
+
+    void rifiuta()
+    {
+        bool ok = false;
+        const QString motivo = QInputDialog::getText(this, QStringLiteral("Rifiuta il carico"),
+                                                     QStringLiteral("Motivo (lo vede chi ha fatto il carico):"),
+                                                     QLineEdit::Normal, {}, &ok).trimmed();
+        if (!ok || motivo.isEmpty())
+            return;
+        QPointer<DialogoApprovaCarico> io(this);
+        m_client.rpc(QStringLiteral("rifiuta_carico"), {{"p_id", m_id}, {"p_motivo", motivo}}, [io](const RispostaServer& risposta) {
+            if (!io)
+                return;
+            if (!risposta.ok()) {
+                mostraErroreServer(io, io->windowTitle(), risposta);
+                return;
+            }
+            io->accept();
+        });
+    }
+
+    ClientServer& m_client;
+    QString m_id;
+    QTableWidget* m_tabella;
+    QLabel* m_totale;
+    QPushButton* m_ok;
+    QStringList m_articoli;
+    QStringList m_codiciFornitore;
 };
 
 // Inventario di un articolo: quantità contata -> rettifica (rpc rettifica_inventario).
@@ -590,20 +813,28 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
 {
     auto* layout = new QVBoxLayout(this);
     auto* barra = new QHBoxLayout;
-    auto* carico = new QPushButton(QStringLiteral("Carico merce…"), this);
-    auto* daFattura = new QPushButton(QStringLiteral("Carica da fattura…"), this);
-    auto* inventario = new QPushButton(QStringLiteral("Inventario…"), this);
-    auto* aggiorna = new QPushButton(QStringLiteral("Aggiorna"), this);
+    auto* carico = new QPushButton(style()->standardIcon(QStyle::SP_ArrowDown), QStringLiteral("Carico merce…"), this);
+    auto* daFattura = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogDetailedView), QStringLiteral("Controlla fattura…"), this);
+    auto* inventario = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogListView), QStringLiteral("Inventario…"), this);
+    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
     carico->setObjectName("carico");
     daFattura->setObjectName("carico_da_fattura");
     inventario->setObjectName("inventario");
     barra->addWidget(carico);
     barra->addWidget(daFattura);
-    auto* importa = new QPushButton(QStringLiteral("Giacenze da file…"), this);
+    auto* importa = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Giacenze da file…"), this);
     importa->setObjectName("importa_giacenze");
     importa->setToolTip(QStringLiteral("Inventario da CSV o Excel: codice e quantità contata"));
     barra->addWidget(inventario);
     barra->addWidget(importa);
+    auto* ordine = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogDetailedView), QStringLiteral("Proposta d'ordine…"), this);
+    ordine->setObjectName("proposta_ordine");
+    ordine->setToolTip(QStringLiteral("Quanto ordinare da ogni fornitore per coprire i prossimi giorni, dalle vendite recenti"));
+    barra->addWidget(ordine);
+    connect(ordine, &QPushButton::clicked, this, [this] {
+        DialogoOrdine d(m_client, this);
+        d.exec();
+    });
     barra->addStretch();
     connect(importa, &QPushButton::clicked, this, [this] {
         importaDaFile(m_client, TipoImportazione::Giacenze, this, [this] { this->aggiorna(); });
@@ -613,11 +844,38 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
 
     auto* divisore = new QSplitter(Qt::Vertical, this);
 
+    auto* approvare = new QWidget(divisore);
+    auto* lap = new QVBoxLayout(approvare);
+    lap->setContentsMargins(0, 0, 0, 0);
+    lap->addWidget(new QLabel(QStringLiteral("<b>Carichi da approvare</b> — merce letta dal palmare: le giacenze cambiano "
+                                             "solo dopo l'approvazione (doppio clic per controllare)"), approvare));
+    m_daApprovare = new TabellaServer({
+        {"proposto_at", QStringLiteral("Quando"), ColonnaServer::Testo,
+         [](const QJsonObject& r) {
+             return QDateTime::fromString(r.value("proposto_at").toString(), Qt::ISODate).toLocalTime().toString(QStringLiteral("dd/MM HH:mm"));
+         }},
+        {"origine", QStringLiteral("Da"), ColonnaServer::Testo,
+         [](const QJsonObject& r) {
+             return r.value("origine").toString() == QLatin1String("ricevimento")
+                        ? QStringLiteral("Ricevimento fattura %1").arg(r.value("fattura_numero").toString())
+                        : QStringLiteral("Carico palmare%1").arg(r.value("numero_esterno").toString().isEmpty()
+                                                                     ? QString() : QStringLiteral(" (%1)").arg(r.value("numero_esterno").toString()));
+         }},
+        {"fornitore", QStringLiteral("Fornitore")},
+        {"numero_righe", QStringLiteral("Righe"), ColonnaServer::Intero},
+        {"totale_costo", QStringLiteral("Totale al costo €"), ColonnaServer::Euro},
+        {"proposto_da", QStringLiteral("Proposto da")},
+    }, approvare);
+    m_daApprovare->setObjectName("da_approvare");
+    m_daApprovare->testoVuoto = QStringLiteral("Nessun carico in attesa");
+    m_daApprovare->evidenzia = [](const QJsonObject&) { return true; };
+    lap->addWidget(m_daApprovare);
+
     auto* passive = new QWidget(divisore);
     auto* lpa = new QVBoxLayout(passive);
     lpa->setContentsMargins(0, 0, 0, 0);
-    lpa->addWidget(new QLabel(QStringLiteral("<b>Fatture passive da caricare</b> — arrivate dallo SDI "
-                                             "(doppio clic per caricarle)"), passive));
+    lpa->addWidget(new QLabel(QStringLiteral("<b>Fatture in entrata da controllare</b> — arrivate dallo SDI: il carico va controllato e approvato "
+                                             "(doppio clic)"), passive));
     m_passive = new TabellaServer({
         {"data", QStringLiteral("Data"), ColonnaServer::Data},
         {"numero", QStringLiteral("Numero")},
@@ -631,6 +889,8 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
         {"totale", QStringLiteral("Totale €"), ColonnaServer::Euro},
         {"xml", QStringLiteral("Stato righe"), ColonnaServer::Testo,
          [](const QJsonObject& r) {
+             if (!r.value("carico_proposto_id").isNull() && !r.value("carico_proposto_id").toString().isEmpty())
+                 return QStringLiteral("ricevuta col palmare: da approvare");
              if (!r.value("xml_errore").toString().isEmpty())
                  return QStringLiteral("XML non leggibile: a mano");
              return r.value("xml_scaricato").toBool() ? QStringLiteral("pronte") : QStringLiteral("in arrivo");
@@ -680,12 +940,14 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     connect(carico, &QPushButton::clicked, this, &VistaMagazzino::apriCarico);
     connect(daFattura, &QPushButton::clicked, this, &VistaMagazzino::apriCaricoDaFattura);
     connect(m_passive, &TabellaServer::attivata, this, [this] { apriCaricoDaFattura(); });
+    connect(m_daApprovare, &TabellaServer::attivata, this, &VistaMagazzino::apriApprovazione);
     connect(inventario, &QPushButton::clicked, this, &VistaMagazzino::apriInventario);
     connect(aggiorna, &QPushButton::clicked, this, &VistaMagazzino::aggiorna);
 }
 
 void VistaMagazzino::aggiorna()
 {
+    m_daApprovare->carica(m_client, QStringLiteral("v_carichi_da_approvare?order=proposto_at"));
     m_passive->carica(m_client, QStringLiteral("v_fatture_passive_da_caricare?order=data.desc&limit=200"));
     // Solo gli articoli con una scorta minima: senza il filtro ogni giacenza negativa (migliaia,
     // portate così da SystemApp) finirebbe tra quelli da riordinare.
@@ -693,13 +955,16 @@ void VistaMagazzino::aggiorna()
     m_carichi->carica(m_client, QStringLiteral("documenti?select=id,anno,numero,data,numero_esterno,imponibile,totale,"
                                                "fornitori(ragione_sociale)&tipo=eq.carico_fornitore"
                                                "&order=data.desc,numero.desc&limit=50"));
+    emit cambiato();
 }
 
 void VistaMagazzino::apriCarico()
 {
     DialogoCarico d(m_client, this);
-    if (d.exec() == QDialog::Accepted)
+    if (d.exec() == QDialog::Accepted) {
         aggiorna();
+        controllaPrezzi(d.caricati);
+    }
 }
 
 void VistaMagazzino::apriCaricoDaFattura()
@@ -710,9 +975,71 @@ void VistaMagazzino::apriCaricoDaFattura()
                                  QStringLiteral("Selezionare una fattura passiva dall'elenco."));
         return;
     }
+    // Già ricevuta col palmare: si approva quel carico
+    const QString proposto = fattura->value("carico_proposto_id").toString();
+    if (!proposto.isEmpty()) {
+        QPointer<VistaMagazzino> io(this);
+        m_client.leggi(QStringLiteral("v_carichi_da_approvare?id=eq.") + proposto, [io](const RispostaServer& r) {
+            if (!io)
+                return;
+            const auto righe = r.json().array();
+            if (!r.ok() || righe.isEmpty()) {
+                io->aggiorna();
+                return;
+            }
+            io->apriApprovazione(righe.first().toObject());
+        });
+        return;
+    }
     DialogoCaricoFattura d(m_client, *fattura, this);
-    if (d.exec() == QDialog::Accepted)
+    if (d.exec() == QDialog::Accepted) {
         aggiorna();
+        controllaPrezzi(d.caricati);
+    }
+}
+
+void VistaMagazzino::apriApprovazione(const QJsonObject& carico)
+{
+    DialogoApprovaCarico d(m_client, carico, this);
+    if (d.exec() == QDialog::Accepted) {
+        aggiorna();
+        controllaPrezzi(d.caricati);
+    }
+}
+
+void VistaMagazzino::controllaPrezzi(const QStringList& articoli)
+{
+    if (articoli.isEmpty())
+        return;
+    QPointer<VistaMagazzino> io(this);
+    m_client.leggi(QStringLiteral("v_prezzi_da_rivedere?select=articolo_id,descrizione,prezzo_attuale,prezzo_proposto"
+                                  "&order=descrizione&articolo_id=in.(%1)").arg(articoli.join(QLatin1Char(','))),
+                   [io](const RispostaServer& r) {
+        if (!io || !r.ok())
+            return;
+        const auto righe = r.json().array();
+        if (righe.isEmpty())
+            return;
+        QStringList elenco, ids;
+        for (const auto& v : righe) {
+            const auto a = v.toObject();
+            ids << a.value("articolo_id").toString();
+            if (elenco.size() < 8)
+                elenco << QStringLiteral("• %1: %2 → %3")
+                              .arg(a.value("descrizione").toString(),
+                                   euro(Money::fromCents(a.value("prezzo_attuale").toInteger())),
+                                   euro(Money::fromCents(a.value("prezzo_proposto").toInteger())));
+        }
+        if (righe.size() > elenco.size())
+            elenco << QStringLiteral("… e altri %1").arg(righe.size() - elenco.size());
+        const auto scelta = QMessageBox::question(
+            io, QStringLiteral("Prezzi da rivedere"),
+            QStringLiteral("Con questo carico il costo di %1 articoli è salito e il prezzo è sotto quello del ricarico "
+                           "voluto:\n\n%2\n\nRivederli adesso?").arg(righe.size()).arg(elenco.join(QLatin1Char('\n'))));
+        emit io->cambiato();
+        if (scelta == QMessageBox::Yes)
+            emit io->rivediPrezzi(QJsonObject{{"articoli", QJsonArray::fromStringList(ids)}});
+    });
 }
 
 void VistaMagazzino::apriInventario()

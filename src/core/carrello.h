@@ -35,6 +35,10 @@ public:
     void quantitaRiga(int indice, Quantita q);   // azzera lo sconto della riga
     void scontoRiga(int indice, Money sconto);
     void scontoPercentualeRiga(int indice, int basisPoints);
+    // Sconto sul totale, diviso tra le righe in proporzione al loro importo (il registratore lo
+    // stampa riga per riga, il server non cambia); i centesimi che avanzano vanno sulla riga più
+    // grande. false (e niente cambia) se l'importo non è tra 0 e il totale escluso.
+    bool scontoTotale(Money importo);
     void svuota();
 
     const QList<RigaCarrello>& righe() const { return m_righe; }

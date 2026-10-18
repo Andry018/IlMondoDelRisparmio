@@ -16,6 +16,7 @@
 #include <QNetworkInterface>
 #include <QPainter>
 #include <QPushButton>
+#include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -115,7 +116,7 @@ VistaPalmare::VistaPalmare(QWidget* parent)
     m_dettagli->setTextInteractionFlags(Qt::TextSelectableByMouse);
     sinistra->addWidget(m_dettagli);
 
-    auto* bAggiorna = new QPushButton(QStringLiteral("Aggiorna (rete cambiata)"), this);
+    auto* bAggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna (rete cambiata)"), this);
     connect(bAggiorna, &QPushButton::clicked, this, &VistaPalmare::aggiorna);
     sinistra->addWidget(bAggiorna, 0, Qt::AlignLeft);
     sinistra->addStretch();

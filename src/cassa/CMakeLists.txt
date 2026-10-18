@@ -5,6 +5,9 @@ qt_add_resources(MDR_RISORSE_CASSA risorse/risorse.qrc)
 add_library(mdr_cassa STATIC
     dialogocontanti.h    dialogocontanti.cpp
     dialogooperatore.h   dialogooperatore.cpp
+    aspettocassa.h       aspettocassa.cpp
+    vistaaspetto.h       vistaaspetto.cpp
+    schermocliente.h     schermocliente.cpp
     vistacassa.h         vistacassa.cpp
     vistavendite.h       vistavendite.cpp
     finestracassa.h      finestracassa.cpp

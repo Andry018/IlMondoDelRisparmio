@@ -16,24 +16,36 @@ CONTAINER=${MDR_DB_CONTAINER:-supabase-db}
 mkdir -p "$DEST"
 FILE="$DEST/mdr_$(date +%F_%H%M).dump"
 
+# Esito nel database (salute_server, cruscotto della gestione): anche un backup fallito si vede
+registra() {   # esito dettaglio [byte]
+    docker exec -i "$CONTAINER" psql -X -q -U postgres -d postgres -v ON_ERROR_STOP=1         -v esito="$1" -v dettaglio="$2" -v byte="${3:-}" > /dev/null 2>&1 <<'SQL' || echo "Avviso: esito non registrato nel database" >&2
+select registra_manutenzione('backup', :'esito'::boolean, :'dettaglio', nullif(:'byte', '')::bigint);
+SQL
+}
+fallito() {
+    echo "ERRORE: $1" >&2
+    registra false "$1"
+    exit 1
+}
+trap 'fallito "comando non riuscito alla riga $LINENO"' ERR
+
 docker exec "$CONTAINER" pg_dump -U postgres -d postgres -Fc > "$FILE.parziale"
 
 # Il dump deve leggersi e contenere i dati delle tabelle che contano
 indice=$(docker exec -i "$CONTAINER" pg_restore --list < "$FILE.parziale")
 for t in articoli vendite vendite_righe movimenti_magazzino operatori fatture_sdi; do
     if ! grep -q "TABLE DATA public $t " <<< "$indice"; then
-        echo "ERRORE: nel dump mancano i dati di public.$t: backup NON valido ($FILE.parziale)" >&2
-        exit 1
+        fallito "nel dump mancano i dati di public.$t: backup NON valido ($FILE.parziale)"
     fi
 done
-grep -q "TABLE DATA auth users " <<< "$indice" || { echo "ERRORE: nel dump mancano gli utenti (auth.users)" >&2; exit 1; }
+grep -q "TABLE DATA auth users " <<< "$indice" || fallito "nel dump mancano gli utenti (auth.users)"
 mv "$FILE.parziale" "$FILE"
 echo "Backup: $FILE ($(du -h "$FILE" | cut -f1))"
 
 if [ -n "${MDR_BACKUP_COPIA:-}" ]; then
     mkdir -p "$MDR_BACKUP_COPIA"
     cp "$FILE" "$MDR_BACKUP_COPIA/"
-    cmp -s "$FILE" "$MDR_BACKUP_COPIA/$(basename "$FILE")" || { echo "ERRORE: copia su $MDR_BACKUP_COPIA non riuscita" >&2; exit 1; }
+    cmp -s "$FILE" "$MDR_BACKUP_COPIA/$(basename "$FILE")" || fallito "copia su $MDR_BACKUP_COPIA non riuscita"
     echo "Copia: $MDR_BACKUP_COPIA/$(basename "$FILE")"
 fi
 
@@ -55,5 +67,6 @@ ruota() {
     done
 }
 ruota "$DEST"
-[ -n "${MDR_BACKUP_COPIA:-}" ] && ruota "$MDR_BACKUP_COPIA"
+if [ -n "${MDR_BACKUP_COPIA:-}" ]; then ruota "$MDR_BACKUP_COPIA"; fi
+registra true "$FILE${MDR_BACKUP_COPIA:+ (copia su $MDR_BACKUP_COPIA)}" "$(stat -c %s "$FILE")"
 exit 0

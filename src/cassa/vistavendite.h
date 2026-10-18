@@ -2,10 +2,13 @@
 
 #include "locale/operazionicassa.h"
 
+#include <QDialog>
 #include <QWidget>
+#include <functional>
 
 class QDateEdit;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QTableWidget;
 
@@ -19,6 +22,11 @@ public:
     VistaVendite(ArchivioLocale& archivio, OperazioniCassa& operazioni, QWidget* parent = nullptr);
 
     void aggiorna();
+    void reso();     // reso dello scontrino scelto (finestra guidata)
+    void filtra();   // ricerca per numero di documento o barcode di un articolo
+
+    // Apre le finestre (exec); sostituibile nei test per toccare i tasti della finestra di reso.
+    std::function<int(QDialog&)> esegui = [](QDialog& d) { return d.exec(); };
 
 signals:
     void documentoEmesso();
@@ -26,7 +34,6 @@ signals:
 private:
     void mostraDettaglio();
     void annulla();
-    void reso();
     std::optional<VenditaLocale> selezionata() const;
 
     ArchivioLocale& m_archivio;
@@ -34,6 +41,7 @@ private:
     QList<VenditaLocale> m_vendite;
 
     QDateEdit* m_giorno = nullptr;
+    QLineEdit* m_cerca = nullptr;
     QTableWidget* m_tabella = nullptr;
     QTableWidget* m_dettaglio = nullptr;
     QLabel* m_intestazione = nullptr;

@@ -825,7 +825,8 @@ async function vistaRicevimenti() {
         const li = html(`<li class="riga-elenco toccabile">
             <div class="bollo-icona arancio">${icona("camion")}</div>
             <div class="testo"><b>${esc(f.fornitore || "Fornitore sconosciuto")}</b>
-                <small>n. ${esc(f.numero)} · ${esc(new Date(f.data).toLocaleDateString("it-IT"))} · ${f.righe} righe</small></div>
+                <small>n. ${esc(f.numero)} · ${esc(new Date(f.data).toLocaleDateString("it-IT"))} · ${f.righe} righe${
+                    f.carico_proposto_id ? ` · <b style="color:var(--arancio, #e65100)">in attesa di approvazione</b>` : ""}</small></div>
             <div class="num">${euro(f.totale)}</div>${icona("avanti")}</li>`).firstElementChild;
         li.addEventListener("click", () => mostra(vistaRicevimento, f));
         ul.appendChild(li);
@@ -877,7 +878,7 @@ async function vistaRicevimento(f) {
                 <li class="riga-elenco"><div class="testo"><b>${esc(r.descrizione)}</b>
                     <small>${r.articolo_id ? esc(r.codice) : "non in anagrafica"}${r.codice_fornitore ? ` · forn. ${esc(r.codice_fornitore)}` : ""}</small></div>
                     <span class="pastiglia ${r.differenza === 0 ? "ok" : r.differenza < 0 ? "meno" : "piu"}">${testoDaMillesimi(r.spuntato)} / ${testoDaMillesimi(r.atteso)}</span></li>`).join("")}</ul>
-            <div class="tasti"><button class="tasto pieno largo" id="carica">${icona("scatola")}Carica in magazzino</button></div>`));
+            <div class="tasti"><button class="tasto pieno largo" id="carica">${icona("scatola")}Invia per approvazione</button></div>`));
         $("#carica", tabella).addEventListener("click", carica);
     }
 
@@ -885,18 +886,19 @@ async function vistaRicevimento(f) {
         const daCaricare = righe.filter((r) => r.articolo_id && r.spuntato > 0);
         if (!daCaricare.length) { avviso("Nessun articolo spuntato", "errore"); return; }
         const diverse = righe.filter((r) => r.differenza !== 0).length;
-        if (!await conferma(`Caricare ${daCaricare.length} articoli?`,
-            diverse ? `${diverse} righe non corrispondono alla fattura: si carica quanto è arrivato.` : "Tutto corrisponde alla fattura.",
-            { tasto: "Carica" })) return;
+        if (!await conferma(`Inviare ${daCaricare.length} articoli per l'approvazione?`,
+            (diverse ? `${diverse} righe non corrispondono alla fattura: si propone quanto è arrivato. ` : "Tutto corrisponde alla fattura. ")
+            + "Le giacenze cambiano quando il carico viene approvato nella gestione.",
+            { tasto: "Invia" })) return;
         try {
             await coda.invia();
             if (coda.inAttesa) { avviso("Ci sono spunte non ancora inviate", "errore"); return; }
-            await server.rpc("carico_magazzino", { p: {
-                fattura_passiva_id: f.id,
-                righe: daCaricare.map((r) => ({ articolo_id: r.articolo_id, quantita: r.spuntato,
+            await server.rpc("proponi_carico", { p: {
+                id: nuovoId(), origine: "ricevimento", fattura_passiva_id: f.id,
+                righe: daCaricare.map((r) => ({ articolo_id: r.articolo_id, quantita: r.spuntato, atteso: r.atteso,
                                                 costo_unitario: r.costo_unitario ?? 0, codice_fornitore: r.codice_fornitore })),
             } });
-            avviso("Merce caricata in magazzino");
+            avviso("Inviato per l'approvazione: le giacenze cambiano quando la gestione lo approva");
             mostraScheda("ricevimento");
         } catch (e) { errore(e); }
     }
@@ -995,6 +997,7 @@ async function vistaCarico() {
         const righe = leggiCarico();
         if (!selFornitore.value) { avviso("Scegli il fornitore", "errore"); selFornitore.focus(); return; }
         const fornitore = selFornitore.selectedOptions[0].textContent;
+        // Merce senza fattura elettronica: si carica subito (l'approvazione serve alle fatture in entrata)
         if (!await conferma(`Caricare ${righe.length} articoli?`, `Fornitore ${esc(fornitore)}. Le giacenze aumentano subito.`, { tasto: "Carica" })) return;
         try {
             await server.rpc("carico_magazzino", { p: {

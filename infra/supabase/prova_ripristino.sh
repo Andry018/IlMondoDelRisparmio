@@ -46,4 +46,8 @@ if [ $esito -eq 0 ]; then
 else
     echo "PROVA DI RIPRISTINO NON RIUSCITA: vedi /tmp/mdr_prova_ripristino.log" >&2
 fi
+# Esito nel database: il cruscotto della gestione avvisa se manca da più di 40 giorni o non è riuscita
+docker exec -i "$CONTAINER" psql -X -q -U postgres -d postgres -v ON_ERROR_STOP=1     -v esito="$([ $esito -eq 0 ] && echo true || echo false)" -v dettaglio="$(basename "$FILE")" > /dev/null 2>&1 <<'SQL'     || echo "Avviso: esito non registrato nel database" >&2
+select registra_manutenzione('ripristino', :'esito'::boolean, :'dettaglio');
+SQL
 exit $esito

@@ -1,13 +1,16 @@
 ﻿#pragma once
 
+#include "aspettocassa.h"
 #include "core/carrello.h"
 #include "locale/operazionicassa.h"
 
+#include <QPointer>
 #include <QWidget>
 #include <array>
 #include <functional>
 #include <optional>
 
+class QBoxLayout;
 class QGridLayout;
 class QLabel;
 class QLineEdit;
@@ -31,7 +34,11 @@ public:
     bool scontrinoAperto() const { return !m_carrelli[0].vuoto() || !m_carrelli[1].vuoto(); }
     void log(const QString& riga);
     void attiva();          // fuoco sul campo barcode
-    void aggiornaReparti(); // tasti reparto dopo una sincronizzazione
+    void aggiornaReparti(); // tasti reparto e tasti rapidi (dopo una sincronizzazione o un cambio d'aspetto)
+
+    // Tema a parte (applicaTema, per tutta l'applicazione): disposizione, caratteri, tasti.
+    void applicaAspetto(const AspettoCassa& aspetto);
+    const AspettoCassa& aspetto() const { return m_aspetto; }
 
     // Per i test e l'automazione: equivale a digitare il testo e premere Invio.
     void leggi(const QString& testo);
@@ -47,9 +54,13 @@ public:
     // Mostra il prezzo senza aggiungere l'articolo. Senza codice: il prossimo articolo letto
     // viene solo mostrato.
     void verificaPrezzo(const QString& codice = {});
-    // Shopper (0 = 0,05 €, 1 = 0,10 €): l'articolo col suo codice, o un articolo libero se manca.
-    // Un numero digitato prima (es. 3) è la quantità.
-    void vendiShopper(int indice);
+    // Tasto rapido (AspettoCassa::tastiRapidi): l'articolo col suo codice, o un articolo libero
+    // al 22% se manca e il tasto ha un prezzo. Un numero digitato prima (es. 3) è la quantità.
+    void vendiTastoRapido(int indice);
+    // Sconto (tasto Sconto, F3). Per le percentuali valore 10,00 = 10%; per il nuovo totale è
+    // l'importo che il cliente paga. false se non si può (lo dice nel messaggio).
+    enum class ModoSconto { PercentualeRiga, PercentualeTotale, EuroTotale, NuovoTotale };
+    bool applicaSconto(ModoSconto modo, Money valore);
     // Copia dell'ultimo documento emesso (Ctrl+P).
     void ristampaUltimo();
     // Codice fiscale o partita IVA del cliente sullo scontrino (spese sanitarie detraibili).
@@ -64,6 +75,8 @@ signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati
     void chiusuraEseguita();  // dopo la Z: momento buono per installare un aggiornamento
     void operatoreCambiato();
+    void scontrinoCambiato(const Carrello& attivo);     // per la schermata cliente
+    void venditaConclusa(Money totale, Money resto);
 
 private:
     void leggiCodice();
@@ -71,7 +84,7 @@ private:
     void tasto(const QString& testo);
     void quantitaRiga();
     void rimuoviRiga();
-    void scontoRiga();
+    void sconto();   // finestra con i quattro modi
     void emetti();
     void annullaScontrino();
     void chiusuraGiornaliera();
@@ -79,9 +92,12 @@ private:
     void azzeraPagamenti();
     void aggiorna();
     void messaggio(const QString& testo, bool errore = false);
+    void caratteri(QWidget* w, int punti);   // carattere che segue la dimensione del testo scelta
 
     ArchivioLocale& m_archivio;
     OperazioniCassa& m_op;
+    AspettoCassa m_aspetto;
+    QList<QPair<QPointer<QWidget>, int>> m_caratteri;   // widget e punti a dimensione normale
     Carrello& carr() { return m_carrelli[m_attivo]; }
 
     std::array<Carrello, 2> m_carrelli;
@@ -97,18 +113,12 @@ private:
     QLabel* m_messaggio = nullptr;
     QPlainTextEdit* m_giornale = nullptr;
     QGridLayout* m_grigliaReparti = nullptr;
+    QBoxLayout* m_principale = nullptr;
+    QWidget* m_pannelloTastierino = nullptr;
 };
 
 // Prezzo digitato sul tastierino: con la virgola è in euro ("2,50"), senza è in
 // centesimi come sui registratori ("250" = 2,50).
 std::optional<Money> prezzoDaTastierino(const QString& testo);
-
-// Shopper venduti alla cassa: codici degli articoli in archivio (gli stessi di SystemApp).
-struct Shopper {
-    QString etichetta;
-    QString codice;
-    Money prezzo;
-};
-const QList<Shopper>& shopperCassa();
 
 } // namespace mdr

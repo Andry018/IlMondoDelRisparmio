@@ -1,12 +1,15 @@
 #pragma once
 
 #include "finestrabase.h"
+#include "aspettocassa.h"
 #include "locale/operazionicassa.h"
 
 class QLabel;
 
 namespace mdr {
 
+class SchermoCliente;
+class VistaAspetto;
 class VistaCassa;
 class VistaVendite;
 
@@ -20,6 +23,8 @@ public:
 
     VistaCassa* cassa() const { return m_cassa; }
     VistaVendite* vendite() const { return m_vendite; }
+    VistaAspetto* aspetto() const { return m_aspetto; }
+    SchermoCliente* schermoCliente() const { return m_schermoCliente; }
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -34,6 +39,10 @@ private:
 
     VistaCassa* m_cassa = nullptr;
     VistaVendite* m_vendite = nullptr;
+    VistaAspetto* m_aspetto = nullptr;
+    SchermoCliente* m_schermoCliente = nullptr;
+    void applicaAspetto(const AspettoCassa& a);
+    QString m_fileImpostazioni;   // anche l'aspetto della cassa sta lì ([aspetto])
 
     QLabel* m_statoTerminale = nullptr;
     QLabel* m_statoCoda = nullptr;

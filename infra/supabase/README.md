@@ -188,6 +188,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now mdr-backup.timer mdr
 sudo systemctl start mdr-backup.service && journalctl -u mdr-backup -n 20   # prima prova
 ```
 
+Ogni backup e ogni prova di ripristino scrivono l'esito nel database (`registra_manutenzione`): il
+cruscotto della gestione lo mostra e avvisa se l'ultimo backup riuscito ha più di 36 ore, se un
+backup o una prova non sono riusciti, o se la prova di ripristino manca da più di 40 giorni.
+
 Backup ogni notte alle 2:30, prova di ripristino la prima domenica del mese alle 4:00
 (`journalctl -u mdr-prova-ripristino`). Una copia **fuori dal negozio** (chiavetta o disco
 portato a casa una volta a settimana) resta da fare a mano: furto o incendio prendono anche il NAS.

@@ -6,12 +6,15 @@
 #include "vistaarticoli.h"
 #include "vistaarticoliserver.h"
 #include "vistaclienti.h"
+#include "vistacruscotto.h"
+#include "vistaetichette.h"
 #include "vistafatture.h"
 #include "vistacontrolli.h"
 #include "vistamagazzino.h"
 #include "vistapalmare.h"
 #include "vistareport.h"
 
+#include <QJsonArray>
 #include <QLabel>
 #include <QPointer>
 #include <QStackedWidget>
@@ -44,6 +47,7 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
 {
     setWindowTitle(QStringLiteral("Mondo del Risparmio — Gestione"));
 
+    m_cruscotto = new VistaCruscotto(client(), schede());
     // Articoli: sul server se c'è, altrimenti nell'archivio locale (prove senza server).
     m_paginaArticoli = new QStackedWidget(schede());
     m_articoli = new VistaArticoli(archivio, m_paginaArticoli);
@@ -51,6 +55,7 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_paginaArticoli->addWidget(m_articoli);
     m_paginaArticoli->addWidget(m_articoliServer);
     m_magazzino = new VistaMagazzino(client(), schede());
+    m_etichette = new VistaEtichette(client(), schede());
     m_report = new VistaReport(client(), schede());
     m_fatture = new VistaFatture(client(), schede());
     m_clienti = new VistaClienti(client(), schede());
@@ -59,10 +64,12 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_resi = new VistaResi(client(), schede());
     m_operatori = new VistaOperatori(client(), schede());
     m_negozio = new VistaNegozio(client(), schede());
-    m_vistaServer = {m_magazzino, m_report, m_fatture, m_clienti, m_fornitori, m_chiusure, m_resi,
+    m_vistaServer = {m_cruscotto, m_magazzino, m_etichette, m_report, m_fatture, m_clienti, m_fornitori, m_chiusure, m_resi,
                      m_operatori, m_negozio};
+    aggiungiScheda(m_cruscotto, QStringLiteral("Cruscotto"));
     aggiungiScheda(m_paginaArticoli, QStringLiteral("Articoli"));
     aggiungiScheda(m_magazzino, QStringLiteral("Magazzino"));
+    aggiungiScheda(m_etichette, QStringLiteral("Etichette"));
     aggiungiScheda(m_report, QStringLiteral("Vendite"));
     aggiungiScheda(m_fatture, QStringLiteral("Fatture"));
     aggiungiScheda(m_clienti, QStringLiteral("Clienti"));
@@ -92,6 +99,75 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
             verificaAccesso();   // uscita o sessione revocata
     });
     QTimer::singleShot(0, this, &FinestraGestione::verificaAccesso);
+
+    // Avviso: fatture in entrata e ricevimenti dal palmare che aspettano un controllo
+    auto* avvisi = new QTimer(this);
+    avvisi->setInterval(2 * 60 * 1000);
+    connect(avvisi, &QTimer::timeout, this, &FinestraGestione::aggiornaAvvisi);
+    avvisi->start();
+    connect(m_magazzino, &VistaMagazzino::cambiato, this, &FinestraGestione::aggiornaAvvisi);
+    // Prezzi da rivedere dopo i carichi: numero sulla scheda Articoli, ricalcolo dal magazzino
+    connect(m_articoliServer, &VistaArticoliServer::prezziDaRivedere, this, [this](int n) {
+        const int i = schede()->indexOf(m_paginaArticoli);
+        schede()->setTabText(i, n ? QStringLiteral("Articoli (%1)").arg(n) : QStringLiteral("Articoli"));
+        schede()->setTabToolTip(i, n ? QStringLiteral("%1 prezzi da rivedere: il costo è salito con un carico").arg(n) : QString());
+    });
+    connect(m_etichette, &VistaEtichette::cambiato, this, [this](int n) {
+        schede()->setTabText(schede()->indexOf(m_etichette), n ? QStringLiteral("Etichette (%1)").arg(n) : QStringLiteral("Etichette"));
+    });
+    // Dal cruscotto alla scheda dove si fa la cosa
+    connect(m_cruscotto, &VistaCruscotto::apri, this, [this](const QString& dove) {
+        if (dove == QLatin1String("prezzi")) {
+            schede()->setCurrentWidget(m_paginaArticoli);
+            m_articoliServer->ricalcolaPrezzi({{"solo_da_rivedere", true}});
+            m_cruscotto->aggiorna();
+            return;
+        }
+        QWidget* scheda = dove == QLatin1String("resi")       ? static_cast<QWidget*>(m_resi)
+                        : dove == QLatin1String("chiusure")   ? static_cast<QWidget*>(m_chiusure)
+                        : dove == QLatin1String("vendite")    ? static_cast<QWidget*>(m_report)
+                        : dove == QLatin1String("etichette")  ? static_cast<QWidget*>(m_etichette)
+                                                              : static_cast<QWidget*>(m_magazzino);
+        schede()->setCurrentWidget(scheda);
+    });
+    connect(m_magazzino, &VistaMagazzino::rivediPrezzi, this, [this](const QJsonObject& filtro) {
+        schede()->setCurrentWidget(m_paginaArticoli);
+        m_articoliServer->ricalcolaPrezzi(filtro);
+    });
+}
+
+void FinestraGestione::aggiornaAvvisi()
+{
+    const int i = schede()->indexOf(m_magazzino);
+    const bool controlla = m_ruolo == QLatin1String("amministratore") || m_ruolo == QLatin1String("responsabile");
+    if (!controlla) {
+        schede()->setTabText(i, QStringLiteral("Magazzino"));
+        schede()->setTabText(schede()->indexOf(m_paginaArticoli), QStringLiteral("Articoli"));
+        return;
+    }
+    m_articoliServer->contaDaRivedere();
+    QPointer<FinestraGestione> io(this);
+    client().leggi(QStringLiteral("v_fatture_passive_da_caricare?select=id,carico_proposto_id"), [io, i](const RispostaServer& f) {
+        if (!io || !f.ok())
+            return;
+        int fatture = 0, ricevute = 0;
+        for (const auto& v : f.json().array())
+            (v.toObject().value("carico_proposto_id").isNull() ? fatture : ricevute)++;
+        io->client().leggi(QStringLiteral("v_carichi_da_approvare?select=id&fattura_passiva_id=is.null"),
+                           [io, i, fatture, ricevute](const RispostaServer& c) {
+            if (!io)
+                return;
+            const int altri = c.ok() ? int(c.json().array().size()) : 0;
+            const int totale = fatture + ricevute + altri;
+            io->schede()->setTabText(i, totale ? QStringLiteral("Magazzino (%1)").arg(totale) : QStringLiteral("Magazzino"));
+            io->schede()->setTabToolTip(i, totale ? QStringLiteral("Da controllare: %1 fatture in entrata, %2 ricevute col palmare "
+                                                                   "da approvare%3").arg(fatture).arg(ricevute)
+                                                        .arg(altri ? QStringLiteral(", %1 altri carichi").arg(altri) : QString())
+                                                  : QString());
+            if (totale)
+                io->m_statoAccesso->setToolTip(io->schede()->tabToolTip(i));
+        });
+    });
 }
 
 void FinestraGestione::verificaAccesso()
@@ -148,6 +224,7 @@ void FinestraGestione::abilita(const QString& ruolo, const QString& messaggio)
     else
         schedaAttivata(schede()->currentWidget());
     emit accessoVerificato(ruolo);
+    aggiornaAvvisi();
 }
 
 void FinestraGestione::impostazioniApplicate(const Impostazioni& imp)

@@ -208,8 +208,8 @@ try {
     await attendi(`document.querySelector("#conferma-si")`, "conferma del carico");
     await foto("conferma-carico");
     await clic("#conferma-si");
-    await attendiAvviso("Merce caricata");
-    passi.push(" ✔ carico in magazzino dalla fattura");
+    await attendiAvviso("Inviato per l'approvazione");
+    passi.push(" ✔ ricevimento inviato per l'approvazione");
 
     // Carico senza fattura: un articolo nuovo creato al volo e uno già in anagrafica
     await clic('[data-tab="carico"]');

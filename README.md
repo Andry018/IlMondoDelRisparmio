@@ -1,12 +1,13 @@
 # Mondo del Risparmio — gestionale negozio
 
 Cassa, magazzino, anagrafiche e fatturazione per un punto vendita con più casse.
-Sostituisce SystemApp Cash e Terminal. Architettura in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+Sostituisce SystemApp Cash e Terminal. Architettura in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md);
+come si usano cassa, gestione e palmare in [docs/GUIDA_UTENTE.md](docs/GUIDA_UTENTE.md).
 
 - **Server:** Supabase self-hosted nella rete del negozio ([infra/supabase](infra/supabase/README.md))
 - **Casse e PC:** due programmi Windows in C++ / Qt 6, installati entrambi su ogni PC:
   `mdr-cassa` (vendita al banco) e `mdr-gestione` (anagrafiche e amministrazione)
-- **Palmare:** futuro, sulle stesse API
+- **Palmare:** app Android sulle stesse API ([palmare](palmare/README.md))
 
 ## Sviluppo (Windows)
 

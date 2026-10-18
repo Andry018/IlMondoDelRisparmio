@@ -4,6 +4,7 @@
 #include "fiscal/simulatore.h"
 #include "impostazioni.h"
 #include "installazioneaggiornamento.h"
+#include "italiano.h"
 #include "locale/archiviolocale.h"
 #include "locale/operazionicassa.h"
 
@@ -24,6 +25,7 @@ int main(int argc, char* argv[])
     QApplication::setOrganizationName(QStringLiteral("Mondo del Risparmio"));
     QApplication::setApplicationVersion(QStringLiteral(MDR_VERSIONE));
     QApplication::setStyle(QStringLiteral("Fusion"));
+    mdr::usaItaliano(app);   // pulsanti standard (Annulla, Sì/No...) e date in italiano
 
     QCommandLineParser opzioni;
     opzioni.setApplicationDescription(QStringLiteral("Cassa di Mondo del Risparmio"));

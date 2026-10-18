@@ -10,6 +10,8 @@ namespace mdr {
 class VistaArticoli;
 class VistaArticoliServer;
 class VistaClienti;
+class VistaCruscotto;
+class VistaEtichette;
 class VistaFatture;
 class VistaFornitori;
 class VistaNegozio;
@@ -49,7 +51,9 @@ protected:
 
 private:
     void abilita(const QString& ruolo, const QString& messaggio);
+    void aggiornaAvvisi();   // "Magazzino (N)": fatture in entrata e carichi da approvare
 
+    VistaCruscotto* m_cruscotto = nullptr;             // prima scheda: giornata e cose da fare
     VistaArticoli* m_articoli = nullptr;               // senza server: archivio locale
     VistaArticoliServer* m_articoliServer = nullptr;   // con server
     QStackedWidget* m_paginaArticoli = nullptr;
@@ -59,6 +63,7 @@ private:
     VistaOperatori* m_operatori = nullptr;   // solo amministratore
     VistaNegozio* m_negozio = nullptr;
     VistaMagazzino* m_magazzino = nullptr;
+    VistaEtichette* m_etichette = nullptr;
     VistaReport* m_report = nullptr;
     VistaChiusure* m_chiusure = nullptr;
     VistaResi* m_resi = nullptr;
