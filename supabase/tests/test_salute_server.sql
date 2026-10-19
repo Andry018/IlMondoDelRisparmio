@@ -41,9 +41,10 @@ declare
 begin
     assert (s -> 'backup' ->> 'esito')::boolean = false, format('ultimo backup: %s', s -> 'backup');
     assert (s ->> 'ultimo_backup_riuscito')::timestamptz < now() - interval '49 hours', 'ultimo riuscito';
-    assert jsonb_array_length(s -> 'avvisi') = 2, format('avvisi: %s', s -> 'avvisi');
-    assert (s -> 'avvisi' ->> 0) like 'Ultimo backup riuscito 2 days 02:00:00 fa%', format('età: %s', s -> 'avvisi' ->> 0);
-    assert (s -> 'avvisi' ->> 1) like 'L''ultimo backup NON è riuscito%', 'fallito';
+    -- Dalla 20261019000000 conta se ci sono vendite non ancora in un backup, non l'età del backup
+    -- (server acceso solo negli orari del negozio): qui nessuna vendita vecchia, solo il fallimento
+    assert jsonb_array_length(s -> 'avvisi') = 1, format('avvisi: %s', s -> 'avvisi');
+    assert (s -> 'avvisi' ->> 0) like 'L''ultimo backup NON è riuscito%', 'fallito';
     assert (s -> 'ripristino' ->> 'esito')::boolean, 'ripristino';
 end $$;
 reset role;

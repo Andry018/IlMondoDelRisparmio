@@ -1,0 +1,60 @@
+# Ingresso unico del server nativo su Windows (al posto di Kong/Envoy di Supabase).
+# Cassa, gestione e palmare usano gli stessi indirizzi di Supabase:
+#   /rest/v1/...        → PostgREST
+#   /auth/v1/token      → login nel database (schema accesso, vedi accesso.sql)
+# Ogni richiesta deve avere "apikey: <chiave anon>", come su Supabase.
+# Valori da config\server.env (li scrive installa_server.ps1, li passa avvia_servizi.ps1):
+#   MDR_PORTA, MDR_POSTGREST (es. 127.0.0.1:3000), MDR_ANON_KEY, MDR_LOG
+{
+	admin off
+	persist_config off
+	log {
+		output file {$MDR_LOG} {
+			roll_size 10mb
+			roll_keep 5
+		}
+		level WARN
+	}
+}
+
+:{$MDR_PORTA} {
+	# Il palmare nel browser (prove) chiede permesso prima delle richieste
+	header {
+		Access-Control-Allow-Origin *
+		Access-Control-Allow-Methods "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+		Access-Control-Allow-Headers "apikey, authorization, content-type, prefer, accept-profile, content-profile, x-client-info, range"
+		Access-Control-Expose-Headers "content-range"
+		-Server
+	}
+	@preflight method OPTIONS
+	handle @preflight {
+		respond 204
+	}
+
+	# Senza la chiave giusta non si passa (come Kong su Supabase)
+	@senzaChiave not header apikey {$MDR_ANON_KEY}
+	handle @senzaChiave {
+		header Content-Type application/json
+		respond `{"message": "Chiave API mancante o sbagliata"}` 401
+	}
+
+	handle /auth/v1/token {
+		@password query grant_type=password
+		@rinnovo query grant_type=refresh_token
+		rewrite @password /rpc/token_password?
+		rewrite @rinnovo /rpc/token_rinnovo?
+		reverse_proxy {$MDR_POSTGREST} {
+			header_up Content-Profile accesso
+			header_up Accept application/json
+		}
+	}
+
+	handle_path /rest/v1/* {
+		reverse_proxy {$MDR_POSTGREST}
+	}
+
+	handle {
+		header Content-Type application/json
+		respond `{"message": "Indirizzo sconosciuto"}` 404
+	}
+}

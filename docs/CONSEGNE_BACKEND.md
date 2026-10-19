@@ -30,6 +30,7 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261018000400_ordini_fornitori` | `ordini_fornitori`, `ordini_fornitori_righe`, `salva_ordine`, `invia_ordine`, `chiudi_ordine`, `v_ordini_fornitori`, `v_ordini_righe`, `v_ordinato`; `proposta_ordine` con la colonna `ordinato` | `test_ordini_fornitori.sql` |
 | `20261018000500_frequenza_ordini` | `fornitori.giorni_ordine` (si ordina ogni N giorni); `proposta_ordine` usa quei giorni e restituisce `giorni` | `test_frequenza_ordini.sql` |
 | `20261018000600_controllo_dati_completo` | `controllo_dati_elenco` senza il tetto di 5000 righe (esportazione Excel a pagine) | `test_controllo_dati.sql` |
+| `20261019000000_salute_orari_negozio` | `salute_server`: avviso sulle vendite non ancora in un backup (server acceso solo in orario) invece dell'età del backup; campo `vendite_senza_backup` | `test_salute_orari.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

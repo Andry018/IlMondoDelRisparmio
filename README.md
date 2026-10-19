@@ -4,7 +4,8 @@ Cassa, magazzino, anagrafiche e fatturazione per un punto vendita con più casse
 Sostituisce SystemApp Cash e Terminal. Architettura in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md);
 come si usano cassa, gestione e palmare in [docs/GUIDA_UTENTE.md](docs/GUIDA_UTENTE.md).
 
-- **Server:** Supabase self-hosted nella rete del negozio ([infra/supabase](infra/supabase/README.md))
+- **Server:** nella rete del negozio, Supabase self-hosted ([infra/supabase](infra/supabase/README.md)) oppure
+  nativo su Windows senza WSL né Docker ([infra/windows](infra/windows/README.md)): stesse API per cassa, gestione e palmare
 - **Casse e PC:** due programmi Windows in C++ / Qt 6, installati entrambi su ogni PC:
   `mdr-cassa` (vendita al banco) e `mdr-gestione` (anagrafiche e amministrazione)
 - **Palmare:** app Android sulle stesse API ([palmare](palmare/README.md))

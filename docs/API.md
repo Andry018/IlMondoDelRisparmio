@@ -734,9 +734,11 @@ importati da SystemApp risponde in circa 0,1 s.
 
 `POST /rest/v1/rpc/salute_server` `{}` → `ora_server`, `backup` e `ripristino` (ultimo esito
 `{at, esito, dettaglio, dimensione}` o null), `ultimo_backup_riuscito`, `dimensione_database` (byte),
-`vendite_in_ritardo` (di oggi arrivate più di un'ora dopo l'emissione), `avvisi` (testi da mostrare:
-backup mancante o più vecchio di 36 ore, backup o prova di ripristino non riusciti, prova di
-ripristino più vecchia di 40 giorni). Gli esiti li scrivono `infra/supabase/backup.sh` e
+`vendite_in_ritardo` (di oggi arrivate più di un'ora dopo l'emissione), `vendite_senza_backup`,
+`avvisi` (testi da mostrare: nessun backup registrato, vendite arrivate da più di 4 ore e mezza e non
+ancora in un backup — dalla migrazione `20261019000000`, prima era "backup più vecchio di 36 ore", che
+col server spento la sera scattava dopo ogni chiusura —, backup o prova di ripristino non riusciti,
+prova di ripristino più vecchia di 40 giorni). Gli esiti li scrivono `infra/supabase/backup.sh` e
 `prova_ripristino.sh` con `registra_manutenzione` (solo utente postgres); `manutenzione_server` non è
 leggibile dai client.
 
