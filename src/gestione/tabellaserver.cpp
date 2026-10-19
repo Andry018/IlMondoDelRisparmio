@@ -4,7 +4,14 @@
 #include "core/quantita.h"
 #include "locale/clientserver.h"
 
+#include <QDate>
 #include <QDateTime>
+#include <QFile>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QStandardPaths>
+#include <QStyle>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPointer>
@@ -139,7 +146,7 @@ void TabellaServer::mostra(const QJsonArray& righe)
     // Si allarga la prima colonna di testo "lunga" (descrizione, ragione sociale, fornitore...),
     // non l'ultima: altrimenti i numeri finiscono in fondo a destra e le descrizioni restano strette
     static const QRegularExpression lunghe(QStringLiteral("descrizione|ragione_sociale|fornitore|articolo|nome|cliente|note|messaggio"));
-    int elastica = int(m_colonne.size()) - 1;
+    int elastica = -1;   // nessuna colonna di testo lunga: nessuna si allarga, i numeri restano vicini
     for (int c = 0; c < m_colonne.size(); ++c)
         if (m_colonne[c].tipo == ColonnaServer::Testo && lunghe.match(m_colonne[c].campo).hasMatch()) {
             elastica = c;
@@ -152,7 +159,8 @@ void TabellaServer::mostra(const QJsonArray& righe)
     for (int c = 0; c < m_colonne.size(); ++c)
         if (c != elastica && m_tabella->columnWidth(c) > 320)
             m_tabella->setColumnWidth(c, 320);   // testi lunghi in una colonna stretta: il resto nel suggerimento
-    intestazione->setSectionResizeMode(elastica, QHeaderView::Stretch);
+    if (elastica >= 0)
+        intestazione->setSectionResizeMode(elastica, QHeaderView::Stretch);
     m_stato->setStyleSheet(QString());
     if (righe.isEmpty())
         m_stato->setText(testoVuoto);
@@ -160,6 +168,41 @@ void TabellaServer::mostra(const QJsonArray& righe)
         m_stato->setText(QStringLiteral("Prime %1 righe: usare la ricerca o i filtri per vedere le altre").arg(righe.size()));
     else
         m_stato->setText(righe.size() == 1 ? QStringLiteral("1 riga") : QStringLiteral("%1 righe").arg(righe.size()));
+}
+
+FoglioXlsx TabellaServer::foglio(const QString& nome) const
+{
+    FoglioXlsx f{nome, {}, {}};
+    for (const auto& c : m_colonne)
+        f.intestazioni << c.titolo;
+    for (const auto& v : m_righe) {
+        const auto riga = v.toObject();
+        QStringList celle;
+        for (const auto& c : m_colonne)
+            celle << testoCampo(riga, c);
+        f.righe << celle;
+    }
+    return f;
+}
+
+QPushButton* pulsanteEsporta(QWidget* parent, const QString& nomeFile, std::function<QList<FoglioXlsx>()> fogli)
+{
+    auto* b = new QPushButton(parent->style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Esporta in Excel…"), parent);
+    b->setObjectName("esporta_excel");
+    b->setToolTip(QStringLiteral("Quello che si vede, in un file Excel (un foglio per tabella)"));
+    QObject::connect(b, &QPushButton::clicked, parent, [parent, nomeFile, fogli] {
+        const QString file = QFileDialog::getSaveFileName(
+            parent, QStringLiteral("Esporta in Excel"),
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                + QStringLiteral("/%1-%2.xlsx").arg(nomeFile, QDate::currentDate().toString("yyyyMMdd")),
+            QStringLiteral("Excel (*.xlsx)"));
+        if (file.isEmpty())
+            return;
+        QFile f(file);
+        if (!f.open(QIODevice::WriteOnly) || f.write(scriviXlsx(fogli())) < 0)
+            QMessageBox::warning(parent, QStringLiteral("Esporta in Excel"), QStringLiteral("File non salvato: %1").arg(f.errorString()));
+    });
+    return b;
 }
 
 std::optional<QJsonObject> TabellaServer::selezionata() const

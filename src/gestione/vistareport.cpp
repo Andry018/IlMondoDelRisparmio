@@ -1,5 +1,7 @@
 #include "vistareport.h"
 
+#include <QRegularExpression>
+
 #include "comune.h"
 #include "core/modelli.h"
 #include "tabellaserver.h"
@@ -89,6 +91,14 @@ VistaReport::VistaReport(ClientServer& client, QWidget* parent)
         barra->addWidget(b);
     }
     barra->addStretch();
+    // Per il commercialista o per i conti: il periodo mostrato, un foglio per tabella
+    barra->addWidget(pulsanteEsporta(this, QStringLiteral("vendite"), [this] {
+        FoglioXlsx periodo{QStringLiteral("Periodo"), {QStringLiteral("Dal"), QStringLiteral("Al"), QStringLiteral("Riepilogo")},
+                           {{m_dal->date().toString("dd/MM/yyyy"), m_al->date().toString("dd/MM/yyyy"),
+                             QString(m_riepilogo->text()).remove(QRegularExpression(QStringLiteral("<[^>]*>")))}}};
+        return QList<FoglioXlsx>{periodo, m_incassi->foglio(QStringLiteral("Incassi")),
+                                 m_reparti->foglio(QStringLiteral("Reparti e IVA")), m_articoli->foglio(QStringLiteral("Articoli"))};
+    }));
     auto* aggiorna = new QPushButton(QStringLiteral("Aggiorna"), this);
     connect(aggiorna, &QPushButton::clicked, this, &VistaReport::aggiorna);
     barra->addWidget(aggiorna);

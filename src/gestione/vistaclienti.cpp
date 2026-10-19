@@ -161,6 +161,9 @@ VistaClienti::VistaClienti(ClientServer& client, QWidget* parent)
     barra->addWidget(nuovo);
     barra->addWidget(m_modifica);
     barra->addWidget(importa);
+    barra->addWidget(pulsanteEsporta(this, QStringLiteral("clienti"), [this] {
+        return QList<FoglioXlsx>{m_tabella->foglio(QStringLiteral("Clienti"))};
+    }));
     layout->addLayout(barra);
     connect(importa, &QPushButton::clicked, this, [this] {
         importaDaFile(m_client, TipoImportazione::Clienti, this, [this] { aggiorna(); });

@@ -11,6 +11,7 @@
 #include "dialogocontrollodati.h"
 #include "filetabella.h"
 #include "vistaordini.h"
+#include "tabellaserver.h"
 
 #include <QJsonArray>
 #include <QUuid>
@@ -278,6 +279,22 @@ private slots:
         QSignalSpy apri(&d, &DialogoControlloDati::apriArticolo);
         emit articoli->cellDoubleClicked(0, 1);
         QCOMPARE(apri.first().first().toString(), QStringLiteral("CD-2"));
+    }
+
+    void tabella_in_excel()
+    {
+        TabellaServer t({{"descrizione", QStringLiteral("Articolo")},
+                         {"quantita", QStringLiteral("Quantità"), ColonnaServer::Quantita},
+                         {"totale", QStringLiteral("Totale €"), ColonnaServer::Euro}});
+        t.mostra(QJsonDocument::fromJson(R"([{"descrizione": "Detersivo", "quantita": 2500, "totale": 378}])").array());
+        const auto f = t.foglio(QStringLiteral("Articoli"));
+        QCOMPARE(f.intestazioni, (QStringList{"Articolo", "Quantità", "Totale €"}));
+        QCOMPARE(f.righe.first(), (QStringList{"Detersivo", "2,500", "3,78"}));
+        const auto letto = leggiXlsx(scriviXlsx({f}));
+        QVERIFY(letto);
+        QCOMPARE(letto->righe.first(), (QStringList{"Detersivo", "2,500", "3,78"}));
+        // Ogni scheda ha il suo pulsante dove serve
+        QVERIFY(m_finestra->findChildren<QPushButton*>("esporta_excel").size() >= 5);
     }
 
     void qr_del_palmare()

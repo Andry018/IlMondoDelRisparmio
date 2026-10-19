@@ -38,6 +38,9 @@ VistaChiusure::VistaChiusure(ClientServer& client, QWidget* parent)
     barra->addWidget(spiegazione, 1);
     m_soloDifferenze = new QCheckBox(QStringLiteral("Solo quelle che non quadrano"), this);
     barra->addWidget(m_soloDifferenze);
+    barra->addWidget(pulsanteEsporta(this, QStringLiteral("chiusure"), [this] {
+        return QList<FoglioXlsx>{m_chiusure->foglio(QStringLiteral("Chiusure")), m_aliquote->foglio(QStringLiteral("Per aliquota"))};
+    }));
     auto* aggiorna = pulsanteAggiorna(this);
     barra->addWidget(aggiorna);
     layout->addLayout(barra);

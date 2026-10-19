@@ -831,6 +831,12 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     ordine->setObjectName("proposta_ordine");
     ordine->setToolTip(QStringLiteral("Quanto ordinare da ogni fornitore per coprire i prossimi giorni, dalle vendite recenti"));
     barra->addWidget(ordine);
+    barra->addWidget(pulsanteEsporta(this, QStringLiteral("magazzino"), [this] {
+        return QList<FoglioXlsx>{m_daApprovare->foglio(QStringLiteral("Carichi da approvare")),
+                                 m_passive->foglio(QStringLiteral("Fatture in entrata")),
+                                 m_sottoscorta->foglio(QStringLiteral("Sotto scorta")),
+                                 m_carichi->foglio(QStringLiteral("Ultimi carichi"))};
+    }));
     connect(ordine, &QPushButton::clicked, this, [this] {
         DialogoOrdine d(m_client, this);
         d.exec();

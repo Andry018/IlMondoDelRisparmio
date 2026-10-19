@@ -105,6 +105,9 @@ VistaFornitori::VistaFornitori(ClientServer& client, QWidget* parent)
     barra->addWidget(nuovo);
     barra->addWidget(modifica);
     barra->addWidget(importa);
+    barra->addWidget(pulsanteEsporta(this, QStringLiteral("fornitori"), [this] {
+        return QList<FoglioXlsx>{m_tabella->foglio(QStringLiteral("Fornitori"))};
+    }));
     layout->addLayout(barra);
     connect(importa, &QPushButton::clicked, this, [this] {
         importaDaFile(m_client, TipoImportazione::Fornitori, this, [this] { aggiorna(); });
