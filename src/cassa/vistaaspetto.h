@@ -45,6 +45,7 @@ private:
     QCheckBox* m_tastierino;
     QCheckBox* m_giornale;
     QCheckBox* m_cliente;
+    QComboBox* m_blocco;
     QLineEdit* m_messaggioCliente;
     QListWidget* m_reparti;
     QTableWidget* m_rapidi;

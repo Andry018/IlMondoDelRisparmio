@@ -23,6 +23,8 @@
 #include <QShortcut>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <QEvent>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -104,6 +106,13 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
                                                  QLineEdit::Normal, carr().codiceFiscale(), &ok);
         return ok ? std::optional<QString>(testo) : std::nullopt;
     };
+
+    // Blocco per inattività: si riparte a ogni tasto o tocco (filtro sugli eventi dell'applicazione)
+    m_inattivita = new QTimer(this);
+    m_inattivita->setObjectName("inattivita");
+    m_inattivita->setSingleShot(true);
+    connect(m_inattivita, &QTimer::timeout, this, &VistaCassa::bloccaOperatore);
+    qApp->installEventFilter(this);
 
     // F11: passa all'altro scontrino.
     auto* scambia = new QShortcut(QKeySequence(Qt::Key_F11), this);
@@ -430,6 +439,10 @@ void VistaCassa::applicaAspetto(const AspettoCassa& aspetto)
     m_principale->setDirection(aspetto.tastierinoASinistra ? QBoxLayout::RightToLeft : QBoxLayout::LeftToRight);
     m_pannelloTastierino->setVisible(aspetto.mostraTastierino);
     m_giornale->setVisible(aspetto.mostraGiornale);
+    if (aspetto.bloccoMinuti > 0)
+        m_inattivita->start(aspetto.bloccoMinuti * 60 * 1000);
+    else
+        m_inattivita->stop();
     // palette() nei fogli di stile si legge una volta sola: dopo un cambio di tema si rilegge
     const QString stile = m_tastoVerifica->styleSheet();
     m_tastoVerifica->setStyleSheet(QString());
@@ -602,6 +615,31 @@ void VistaCassa::guidaTasti()
     layout->addWidget(chiudi);
     esegui(d);
     attiva();
+}
+
+bool VistaCassa::eventFilter(QObject* oggetto, QEvent* evento)
+{
+    switch (evento->type()) {
+    case QEvent::KeyPress:
+    case QEvent::MouseButtonPress:
+    case QEvent::TouchBegin:
+        if (m_aspetto.bloccoMinuti > 0)
+            m_inattivita->start(m_aspetto.bloccoMinuti * 60 * 1000);
+        break;
+    default:
+        break;
+    }
+    return QWidget::eventFilter(oggetto, evento);
+}
+
+void VistaCassa::bloccaOperatore()
+{
+    // Senza operatori configurati (prove senza server) non c'è niente da bloccare
+    if (m_op.operatore().isNull() || m_archivio.contaOperatori() == 0)
+        return;
+    m_op.impostaOperatore(QUuid());
+    messaggio(QStringLiteral("Cassa bloccata per inattività: Operatore (F1) per riprendere"));
+    emit operatoreCambiato();
 }
 
 void VistaCassa::ristampaUltimo()

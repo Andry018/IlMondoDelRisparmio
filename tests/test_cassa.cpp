@@ -13,6 +13,7 @@
 
 #include <QBoxLayout>
 #include <QComboBox>
+#include <QKeyEvent>
 #include <QShortcut>
 #include <QDialogButtonBox>
 #include <QMessageBox>
@@ -615,6 +616,33 @@ private slots:
         cassa()->paga(TipoPagamento::Carta);
         const auto v = m_archivio->vendite(QDate::currentDate()).first();
         QCOMPARE(v.payload.value("operatore_id").toString(), QStringLiteral("00000000-0000-0000-0000-0000000000a3"));
+
+        // Blocco per inattività a 2 minuti: il tempo riparte a ogni tasto
+        AspettoCassa a;
+        a.bloccoMinuti = 2;
+        cassa()->applicaAspetto(a);
+        auto* timer = cassa()->findChild<QTimer*>("inattivita");
+        QVERIFY(timer && timer->isActive() && timer->interval() == 120000);
+        timer->start(1000);
+        QKeyEvent tasto(QEvent::KeyPress, Qt::Key_5, Qt::NoModifier, QStringLiteral("5"));
+        QApplication::sendEvent(cassa()->findChild<QLineEdit*>("codice"), &tasto);
+        QVERIFY(timer->remainingTime() > 60000);
+        // Scaduto: l'operatore esce, lo scontrino in corso resta, per vendere si rimette il PIN
+        cassa()->leggi("1001");
+        cassa()->bloccaOperatore();
+        QVERIFY(m_op->operatore().isNull());
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        QVERIFY(testo("messaggio").contains("bloccata"));
+        QTimer::singleShot(0, this, [] {
+            auto* d = qobject_cast<DialogoOperatore*>(QApplication::activeModalWidget());
+            QVERIFY(d);
+            d->reject();
+        });
+        cassa()->leggi("1002");
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        // Mai: niente timer
+        cassa()->applicaAspetto(AspettoCassa{});
+        QVERIFY(!timer->isActive());
     }
 
     void prezzo_da_tastierino()

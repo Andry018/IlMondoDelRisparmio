@@ -18,6 +18,7 @@ class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QTableWidget;
+class QTimer;
 
 namespace mdr {
 
@@ -64,6 +65,10 @@ public:
     bool applicaSconto(ModoSconto modo, Money valore);
     // Copia dell'ultimo documento emesso (Ctrl+P).
     void ristampaUltimo();
+    // Blocco per inattività (AspettoCassa::bloccoMinuti): l'operatore esce, gli scontrini restano.
+    // Ogni tasto o tocco nella cassa riparte da capo.
+    void bloccaOperatore();
+    bool eventFilter(QObject* oggetto, QEvent* evento) override;
     // Guida dei tasti (pulsante "?" e Ctrl+G): tasti funzione e modi di scrivere nel campo.
     void guidaTasti();
     // Voci della guida: tasto e cosa fa (anche per i test, che le confrontano con i pulsanti)
@@ -126,6 +131,7 @@ private:
     QGridLayout* m_grigliaReparti = nullptr;
     QBoxLayout* m_principale = nullptr;
     QWidget* m_pannelloTastierino = nullptr;
+    QTimer* m_inattivita = nullptr;
 };
 
 // Prezzo digitato sul tastierino: con la virgola è in euro ("2,50"), senza è in

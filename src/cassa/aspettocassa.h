@@ -41,6 +41,7 @@ struct AspettoCassa {
     bool mostraTastierino = true;       // con la tastiera fisica si può nascondere
     bool mostraGiornale = true;         // righe del registratore sotto lo scontrino
     bool schermoCliente = false;        // schermata per il cliente sul secondo monitor
+    int bloccoMinuti = 0;               // senza attività per tanti minuti l'operatore esce (0 = mai)
     QString messaggioCliente = QStringLiteral("Benvenuti al Mondo del Risparmio");
     QList<int> reparti;                 // numeri RT dei tasti reparto; vuoto = 5% e 22%
     QList<TastoRapido> tastiRapidi = predefiniti();

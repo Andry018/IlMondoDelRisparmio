@@ -74,6 +74,14 @@ VistaAspetto::VistaAspetto(ArchivioLocale& archivio, AspettoCassa aspetto, QWidg
     form->addRow(m_tastierino);
     form->addRow(m_giornale);
     form->addRow(m_cliente);
+    m_blocco = new QComboBox(schermo);
+    m_blocco->setObjectName("aspetto_blocco");
+    m_blocco->setToolTip(QStringLiteral("Senza attività l'operatore esce: per vendere si rimettono codice e PIN (F1). "
+                                        "Gli scontrini in corso restano"));
+    m_blocco->addItem(QStringLiteral("Mai"), 0);
+    for (const int m : {2, 5, 10, 15, 30})
+        m_blocco->addItem(QStringLiteral("Dopo %1 minuti senza attività").arg(m), m);
+    form->addRow(QStringLiteral("Esci operatore"), m_blocco);
     form->addRow(QStringLiteral("Benvenuto"), m_messaggioCliente);
     connect(m_cliente, &QCheckBox::toggled, m_messaggioCliente, &QWidget::setEnabled);
     sinistra->addWidget(schermo);
@@ -188,6 +196,7 @@ void VistaAspetto::mostra(const AspettoCassa& a)
     m_tastierino->setChecked(a.mostraTastierino);
     m_giornale->setChecked(a.mostraGiornale);
     m_cliente->setChecked(a.schermoCliente);
+    m_blocco->setCurrentIndex(std::max(0, m_blocco->findData(a.bloccoMinuti)));
     m_messaggioCliente->setText(a.messaggioCliente);
     m_messaggioCliente->setEnabled(a.schermoCliente);
 
@@ -287,6 +296,7 @@ AspettoCassa VistaAspetto::aspettoScelto() const
     a.mostraTastierino = m_tastierino->isChecked();
     a.mostraGiornale = m_giornale->isChecked();
     a.schermoCliente = m_cliente->isChecked();
+    a.bloccoMinuti = m_blocco->currentData().toInt();
     a.messaggioCliente = m_messaggioCliente->text().trimmed().isEmpty() ? AspettoCassa{}.messaggioCliente
                                                                         : m_messaggioCliente->text().trimmed();
     for (int i = 0; i < m_reparti->count(); ++i)

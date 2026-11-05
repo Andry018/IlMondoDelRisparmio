@@ -1,6 +1,7 @@
 #include "aspettocassa.h"
 
 #include <QApplication>
+#include <algorithm>
 #include <QPalette>
 #include <QSettings>
 #include <QStyle>
@@ -81,6 +82,7 @@ AspettoCassa AspettoCassa::carica(const QString& file)
     a.mostraTastierino = s.value("mostra_tastierino", true).toBool();
     a.mostraGiornale = s.value("mostra_giornale", true).toBool();
     a.schermoCliente = s.value("schermo_cliente", false).toBool();
+    a.bloccoMinuti = std::clamp(s.value("blocco_minuti", 0).toInt(), 0, 240);
     a.messaggioCliente = s.value("messaggio_cliente", a.messaggioCliente).toString();
     for (const auto& n : s.value("reparti").toString().split(QLatin1Char(','), Qt::SkipEmptyParts))
         if (const int r = n.trimmed().toInt(); r > 0 && !a.reparti.contains(r))
@@ -116,6 +118,7 @@ void AspettoCassa::salva(const QString& file) const
     s.setValue("mostra_tastierino", mostraTastierino);
     s.setValue("mostra_giornale", mostraGiornale);
     s.setValue("schermo_cliente", schermoCliente);
+    s.setValue("blocco_minuti", bloccoMinuti);
     s.setValue("messaggio_cliente", messaggioCliente);
     QStringList r;
     for (const int n : reparti)
