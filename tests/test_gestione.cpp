@@ -360,10 +360,10 @@ private slots:
                                       "Impostazioni"}));
     }
 
-    void ogni_scheda_sta_in_1024()
+    void ogni_scheda_sta_in_1280()
     {
-        // Cassa e gestione stanno su ogni PC, anche sul POS a 1024x768: col carattere di Windows e
-        // il menu laterale, ogni scheda deve stare nella larghezza che resta accanto al menu.
+        // La gestione si usa su un monitor normale (la cassa sul POS a 1024x768, test_cassa): col
+        // carattere di Windows e il menu laterale, ogni scheda deve stare in 1280 punti.
         const QFont prima = QApplication::font();
         if (QFontDatabase::families().contains(QStringLiteral("Segoe UI")))
             QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
@@ -374,13 +374,13 @@ private slots:
             const int larga = schede->widget(i)->minimumSizeHint().width();
             if (!qEnvironmentVariableIsEmpty("MDR_MISURE"))
                 qInfo("%s: larga almeno %d (menu %d)", qPrintable(schede->tabText(i)), larga, menu);
-            if (menu + larga > 1010)
+            if (menu + larga > 1270)
                 troppo << QStringLiteral("%1=%2").arg(schede->tabText(i)).arg(larga);
         }
         const int finestra = m_finestra->minimumSizeHint().width();
         QApplication::setFont(prima);
         QVERIFY2(troppo.isEmpty(), qPrintable(QStringLiteral("menu %1, schede: %2").arg(menu).arg(troppo.join(", "))));
-        QVERIFY2(finestra <= 1024, qPrintable(QString::number(finestra)));
+        QVERIFY2(finestra <= 1280, qPrintable(QString::number(finestra)));
     }
 
     void senza_server_schede_del_server_spente()

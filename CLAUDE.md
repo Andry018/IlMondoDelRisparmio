@@ -33,7 +33,7 @@ python strumenti\rt-finto\rt_finto.py                 # registratore Custom fint
   acceso: non contarli come provati.
 - Se `mdr-cassa.exe` o `mdr-gestione.exe` sono aperti, **non chiuderli**: rinominare l'exe in
   `build\debug\bin` (la skill lo fa da sola).
-- Dopo una modifica all'interfaccia, aprire il programma (`--finestra 1024x768` per la risoluzione
+- Dopo una modifica all'interfaccia, aprire il programma (cassa: `--finestra 1024x768`, la risoluzione
   del POS) e farlo vedere all'utente prima di andare avanti.
 
 ## Regole del dominio
@@ -53,7 +53,8 @@ python strumenti\rt-finto\rt_finto.py                 # registratore Custom fint
   `supabase/migrations/AAAAMMGGhhmmss_nome.sql` con il suo test in `supabase/tests/`.
 - Registratore **Custom K3-F RT**: driver XML su HTTP (`src/fiscal/customxml.*`, `/xml/printer.htm`).
   USB non supportato. Da provare sull'RT vero solo in modalità addestramento.
-- POS: Custom Silk 15", **1024×768** touch, Windows 10. L'interfaccia deve starci.
+- POS: Custom Silk 15", **1024×768** touch, Windows 10: la **cassa** deve starci. La **gestione** si usa
+  su un monitor normale (i test controllano almeno 1280 punti di larghezza).
 
 ## Convenzioni di codice
 

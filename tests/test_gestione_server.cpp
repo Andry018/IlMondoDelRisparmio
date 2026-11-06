@@ -2,7 +2,7 @@
 // Si salta se MDR_SERVER_SVILUPPO non è impostata, es.:
 //   $env:MDR_SERVER_SVILUPPO = "http://127.0.0.1:8000"
 //   $env:MDR_CHIAVE_SVILUPPO = (chiave in %LOCALAPPDATA%\Mondo del Risparmio\server-sviluppo\chiavi.txt)
-// Con MDR_SCREENSHOT=cartella salva un'immagine di ogni scheda a 1024x768.
+// Con MDR_SCREENSHOT=cartella salva un'immagine di ogni scheda a 1280x800 (monitor normale).
 
 #include "core/quantita.h"
 #include "core/promozioni.h"
@@ -58,7 +58,7 @@ class TestGestioneServer : public QObject {
         imp.apiKey = qEnvironmentVariable("MDR_CHIAVE_SVILUPPO");
         m_finestra = std::make_unique<FinestraGestione>(*m_archivio, imp, m_dir.filePath(email + ".ini"),
                                                         QStringLiteral("prova"));
-        m_finestra->resize(1024, 768);
+        m_finestra->resize(1280, 800);   // monitor normale (la gestione non va sul POS)
         m_finestra->show();
         QSignalSpy verificato(m_finestra.get(), &FinestraGestione::accessoVerificato);
         m_finestra->findChild<ClientServer*>()->accedi(email, QStringLiteral("prova"));
@@ -451,8 +451,8 @@ private slots:
             auto nome = titolo.toLower();
             nome.replace(QRegularExpression("[^a-z0-9]+"), "_");
             m_finestra->grab().save(cartella + QStringLiteral("/gestione_%1_%2.png").arg(i, 2, 10, QChar('0')).arg(nome));
-            // Con i dati veri ogni scheda deve stare accanto al menu nei 1024 punti del POS
-            QVERIFY2(m_finestra->width() <= 1024,
+            // Con i dati veri ogni scheda deve stare accanto al menu su un monitor normale (1280)
+            QVERIFY2(m_finestra->width() <= 1280,
                      qPrintable(QStringLiteral("%1 allarga la finestra a %2").arg(titolo).arg(m_finestra->width())));
         }
     }

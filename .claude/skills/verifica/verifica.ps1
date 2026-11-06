@@ -64,7 +64,9 @@ try {
             $riepilogo += "configurazione FALLITA"
             $ok = $false
         } else {
-            $out = Esegui "cmake --build --preset debug"
+            # Al massimo 4 file insieme: con tutti i core la compilazione di molti file si fermava
+            # senza errori nel codice (memoria), e rifatta con meno lavori passava.
+            $out = Esegui "cmake --build --preset debug --parallel 4"
             $codice = $LASTEXITCODE
             $avvisi = @($out | Where-Object { $_ -match "warning:" } | Select-Object -Unique)
             if ($codice -ne 0) {
