@@ -55,6 +55,7 @@ private:
     void inviaCoda(QList<OperazioneInCoda> coda);
     void scaricaReparti();
     void scarica(const QString& nome, const QString& vista, int offset, const QString& massimo);
+    void scaricaPromozioni();
     void fine(bool ok);
 
     ArchivioLocale& m_archivio;
@@ -63,6 +64,7 @@ private:
     int m_inviate = 0;
     int m_articoli = 0;
     int m_operatori = 0;
+    int m_promozioni = 0;   // promozioni attive o in arrivo scaricate nell'ultima sincronizzazione
     int m_rifiutate = 0;
 };
 

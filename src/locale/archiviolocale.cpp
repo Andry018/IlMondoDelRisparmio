@@ -148,7 +148,9 @@ bool ArchivioLocale::apri()
                         attivo     integer not null,
                         pin_sale   text,
                         pin_hash   text,
-                        updated_at text))");
+                        updated_at text))")
+        // Promozioni scaricate dal server (v_promozioni_cassa), come JSON: si riscrivono tutte
+        && esegui("create table if not exists promozioni (id text primary key, dati text not null)");
     if (!ok)
         return false;
 
@@ -579,6 +581,41 @@ bool ArchivioLocale::salvaReparto(const Reparto& r)
         return false;
     }
     return true;
+}
+
+bool ArchivioLocale::sostituisciPromozioni(const QList<Promozione>& promozioni)
+{
+    auto d = db();
+    if (!d.transaction()) {
+        m_errore = d.lastError().text();
+        return false;
+    }
+    QSqlQuery q(d);
+    bool ok = q.exec(QStringLiteral("delete from promozioni"));
+    for (const auto& p : promozioni) {
+        if (!ok)
+            break;
+        q.prepare(QStringLiteral("insert into promozioni (id, dati) values (?, ?)"));
+        q.addBindValue(p.id.toString(QUuid::WithoutBraces));
+        q.addBindValue(QString::fromUtf8(QJsonDocument(p.json()).toJson(QJsonDocument::Compact)));
+        ok = q.exec();
+    }
+    if (!ok) {
+        m_errore = q.lastError().text();
+        d.rollback();
+        return false;
+    }
+    return d.commit();
+}
+
+QList<Promozione> ArchivioLocale::promozioni() const
+{
+    QList<Promozione> out;
+    QSqlQuery q(QStringLiteral("select dati from promozioni"), db());
+    while (q.next())
+        if (const auto p = Promozione::daJson(QJsonDocument::fromJson(q.value(0).toString().toUtf8()).object()))
+            out << *p;
+    return out;
 }
 
 // ---------------------------------------------------------------------------

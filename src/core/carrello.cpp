@@ -6,10 +6,11 @@ namespace mdr {
 
 void Carrello::aggiungi(const Articolo& a, Quantita q)
 {
-    // Stesso articolo a pezzo senza sconto: incrementa la riga invece di duplicarla.
+    // Stesso articolo a pezzo senza sconto a mano: incrementa la riga invece di duplicarla
+    // (lo sconto di una promozione si ricalcola sulla quantità nuova).
     if (a.unita == UnitaMisura::Pezzo) {
         for (auto& r : m_righe) {
-            if (r.articoloId == a.id && r.sconto.isZero() && r.prezzoUnitario == a.prezzoVendita) {
+            if (r.articoloId == a.id && r.scontoManuale().isZero() && r.prezzoUnitario == a.prezzoVendita) {
                 r.quantita = r.quantita + q;
                 return;
             }
@@ -36,21 +37,36 @@ void Carrello::quantitaRiga(int indice, Quantita q)
 {
     if (indice >= 0 && indice < m_righe.size() && q > Quantita()) {
         m_righe[indice].quantita = q;
-        m_righe[indice].sconto = {};
+        m_righe[indice].sconto = m_righe[indice].scontoPromo;   // via lo sconto a mano, la promozione resta
     }
 }
 
 void Carrello::scontoRiga(int indice, Money sconto)
 {
     if (indice >= 0 && indice < m_righe.size())
-        m_righe[indice].sconto = sconto;
+        m_righe[indice].sconto = m_righe[indice].scontoPromo + sconto;
 }
 
 void Carrello::scontoPercentualeRiga(int indice, int basisPoints)
 {
     if (indice >= 0 && indice < m_righe.size()) {
         auto& r = m_righe[indice];
-        r.sconto = (r.prezzoUnitario * r.quantita).percentuale(basisPoints);
+        // Sul prezzo già scontato dalla promozione, come lo legge il cliente
+        r.sconto = r.scontoPromo + (r.prezzoUnitario * r.quantita - r.scontoPromo).percentuale(basisPoints);
+    }
+}
+
+void Carrello::impostaScontiPromo(const QList<QPair<Money, QString>>& sconti)
+{
+    for (int i = 0; i < m_righe.size() && i < sconti.size(); ++i) {
+        auto& r = m_righe[i];
+        const Money manuale = r.scontoManuale();
+        // La promozione non porta la riga sotto zero insieme allo sconto a mano
+        const Money massimo = r.prezzoUnitario * r.quantita - manuale;
+        const Money promo = std::max(Money(), std::min(sconti[i].first, massimo));
+        r.scontoPromo = promo;
+        r.promozione = promo.isZero() ? QString() : sconti[i].second;
+        r.sconto = manuale + promo;
     }
 }
 

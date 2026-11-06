@@ -28,9 +28,11 @@ public:
 
 signals:
     void aspettoCambiato(const AspettoCassa& aspetto);
+    void personalizza();   // "Personalizza la schermata della cassa…"
 
 private:
-    enum Colonna { Etichetta, Codice, Articolo, Colore, Prezzo, NumeroColonne };
+    enum Colonna { Etichetta, Codice, Articolo, Colore, Prezzo, Pagina, NumeroColonne };
+    TastoRapido tastoDellaRiga(int riga) const;
 
     void aggiungiRiga(const TastoRapido& t);
     void controllaRiga(int riga);
@@ -41,9 +43,6 @@ private:
     AspettoCassa m_salvato;
     QComboBox* m_tema;
     QComboBox* m_testo;
-    QComboBox* m_posizione;
-    QCheckBox* m_tastierino;
-    QCheckBox* m_giornale;
     QCheckBox* m_cliente;
     QComboBox* m_blocco;
     QLineEdit* m_messaggioCliente;

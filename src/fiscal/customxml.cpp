@@ -1,6 +1,11 @@
 #include "customxml.h"
 
+#include <QDate>
+#include <QDir>
 #include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
+#include <QTime>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
 #include <QNetworkReply>
@@ -136,8 +141,12 @@ void scriviRighe(ScrittoreXml& xml, const Carrello& carrello, const Configurazio
         xml.comando(QStringLiteral("printRecItem"), riga);
 
         if (r.sconto > Money()) {
+            // Solo promozione: sullo scontrino il suo nome ("3x2 COLAZIONE (3X2)"); altrimenti SCONTO
+            const QString descrizione = r.scontoPromo == r.sconto && !r.promozione.isEmpty()
+                                            ? testoStampabile(r.promozione.toUpper(), kDescrizione)
+                                            : QStringLiteral("SCONTO");
             Attributi sconto{{QStringLiteral("adjustmentType"), QStringLiteral("3")},
-                             {QStringLiteral("description"), QStringLiteral("SCONTO")},
+                             {QStringLiteral("description"), descrizione},
                              {QStringLiteral("amount"), QString::number(r.sconto.cents())}};
             sconto += dove;
             xml.comando(QStringLiteral("printRecItemAdjustment"), sconto);
@@ -180,6 +189,52 @@ QString controllaRighe(const Carrello& carrello, const ConfigurazioneCustom& con
 }
 
 } // namespace
+
+// --- Registro degli scambi -----------------------------------------------------------------------
+
+TrasportoConRegistro::TrasportoConRegistro(std::unique_ptr<TrasportoRt> vero, QString cartella, int giorni)
+    : m_vero(std::move(vero))
+    , m_cartella(std::move(cartella))
+{
+    QDir dir(m_cartella);
+    dir.mkpath(QStringLiteral("."));
+    const QDate limite = QDate::currentDate().addDays(-giorni);
+    for (const auto& f : dir.entryInfoList({QStringLiteral("rt-*.log")}, QDir::Files)) {
+        const QDate data = QDate::fromString(f.completeBaseName().mid(3), QStringLiteral("yyyyMMdd"));
+        if (data.isValid() && data < limite)
+            QFile::remove(f.absoluteFilePath());
+    }
+}
+
+QString TrasportoConRegistro::fileDiOggi() const
+{
+    return QDir(m_cartella).filePath(QStringLiteral("rt-%1.log").arg(QDate::currentDate().toString(QStringLiteral("yyyyMMdd"))));
+}
+
+void TrasportoConRegistro::scrivi(const QByteArray& testo)
+{
+    QFile f(fileDiOggi());
+    if (f.open(QIODevice::WriteOnly | QIODevice::Append))
+        f.write(testo);
+}
+
+void TrasportoConRegistro::nota(const QString& testo)
+{
+    scrivi(QStringLiteral("\n==== %1  %2\n").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz")), testo).toUtf8());
+}
+
+RispostaTrasporto TrasportoConRegistro::invia(const QByteArray& xml, int attesaMs)
+{
+    scrivi(QStringLiteral("\n---- richiesta %1\n").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz"))).toUtf8() + xml);
+    const auto r = m_vero->invia(xml, attesaMs);
+    scrivi(QStringLiteral("\n---- risposta %1%2\n")
+               .arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz")),
+                    r.ricevuta ? QString() : QStringLiteral(" NON RICEVUTA (%1%2)").arg(r.errore,
+                                                  r.forseEseguita ? QStringLiteral(", forse eseguita") : QString()))
+               .toUtf8()
+           + r.corpo + "\n");
+    return r;
+}
 
 // --- Trasporto HTTP ----------------------------------------------------------------------------
 
@@ -587,6 +642,9 @@ bool StampanteCustomXml::leggiInformazioni(QString* errore, int attesaMs)
     aggiungi(QStringLiteral("demoMode"), QStringLiteral("Demo"));
     aggiungi(QStringLiteral("certExpired"), QStringLiteral("Certificato scaduto"));
     m_informazioni = righe.join(QLatin1Char('\n'));
+    const QString simulazione = r.valore(QStringLiteral("simulation")).trimmed().toUpper();
+    m_addestramento = simulazione == QLatin1String("SI") || simulazione == QLatin1String("1")
+                   || simulazione == QLatin1String("TRUE") || simulazione == QLatin1String("YES");
     return true;
 }
 

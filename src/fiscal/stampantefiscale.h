@@ -46,6 +46,9 @@ public:
 
     virtual QString nome() const = 0;
     virtual QString matricola() const = 0;
+    // Registratore in modalità addestramento: emette, ma i documenti NON sono fiscali.
+    // La cassa lo dice in rosso, perché dopo una prova nessuno venda così per sbaglio.
+    virtual bool inAddestramento() const { return false; }
 
     virtual EsitoFiscale stato() = 0;
     virtual EsitoFiscale emettiDocumentoCommerciale(const Carrello& carrello) = 0;

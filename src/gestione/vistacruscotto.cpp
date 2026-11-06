@@ -87,6 +87,7 @@ void GraficoBarre::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
+    p.fillRect(rect(), palette().color(QPalette::Base));
     const QRect area = rect().adjusted(4, 4, -4, -4);
     if (m_valori.isEmpty()) {
         p.setPen(palette().color(QPalette::PlaceholderText));
@@ -106,11 +107,14 @@ void GraficoBarre::paintEvent(QPaintEvent*)
         const int sx = x + int((passo - larghezza) / 2);
         const qint64 v = std::max<qint64>(0, m_valori[i]);
         const int h = int(double(base - alto) * v / massimo);
+        // Il giorno scelto pieno, gli altri tenui: si vede subito dove si è
         QColor c = colore;
         if (m_evidenziata >= 0 && i != m_evidenziata)
-            c.setAlpha(140);
-        p.fillRect(QRect(sx, base - h, larghezza, h), c);
-        p.setPen(palette().color(QPalette::WindowText));
+            c.setAlpha(90);
+        p.setPen(Qt::NoPen);
+        p.setBrush(c);
+        p.drawRoundedRect(QRectF(sx, base - h, larghezza, h), 2, 2);
+        p.setPen(palette().color(i == m_evidenziata || m_evidenziata < 0 ? QPalette::WindowText : QPalette::PlaceholderText));
         if (v > 0 && passo > fm.horizontalAdvance(QStringLiteral("9999")))
             p.drawText(QRect(x, base - h - altezzaTesto - 1, int(passo), altezzaTesto), Qt::AlignCenter,
                        QLocale(QLocale::Italian).toString((v + 50) / 100));
@@ -124,17 +128,18 @@ void GraficoBarre::paintEvent(QPaintEvent*)
 QLabel* VistaCruscotto::riquadro(QGridLayout* griglia, int colonna, const QString& titolo, const QString& nome)
 {
     auto* cornice = new QFrame(this);
-    cornice->setFrameShape(QFrame::StyledPanel);
     cornice->setObjectName("riquadro");
-    cornice->setStyleSheet(QStringLiteral("#riquadro { background: palette(base); border: 1px solid palette(mid); border-radius: 6px; }"));
+    cornice->setStyleSheet(QStringLiteral("#riquadro { background: palette(base); border: 1px solid palette(mid); border-radius: 8px; }"));
     auto* l = new QVBoxLayout(cornice);
-    auto* t = new QLabel(titolo, cornice);
-    t->setStyleSheet(QStringLiteral("color: palette(placeholder-text);"));
+    l->setContentsMargins(14, 10, 14, 12);
+    l->setSpacing(2);
+    auto* t = nota(titolo, cornice);
     auto* valore = new QLabel(QStringLiteral("—"), cornice);
     valore->setObjectName(nome);
     valore->setFont(fontGrande(font(), 20, true));
     l->addWidget(t);
     l->addWidget(valore);
+    l->addStretch();
     griglia->addWidget(cornice, 0, colonna);
     return valore;
 }
@@ -153,8 +158,9 @@ VistaCruscotto::VistaCruscotto(ClientServer& client, QWidget* parent)
     m_giorno->setDisplayFormat(QStringLiteral("dddd dd/MM/yyyy"));
     m_giorno->setMaximumDate(QDate::currentDate());
     auto* oggi = new QPushButton(QStringLiteral("Oggi"), this);
-    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
-    m_stato = new QLabel(this);
+    auto* aggiorna = pulsanteAggiorna(this);
+    m_stato = nota(QString(), this);
+    m_stato->setWordWrap(false);
     m_stato->setObjectName("cruscotto_stato");
     barra->addWidget(titolo);
     barra->addWidget(m_giorno);
@@ -171,9 +177,9 @@ VistaCruscotto::VistaCruscotto(ClientServer& client, QWidget* parent)
 
     auto* riquadri = new QGridLayout;
     m_incasso = riquadro(riquadri, 0, QStringLiteral("Incasso"), "cruscotto_incasso");
-    m_confronto = new QLabel(m_incasso->parentWidget());
+    m_confronto = nota(QString(), m_incasso->parentWidget());
     m_confronto->setObjectName("cruscotto_confronto");
-    m_incasso->parentWidget()->layout()->addWidget(m_confronto);
+    static_cast<QVBoxLayout*>(m_incasso->parentWidget()->layout())->insertWidget(2, m_confronto);
     m_scontrini = riquadro(riquadri, 1, QStringLiteral("Scontrini"), "cruscotto_scontrini");
     m_medio = riquadro(riquadri, 2, QStringLiteral("Scontrino medio"), "cruscotto_medio");
     m_mese = riquadro(riquadri, 3, QStringLiteral("Incasso del mese"), "cruscotto_mese");
@@ -250,21 +256,22 @@ void VistaCruscotto::mostraServer(const QJsonObject& s)
     const auto backup = s.value("backup").toObject();
     const auto ripristino = s.value("ripristino").toObject();
     QStringList parti;
-    parti << QStringLiteral("Backup: %1%2").arg(quando(backup.value("at")),
-                                               backup.isEmpty() ? QString()
-                                               : backup.value("esito").toBool() ? QStringLiteral(" ✔ (%1)").arg(mega(backup.value("dimensione").toInteger()))
-                                                                                : QStringLiteral(" ✘"));
-    parti << QStringLiteral("Prova di ripristino: %1%2").arg(quando(ripristino.value("at")),
-                                                             ripristino.isEmpty() ? QString()
-                                                             : ripristino.value("esito").toBool() ? QStringLiteral(" ✔") : QStringLiteral(" ✘"));
-    parti << QStringLiteral("Database %1").arg(mega(s.value("dimensione_database").toInteger()));
+    parti << QStringLiteral("backup %1%2").arg(quando(backup.value("at")),
+                                              backup.isEmpty() ? QString()
+                                              : backup.value("esito").toBool() ? QStringLiteral(" (%1)").arg(mega(backup.value("dimensione").toInteger()))
+                                                                               : QStringLiteral(" (non riuscito)"));
+    parti << QStringLiteral("prova di ripristino %1%2").arg(quando(ripristino.value("at")),
+                                                            ripristino.isEmpty() || ripristino.value("esito").toBool()
+                                                                ? QString() : QStringLiteral(" (non riuscita)"));
+    parti << QStringLiteral("database %1").arg(mega(s.value("dimensione_database").toInteger()));
     if (const int ritardo = s.value("vendite_in_ritardo").toInt())
-        parti << QStringLiteral("%1 vendite di oggi arrivate in ritardo (cassa offline)").arg(ritardo);
-    QString testo = QStringLiteral("<span style='color:palette(placeholder-text)'>Server — %1</span>")
+        parti << QStringLiteral("%1 vendite di oggi arrivate in ritardo").arg(ritardo);
+    QString testo = QStringLiteral("<span style='color:palette(placeholder-text)'>Server: %1</span>")
                         .arg(parti.join(QStringLiteral(" · ")).toHtmlEscaped());
+    // Gli avvisi in rosso, a parole: vanno segnalati a chi segue il server
     const auto avvisi = s.value("avvisi").toArray();
     for (const auto& a : avvisi)
-        testo += QStringLiteral("<br><b style='color:#c62828'>⚠ %1</b>").arg(a.toString().toHtmlEscaped());
+        testo += QStringLiteral("<br><span style='color:#c62828; font-weight:600'>%1</span>").arg(a.toString().toHtmlEscaped());
     m_server->setText(testo);
     m_server->setToolTip(QStringLiteral("Backup ogni notte e prova di ripristino ogni mese: infra/supabase/README.md"));
 }
@@ -278,14 +285,15 @@ void VistaCruscotto::mostra(const QJsonObject& d)
     m_incasso->setText(euro(Money::fromCents(incasso)));
     if (prima > 0) {
         const double variazione = (incasso - prima) * 100.0 / prima;
-        m_confronto->setText(QStringLiteral("%1%2% rispetto a %3 della settimana scorsa (%4)")
+        m_confronto->setText(QStringLiteral("%1%2% su %3 scorso")
                                  .arg(variazione >= 0 ? QStringLiteral("+") : QString())
                                  .arg(it.toString(variazione, 'f', 0))
-                                 .arg(it.dayName(QDate::fromString(d.value("giorno").toString(), Qt::ISODate).dayOfWeek()))
-                                 .arg(euroTondi(prima)));
+                                 .arg(it.dayName(QDate::fromString(d.value("giorno").toString(), Qt::ISODate).dayOfWeek())));
+        m_confronto->setToolTip(QStringLiteral("Stesso giorno della settimana scorsa: %1").arg(euroTondi(prima)));
         m_confronto->setStyleSheet(variazione >= 0 ? QStringLiteral("color: #2e7d32;") : QStringLiteral("color: #c62828;"));
     } else {
-        m_confronto->setText(QStringLiteral("Nessuna vendita lo stesso giorno della settimana scorsa"));
+        m_confronto->setText(QStringLiteral("nessun confronto con la settimana scorsa"));
+        m_confronto->setToolTip(QString());
         m_confronto->setStyleSheet(QString());
     }
     const int resi = oggi.value("resi").toInt();
@@ -380,18 +388,19 @@ void VistaCruscotto::mostra(const QJsonObject& d)
         const int n = f.value(QLatin1String(v.chiave)).toInt();
         if (n <= 0)
             continue;
+        // Righe semplici, cliccabili: il numero davanti, una linea sottile tra una e l'altra
         auto* b = new QPushButton(QStringLiteral("%1 %2").arg(n).arg(QString::fromUtf8(n == 1 ? v.uno : v.tanti)), m_daFare);
         b->setObjectName(QStringLiteral("da_fare_%1").arg(QLatin1String(v.chiave)));
-        b->setIcon(style()->standardIcon(QStyle::SP_ArrowRight));
-        b->setStyleSheet(QStringLiteral("QPushButton { text-align: left; padding: 6px; }"));
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet(QStringLiteral("QPushButton { text-align: left; padding: 9px 6px; border: none;"
+                                        " border-bottom: 1px solid palette(mid); border-radius: 0; background: transparent; }"
+                                        "QPushButton:hover { color: palette(highlight); }"));
         connect(b, &QPushButton::clicked, this, [this, dove = QString::fromLatin1(v.dove)] { emit apri(dove); });
         lf->addWidget(b);
         ++quante;
     }
     if (quante == 0) {
-        auto* tutto = new QLabel(QStringLiteral("Niente da fare: tutto in ordine."), m_daFare);
-        tutto->setStyleSheet(QStringLiteral("color: #2e7d32; font-weight: bold;"));
-        lf->addWidget(tutto);
+        lf->addWidget(nota(QStringLiteral("Niente in sospeso."), m_daFare));
     }
     static_cast<QVBoxLayout*>(lf)->addStretch();
     m_stato->setText(QStringLiteral("Aggiornato alle %1").arg(QTime::currentTime().toString("HH:mm")));

@@ -82,8 +82,10 @@ int main(int argc, char* argv[])
     std::unique_ptr<mdr::StampanteFiscale> rt;
     QString registratore;
     if (impostazioni.rtConnessione == mdr::ConnessioneRt::Rete && !impostazioni.rtIndirizzo.isEmpty()) {
+        // Ogni scambio col registratore finisce in <dati>/registratore/rt-AAAAMMGG.log (30 giorni)
         auto custom = std::make_unique<mdr::StampanteCustomXml>(
-            std::make_unique<mdr::TrasportoHttpCustom>(impostazioni.rtIndirizzo),
+            std::make_unique<mdr::TrasportoConRegistro>(std::make_unique<mdr::TrasportoHttpCustom>(impostazioni.rtIndirizzo),
+                                                        dati.absoluteFilePath(QStringLiteral("registratore"))),
             mdr::ConfigurazioneCustom::daTesto(impostazioni.rtPagamenti, impostazioni.rtAliquote),
             impostazioni.rtMatricola);
         QString errore;
@@ -91,7 +93,9 @@ int main(int argc, char* argv[])
             impostazioni.rtMatricola = custom->matricola();
             impostazioni.salva(fileImpostazioni);
         }
-        registratore = QStringLiteral("%1 %2 (%3)").arg(custom->nome(), custom->matricola(), impostazioni.descrizioneRt());
+        registratore = QStringLiteral("%1 %2 (%3)<br>Registro degli scambi: %4")
+                           .arg(custom->nome(), custom->matricola(), impostazioni.descrizioneRt(),
+                                QDir::toNativeSeparators(dati.absoluteFilePath(QStringLiteral("registratore"))));
         if (!errore.isEmpty())
             registratore += QStringLiteral(" — all'avvio: %1").arg(errore);
         rt = std::move(custom);

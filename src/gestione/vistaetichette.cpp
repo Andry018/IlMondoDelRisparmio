@@ -50,7 +50,7 @@ VistaEtichette::VistaEtichette(ClientServer& client, QWidget* parent)
     auto* aggiungi = new QPushButton(style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("Aggiungi"), this);
     auto* tutte = new QPushButton(QStringLiteral("Spunta tutte"), this);
     auto* nessuna = new QPushButton(QStringLiteral("Nessuna"), this);
-    auto* ricarica = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
+    auto* ricarica = pulsanteAggiorna(this);
     barra->addWidget(m_codice, 1);
     barra->addWidget(aggiungi);
     barra->addSpacing(16);

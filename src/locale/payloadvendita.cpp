@@ -32,7 +32,7 @@ QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
 {
     QJsonArray righe;
     for (const auto& r : carrello.righe()) {
-        righe.append(QJsonObject{
+        QJsonObject riga{
             {"articolo_id", r.articoloId.isNull() ? QJsonValue() : r.articoloId.toString(QUuid::WithoutBraces)},
             {"descrizione", r.descrizione},
             {"quantita", qint64(r.quantita.millesimi())},
@@ -42,7 +42,13 @@ QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
             {"aliquota_bp", r.iva.basisPoints},
             {"natura", r.iva.natura.isEmpty() ? QJsonValue() : r.iva.natura},
             {"numero_reparto", r.reparto.toInt()},
-        });
+        };
+        // Promozione applicata (parte di "sconto"): il server la ignora, resta nel giornale della cassa
+        if (!r.promozione.isEmpty()) {
+            riga.insert("promozione", r.promozione);
+            riga.insert("sconto_promozione", qint64(r.scontoPromo.cents()));
+        }
+        righe.append(riga);
     }
 
     QJsonArray pagamenti;
@@ -94,6 +100,8 @@ QList<RigaCarrello> righeDaPayload(const QJsonObject& payload)
         riga.quantita = Quantita::fromMillesimi(r.value("quantita").toInteger());
         riga.prezzoUnitario = Money::fromCents(r.value("prezzo_unitario").toInteger());
         riga.sconto = Money::fromCents(r.value("sconto").toInteger());
+        riga.promozione = r.value("promozione").toString();
+        riga.scontoPromo = Money::fromCents(r.value("sconto_promozione").toInteger());
         out.append(riga);
     }
     return out;

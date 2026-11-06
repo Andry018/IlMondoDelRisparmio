@@ -18,6 +18,7 @@ class VistaFornitori;
 class VistaNegozio;
 class VistaOperatori;
 class VistaPalmare;
+class VistaPromozioni;
 class VistaChiusure;
 class VistaMagazzino;
 class VistaReport;
@@ -41,6 +42,10 @@ public:
 
     // Ricontrolla login e ruolo sul server e abilita le schede (anche per i test).
     void verificaAccesso();
+
+    // Il server del negozio è appena stato avviato su questo PC (avviaServerLocale): finché non
+    // risponde si riprova l'accesso ogni 3 secondi, per al massimo due minuti.
+    void attendiServer();
 
 signals:
     void accessoVerificato(const QString& ruolo);
@@ -66,6 +71,7 @@ private:
     VistaMagazzino* m_magazzino = nullptr;
     VistaEtichette* m_etichette = nullptr;
     VistaOrdini* m_ordini = nullptr;   // ordini ai fornitori (anche il magazziniere)
+    VistaPromozioni* m_promozioni = nullptr;
     VistaReport* m_report = nullptr;
     VistaChiusure* m_chiusure = nullptr;
     VistaResi* m_resi = nullptr;
@@ -74,6 +80,8 @@ private:
     QLabel* m_statoAccesso = nullptr;
     QString m_ruolo;
     QString m_email;
+    int m_attesaServer = 0;          // tentativi rimasti mentre il server locale si avvia
+    bool m_nonRaggiungibile = false; // ultimo controllo: server che non risponde
 };
 
 } // namespace mdr

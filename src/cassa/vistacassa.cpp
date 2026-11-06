@@ -4,8 +4,11 @@
 #include "core/codicefiscale.h"
 #include "dialogocontanti.h"
 #include "dialogooperatore.h"
+#include "pannellocontanti.h"
 
 #include <QApplication>
+#include <QColor>
+#include <QDate>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -20,7 +23,9 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QShortcut>
+#include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QEvent>
@@ -30,16 +35,54 @@
 
 namespace mdr {
 
+namespace {
+
+// Tasti che restano premuti (scontrino 1 e 2, verifica prezzo, pagine dei tasti rapidi): normali
+// come gli altri, col colore del negozio quando sono attivi. palette() si legge quando si imposta lo
+// stile: dopo un cambio di tema va reimpostato (applicaAspetto).
+QString stileAttivabile()
+{
+    return QStringLiteral("QPushButton { background: palette(button); color: palette(button-text);"
+                          " border: 1px solid palette(mid); border-radius: 6px; }"
+                          "QPushButton:checked { background: palette(highlight); color: palette(highlighted-text);"
+                          " border-color: palette(highlight); font-weight: bold; }");
+}
+
+} // namespace
+
 VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QWidget* parent)
     : QWidget(parent)
     , m_archivio(archivio)
     , m_op(operazioni)
 {
-    auto* principale = new QHBoxLayout(this);
-    m_principale = principale;
+    // Tre colonne; ogni pannello della schermata (scontrino, tasti, tastierino, comandi, contanti,
+    // giornale) va nella colonna scelta nell'aspetto (disponi). Una colonna più alta dello schermo
+    // scorre invece di allungare la finestra oltre i 768 punti del POS.
+    // Sul POS a 1024 punti ogni pixel conta: tasti col margine interno minimo (lo stile comune ne
+    // mette di più); i tasti colorati hanno il loro stile, che si somma a questo.
+    setStyleSheet(QStringLiteral("QPushButton { padding: 2px 4px; }"));
+    m_principale = new QHBoxLayout(this);
+    for (int c = 0; c < AspettoCassa::numeroColonne; ++c) {
+        auto* area = new QScrollArea(this);
+        area->setObjectName(QStringLiteral("colonna_%1").arg(c));
+        area->setWidgetResizable(true);
+        area->setFrameShape(QFrame::NoFrame);
+        area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        auto* dentro = new QWidget(area);
+        auto* l = new QVBoxLayout(dentro);
+        l->setContentsMargins(0, 0, 0, 0);
+        area->setWidget(dentro);
+        m_scorrimenti[c] = area;
+        m_colonne[c] = l;
+        m_principale->addWidget(area);
+    }
 
-    // Colonna sinistra: lettura codici e righe dello scontrino.
-    auto* sinistra = new QVBoxLayout;
+    // Scontrino: lettura codici, scontrini 1 e 2, righe, messaggio e totale.
+    auto* pannelloScontrino = new QWidget(this);
+    pannelloScontrino->setObjectName("pannello_scontrino");
+    auto* sinistra = new QVBoxLayout(pannelloScontrino);
+    sinistra->setContentsMargins(0, 0, 0, 0);
+    m_pannelli[Pannello::Scontrino] = pannelloScontrino;
     m_codice = new QLineEdit(this);
     m_codice->setObjectName("codice");
     m_codice->setPlaceholderText(QStringLiteral("Barcode, codice o prezzo + reparto"));
@@ -69,9 +112,7 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
         b->setFocusPolicy(Qt::NoFocus);
         b->setMinimumHeight(52);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        b->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #3a3a3a; color: #ddd; border: 1px solid #555; border-radius: 4px; }"
-            "QPushButton:checked { background: #f2c94c; color: black; font-weight: bold; border-color: #b8901c; }"));
+        b->setStyleSheet(stileAttivabile());
         connect(b, &QPushButton::clicked, this, [this, i] { cambiaScontrino(i); });
         m_tastiScontrino[i] = b;
         scontrini->addWidget(b, 2);
@@ -79,11 +120,7 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     m_tastoVerifica = pulsanteComando(QStringLiteral("Verifica prezzo"), Qt::Key_F12, this);
     m_tastoVerifica->setObjectName("verifica_prezzo");
     m_tastoVerifica->setCheckable(true);
-    // Stato normale dalla palette: con il solo :checked il tasto resterebbe chiaro nel tema scuro
-    m_tastoVerifica->setStyleSheet(QStringLiteral(
-        "QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid);"
-        " border-radius: 4px; }"
-        "QPushButton:checked { background: #1565c0; color: white; font-weight: bold; }"));
+    m_tastoVerifica->setStyleSheet(stileAttivabile());
     connect(m_tastoVerifica, &QPushButton::clicked, this, [this] { verificaPrezzo(); });
     scontrini->addWidget(m_tastoVerifica, 1);
     auto* ristampa = pulsanteComando(QStringLiteral("Ristampa"), QKeySequence(Qt::CTRL | Qt::Key_P), this);
@@ -118,15 +155,17 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     auto* scambia = new QShortcut(QKeySequence(Qt::Key_F11), this);
     connect(scambia, &QShortcut::activated, this, [this] { cambiaScontrino(1 - m_attivo); });
 
-    m_righe = new QTableWidget(0, 5, this);
+    m_righe = new QTableWidget(0, 6, this);
     m_righe->setObjectName("righe");
     m_righe->setHorizontalHeaderLabels({QStringLiteral("Descrizione"), QStringLiteral("Q.tà"),
                                         QStringLiteral("Prezzo"), QStringLiteral("Sconto"),
-                                        QStringLiteral("Totale")});
+                                        QStringLiteral("Totale"), QString()});   // ultima: ✕ per stornare
     // Su 1024x768 la descrizione deve avere tutto lo spazio che avanza.
     m_righe->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     m_righe->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_righe->verticalHeader()->setVisible(false);
+    m_righe->setShowGrid(false);              // righe separate dalle fasce alterne, senza griglia
+    m_righe->setAlternatingRowColors(true);
     m_righe->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_righe->setSelectionMode(QAbstractItemView::SingleSelection);
     m_righe->setFocusPolicy(Qt::NoFocus);
@@ -135,21 +174,36 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
 
     m_messaggio = new QLabel(this);
     m_messaggio->setObjectName("messaggio");
+    m_messaggio->setWordWrap(true);   // descrizioni lunghe: a capo, senza allargare la colonna
     caratteri(m_messaggio, 12);
     sinistra->addWidget(m_messaggio);
 
-    auto* totali = new QHBoxLayout;
+    // Totale in un riquadro: "Totale" piccolo sopra, l'importo grande; pagato e da pagare a destra
+    auto* riquadroTotale = new QFrame(this);
+    riquadroTotale->setObjectName("riquadro_totale");
+    riquadroTotale->setStyleSheet(QStringLiteral("#riquadro_totale { background: palette(base); border: 1px solid palette(mid);"
+                                                 " border-radius: 8px; }"));
+    auto* totali = new QHBoxLayout(riquadroTotale);
+    totali->setContentsMargins(12, 6, 12, 8);
+    auto* colonnaTotale = new QVBoxLayout;
+    colonnaTotale->setSpacing(0);
+    auto* titoloTotale = nota(QStringLiteral("Totale"), this);
+    titoloTotale->setWordWrap(false);
+    caratteri(titoloTotale, 10);
     m_totale = new QLabel(this);
     m_totale->setObjectName("totale");
-    m_totale->setFont(fontGrande(font(), 24, true));
-    caratteri(m_totale, 24);
+    m_totale->setFont(fontGrande(font(), 26, true));
+    caratteri(m_totale, 26);
+    colonnaTotale->addWidget(titoloTotale);
+    colonnaTotale->addWidget(m_totale);
     m_residuo = new QLabel(this);
     m_residuo->setObjectName("residuo");
-    caratteri(m_residuo, 16);
-    totali->addWidget(m_totale);
-    totali->addStretch();
-    totali->addWidget(m_residuo);
-    sinistra->addLayout(totali);
+    m_residuo->setWordWrap(true);   // "Pagato … — da pagare …" non deve allargare la colonna
+    m_residuo->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    caratteri(m_residuo, 14);
+    totali->addLayout(colonnaTotale);
+    totali->addWidget(m_residuo, 1);
+    sinistra->addWidget(riquadroTotale);
 
     m_giornale = new QPlainTextEdit(this);
     m_giornale->setObjectName("giornale");
@@ -158,43 +212,27 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     m_giornale->setMaximumBlockCount(500);
     m_giornale->setMaximumHeight(80);
     m_giornale->setPlaceholderText(QStringLiteral("Giornale del registratore"));
-    sinistra->addWidget(m_giornale);
-    principale->addLayout(sinistra, 6);
+    m_pannelli[Pannello::Giornale] = m_giornale;
 
-    // Colonna centrale: tastierino e reparti. Colonna destra: comandi.
-    auto* centro = new QVBoxLayout;
-    auto* destra = new QVBoxLayout;
-    auto* griglia = new QGridLayout;
-    auto* bContanti = pulsanteComando(QStringLiteral("Contanti"),       Qt::Key_F5, this);
-    auto* bCarta    = pulsanteComando(QStringLiteral("Carta"),          Qt::Key_F6, this);
-    auto* bBancomat = pulsanteComando(QStringLiteral("Bancomat"),       Qt::Key_F7, this);
-    auto* bAltro    = pulsanteComando(QStringLiteral("Altri pagamenti"), {}, this);
-    auto* bReparto  = pulsanteComando(QStringLiteral("Articolo libero"), Qt::Key_F2, this);
-    auto* bQuantita = pulsanteComando(QStringLiteral("Quantità riga"),  Qt::Key_F9, this);
-    auto* bSconto   = pulsanteComando(QStringLiteral("Sconto"),         Qt::Key_F3, this);
-    bSconto->setObjectName("sconto");
-    bSconto->setToolTip(QStringLiteral("Sconto sulla riga o sul totale, oppure arrotondamento del totale (F3)"));
-    auto* bRimuovi  = pulsanteComando(QStringLiteral("Storna riga"),    Qt::Key_F4, this);
-    auto* bAnnulla  = pulsanteComando(QStringLiteral("Annulla scontrino"), Qt::Key_F8, this);
-    auto* bZ        = pulsanteComando(QStringLiteral("Chiusura Z"),     Qt::Key_F10, this);
-    auto* bOperatore = pulsanteComando(QStringLiteral("Operatore"),     Qt::Key_F1, this);
-    bOperatore->setObjectName("operatore");
-    bContanti->setStyleSheet("QPushButton { background: #2e7d32; color: white; font-weight: bold;"
-                             " border: 1px solid #1b5e20; border-radius: 4px; }"
-                             "QPushButton:pressed { background: #1b5e20; }");
-    const QList<QPushButton*> comandi = {bContanti, bCarta, bBancomat, bAltro, bReparto,
-                                         bQuantita, bSconto, bRimuovi, bAnnulla, bZ, bOperatore};
-    for (int i = 0; i < comandi.size(); ++i) {
-        comandi[i]->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        caratteri(comandi[i], 11);
-        griglia->addWidget(comandi[i], i, 0);
-    }
-    destra->addLayout(griglia);
+    // Comandi: pagamenti, sconto, storno... (quali e in che ordine li sceglie l'aspetto)
+    auto* pannelloComandi = new QWidget(this);
+    pannelloComandi->setObjectName("pannello_comandi");
+    m_grigliaComandi = new QGridLayout(pannelloComandi);
+    m_grigliaComandi->setContentsMargins(0, 0, 0, 0);
+    m_pannelli[Pannello::Comandi] = pannelloComandi;
+    creaComandi();
+
+    // Contanti fissi: banconote, monete e resto sempre sullo schermo (se scelto nell'aspetto)
+    m_contanti = new PannelloContanti(this);
+    connect(m_contanti, &PannelloContanti::incassa, this, [this] { paga(TipoPagamento::Contanti); });
+    connect(m_contanti, &PannelloContanti::tocco, this, &VistaCassa::attiva);
+    m_pannelli[Pannello::Contanti] = m_contanti;
 
     // Tastierino: scrive nel campo di input, come la tastiera fisica.
-    m_pannelloTastierino = new QWidget(this);
-    m_pannelloTastierino->setObjectName("tastierino");
-    auto* tastierino = new QGridLayout(m_pannelloTastierino);
+    auto* pannelloTastierino = new QWidget(this);
+    pannelloTastierino->setObjectName("tastierino");
+    m_pannelli[Pannello::Tastierino] = pannelloTastierino;
+    auto* tastierino = new QGridLayout(pannelloTastierino);
     tastierino->setContentsMargins(0, 0, 0, 0);
     const QStringList tasti = {"7", "8", "9", "C", "4", "5", "6", QStringLiteral("←"),
                                "1", "2", "3", "X", "0", "00", ",", "Invio"};
@@ -212,39 +250,19 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
 
 
     // Un tasto per reparto: prezzo sul tastierino + reparto = articolo libero.
-    auto* titoloReparti = new QLabel(QStringLiteral("Prezzo + reparto, tasti rapidi"), this);
-    titoloReparti->setWordWrap(true);
-    centro->addWidget(titoloReparti);
+    auto* pannelloTasti = new QWidget(this);
+    pannelloTasti->setObjectName("pannello_tasti");
+    auto* centro = new QVBoxLayout(pannelloTasti);
+    centro->setContentsMargins(0, 0, 0, 0);
+    pannelloTasti->setToolTip(QStringLiteral("Reparto: prezzo sul tastierino e poi il reparto (articolo libero). "
+                                             "Tasto rapido: un numero prima è la quantità."));
     m_grigliaReparti = new QGridLayout;
-    centro->addLayout(m_grigliaReparti, 3);
+    centro->addLayout(m_grigliaReparti, 1);
+    m_pannelli[Pannello::Tasti] = pannelloTasti;
     aggiornaReparti();
-    centro->addWidget(m_pannelloTastierino, 4);
-    principale->addLayout(centro, 3);
-    principale->addLayout(destra, 2);
+    disponi();
 
     connect(m_codice, &QLineEdit::returnPressed, this, &VistaCassa::leggiCodice);
-    connect(bContanti, &QPushButton::clicked, this, [this] { paga(TipoPagamento::Contanti); });
-    connect(bCarta,    &QPushButton::clicked, this, [this] { paga(TipoPagamento::Carta); });
-    connect(bBancomat, &QPushButton::clicked, this, [this] { paga(TipoPagamento::Bancomat); });
-    connect(bAltro,    &QPushButton::clicked, this, [this] {
-        const QList<TipoPagamento> tipi = {TipoPagamento::Satispay, TipoPagamento::BuonoPasto,
-                                           TipoPagamento::NonRiscosso};
-        QStringList nomi;
-        for (auto t : tipi)
-            nomi << nomePagamento(t);
-        bool ok = false;
-        const auto scelto = QInputDialog::getItem(this, QStringLiteral("Pagamento"), QStringLiteral("Tipo:"),
-                                                  nomi, 0, false, &ok);
-        if (ok)
-            paga(tipi[nomi.indexOf(scelto)]);
-    });
-    connect(bReparto,  &QPushButton::clicked, this, &VistaCassa::articoloLibero);
-    connect(bQuantita, &QPushButton::clicked, this, &VistaCassa::quantitaRiga);
-    connect(bSconto,   &QPushButton::clicked, this, &VistaCassa::sconto);
-    connect(bRimuovi,  &QPushButton::clicked, this, &VistaCassa::rimuoviRiga);
-    connect(bAnnulla,  &QPushButton::clicked, this, &VistaCassa::annullaScontrino);
-    connect(bZ,        &QPushButton::clicked, this, &VistaCassa::chiusuraGiornaliera);
-    connect(bOperatore, &QPushButton::clicked, this, &VistaCassa::cambiaOperatore);
 
     const auto stato = m_op.rt().stato();
     if (stato.ok) {
@@ -255,7 +273,148 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     } else {
         log(QStringLiteral("RT non disponibile: %1").arg(stato.errore));
     }
+    m_promozioni = m_archivio.promozioni();
     aggiorna();
+}
+
+void VistaCassa::creaComandi()
+{
+    // Il tasto F funziona anche col pulsante nascosto: è una scorciatoia a parte (stessa azione)
+    for (const auto& c : tuttiIComandi()) {
+        auto* b = new QPushButton(c.tasto.isEmpty() ? c.testo : QStringLiteral("%1\n%2").arg(c.testo, c.tasto.toString()), this);
+        b->setObjectName(c.chiave);
+        b->setMinimumHeight(42);
+        b->setFocusPolicy(Qt::NoFocus);   // il fuoco resta sul campo del lettore barcode
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        caratteri(b, 11);
+        if (!c.tasto.isEmpty()) {
+            auto* s = new QShortcut(c.tasto, this);
+            connect(s, &QShortcut::activated, b, &QPushButton::click);
+        }
+        m_comandi.insert(c.chiave, b);
+    }
+    m_comandi["sconto"]->setToolTip(QStringLiteral("Sconto sulla riga o sul totale, oppure arrotondamento del totale (F3)"));
+    m_comandi["contanti"]->setStyleSheet("QPushButton { background: #2e7d32; color: white; font-weight: bold;"
+                                         " border: 1px solid #1b5e20; border-radius: 4px; }"
+                                         "QPushButton:pressed { background: #1b5e20; }");
+    connect(m_comandi["contanti"], &QPushButton::clicked, this, [this] { paga(TipoPagamento::Contanti); });
+    connect(m_comandi["carta"], &QPushButton::clicked, this, [this] { paga(TipoPagamento::Carta); });
+    connect(m_comandi["bancomat"], &QPushButton::clicked, this, [this] { paga(TipoPagamento::Bancomat); });
+    connect(m_comandi["altri_pagamenti"], &QPushButton::clicked, this, &VistaCassa::altriPagamenti);
+    connect(m_comandi["articolo_libero"], &QPushButton::clicked, this, &VistaCassa::articoloLibero);
+    connect(m_comandi["quantita"], &QPushButton::clicked, this, &VistaCassa::quantitaRiga);
+    connect(m_comandi["sconto"], &QPushButton::clicked, this, &VistaCassa::sconto);
+    connect(m_comandi["storna"], &QPushButton::clicked, this, &VistaCassa::rimuoviRiga);
+    connect(m_comandi["annulla"], &QPushButton::clicked, this, &VistaCassa::annullaScontrino);
+    connect(m_comandi["chiusura_z"], &QPushButton::clicked, this, &VistaCassa::chiusuraGiornaliera);
+    connect(m_comandi["operatore"], &QPushButton::clicked, this, &VistaCassa::cambiaOperatore);
+    m_comandi["altro"]->setToolTip(QStringLiteral("Comandi usati di rado: chiusura Z, operatore, quantità..."));
+    connect(m_comandi["altro"], &QPushButton::clicked, this, &VistaCassa::altriComandi);
+}
+
+void VistaCassa::altriComandi()
+{
+    // Tutti i comandi non mostrati sullo schermo, a tasti grandi; il tocco chiude la pagina e lo esegue
+    QStringList chiavi;
+    for (const auto& c : tuttiIComandi())
+        if (c.chiave != QLatin1String("altro") && !m_aspetto.comandi.contains(c.chiave))
+            chiavi << c.chiave;
+    if (chiavi.isEmpty()) {
+        messaggio(QStringLiteral("Tutti i comandi sono già sullo schermo"));
+        return;
+    }
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Altri comandi"));
+    d.setObjectName("altri_comandi");
+    auto* layout = new QVBoxLayout(&d);
+    auto* griglia = new QGridLayout;
+    QString scelto;
+    for (int i = 0; i < chiavi.size(); ++i) {
+        const auto c = *comando(chiavi[i]);
+        auto* b = new QPushButton(c.tasto.isEmpty() ? c.testo : QStringLiteral("%1\n%2").arg(c.testo, c.tasto.toString()), &d);
+        b->setObjectName(QStringLiteral("altro_%1").arg(c.chiave));
+        b->setMinimumSize(200, 72);
+        b->setFocusPolicy(Qt::NoFocus);
+        b->setFont(fontGrande(font(), m_aspetto.punti(13), true));
+        connect(b, &QPushButton::clicked, &d, [&d, &scelto, k = c.chiave] {
+            scelto = k;
+            d.accept();
+        });
+        griglia->addWidget(b, i / 2, i % 2);
+    }
+    layout->addLayout(griglia);
+    auto* chiudi = new QPushButton(QStringLiteral("Torna alla vendita"), &d);
+    chiudi->setMinimumHeight(52);
+    chiudi->setFocusPolicy(Qt::NoFocus);
+    connect(chiudi, &QPushButton::clicked, &d, &QDialog::reject);
+    layout->addWidget(chiudi);
+    esegui(d);
+    attiva();
+    if (auto* b = m_comandi.value(scelto))
+        b->click();   // stesso comando del tasto (e del tasto F)
+}
+
+void VistaCassa::altriPagamenti()
+{
+    const QList<TipoPagamento> tipi = {TipoPagamento::Satispay, TipoPagamento::BuonoPasto, TipoPagamento::NonRiscosso};
+    QStringList nomi;
+    for (auto t : tipi)
+        nomi << nomePagamento(t);
+    bool ok = false;
+    const auto scelto = QInputDialog::getItem(this, QStringLiteral("Pagamento"), QStringLiteral("Tipo:"), nomi, 0, false, &ok);
+    if (ok)
+        paga(tipi[nomi.indexOf(scelto)]);
+}
+
+void VistaCassa::disponi()
+{
+    // Pannelli nelle colonne, nell'ordine dell'aspetto; i nascosti restano fuori dai layout
+    for (auto* w : std::as_const(m_pannelli))
+        for (auto* l : m_colonne)
+            l->removeWidget(w);
+    std::array<int, AspettoCassa::numeroColonne> quanti{};
+    for (const auto& posto : m_aspetto.pannelli) {
+        QWidget* w = m_pannelli.value(posto.pannello);
+        if (!w)
+            continue;
+        if (!posto.visibile) {
+            w->hide();
+            continue;
+        }
+        // Lo spazio in altezza va a righe dello scontrino, tasti e tastierino; gli altri prendono il loro
+        const int allunga = posto.pannello == Pannello::Scontrino ? 1
+                          : posto.pannello == Pannello::Tasti     ? 3
+                          : posto.pannello == Pannello::Tastierino ? 4
+                          : posto.pannello == Pannello::Comandi   ? 3
+                                                                  : 0;
+        m_colonne[posto.colonna]->addWidget(w, allunga);
+        w->show();
+        ++quanti[posto.colonna];
+    }
+    const int barra = style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    for (int c = 0; c < AspettoCassa::numeroColonne; ++c) {
+        m_scorrimenti[c]->setVisible(quanti[c] > 0);
+        m_principale->setStretch(c, quanti[c] > 0 ? m_aspetto.larghezze[c] : 0);
+        // La colonna non si stringe sotto quello che serve ai suoi tasti (lo scorrimento è solo in verticale)
+        m_scorrimenti[c]->setMinimumWidth(quanti[c] > 0 ? m_scorrimenti[c]->widget()->minimumSizeHint().width() + barra : 0);
+    }
+
+    // Comandi scelti, in ordine, su una o più colonne
+    for (auto* b : std::as_const(m_comandi)) {
+        m_grigliaComandi->removeWidget(b);
+        b->hide();
+    }
+    int i = 0;
+    for (const auto& k : m_aspetto.comandi) {
+        if (auto* b = m_comandi.value(k)) {
+            m_grigliaComandi->addWidget(b, i / m_aspetto.colonneComandi, i % m_aspetto.colonneComandi);
+            b->show();
+            ++i;
+        }
+    }
+    // Colonne dello scontrino
+    m_righe->setColumnHidden(2, !m_aspetto.colonnaPrezzo);
+    m_righe->setColumnHidden(3, !m_aspetto.colonnaSconto);
 }
 
 void VistaCassa::attiva()
@@ -331,8 +490,14 @@ void VistaCassa::leggi(const QString& input)
     // Nuove righe a scontrino già parzialmente pagato: i pagamenti si rifanno da capo.
     azzeraPagamenti();
     carr().aggiungi(*articolo, quantita.value_or(Quantita::pezzi(1)));
-    messaggio(QStringLiteral("%1  %2").arg(articolo->descrizione, euro(articolo->prezzoVendita)));
     aggiorna();
+    QString testoArticolo = QStringLiteral("%1  %2").arg(articolo->descrizione, euro(articolo->prezzoVendita));
+    for (const auto& r : carr().righe())
+        if (r.articoloId == articolo->id && !r.promozione.isEmpty()) {
+            testoArticolo += QStringLiteral("  · in promozione: %1").arg(r.promozione);
+            break;
+        }
+    messaggio(testoArticolo);
     m_righe->selectRow(m_righe->rowCount() - 1);
 }
 
@@ -356,9 +521,16 @@ std::optional<Money> prezzoDaTastierino(const QString& testo)
 void VistaCassa::aggiornaReparti()
 {
     while (auto* item = m_grigliaReparti->takeAt(0)) {
-        delete item->widget();
+        // Si può arrivare qui dal clic su una linguetta di pagina, che è tra i tasti da rifare:
+        // staccata subito (non si vede e findChild non la trova), cancellata a clic finito.
+        if (auto* w = item->widget()) {
+            w->hide();
+            w->setParent(nullptr);
+            w->deleteLater();
+        }
         delete item;
     }
+    const int colonne = std::clamp(m_aspetto.colonneTasti, 1, 4);
     // Reparti scelti nell'aspetto della cassa; se nessuno, quelli al 22% e al 5%: gli articoli hanno
     // già la loro IVA, i tasti servono per gli articoli liberi. Sotto, i tasti rapidi.
     QList<Reparto> reparti;
@@ -393,13 +565,41 @@ void VistaCassa::aggiornaReparti()
         b->setStyleSheet(QStringLiteral("QPushButton { background: #c8551b; color: white; font-weight: bold;"
                                         " border: 1px solid #8f3b10; border-radius: 4px; }"
                                         "QPushButton:pressed { background: #8f3b10; }"));
-        m_grigliaReparti->addWidget(b, i / 2, i % 2);
+        m_grigliaReparti->addWidget(b, i / colonne, i % colonne);
         connect(b, &QPushButton::clicked, this, [this, n = r.numero] { vendiReparto(n); });
     }
 
     // Tasti rapidi: un tocco e l'articolo è nello scontrino ("3" prima = 3 pezzi).
-    const int rigaRapidi = (reparti.size() + 1) / 2;
-    for (int i = 0; i < m_aspetto.tastiRapidi.size(); ++i) {
+    int rigaRapidi = (reparti.size() + colonne - 1) / colonne;
+    // Più pagine (Frutta, Panetteria...): una fila di linguette sopra i tasti, si vede una pagina alla volta
+    const auto pagine = m_aspetto.pagineRapidi();
+    if (!pagine.contains(m_paginaRapidi, Qt::CaseInsensitive))
+        m_paginaRapidi = pagine.value(0);
+    if (pagine.size() > 1) {
+        auto* fila = new QWidget(this);
+        fila->setObjectName("pagine_rapidi");
+        auto* lf = new QHBoxLayout(fila);
+        lf->setContentsMargins(0, 0, 0, 0);
+        lf->setSpacing(3);
+        for (int p = 0; p < pagine.size(); ++p) {
+            auto* b = new QPushButton(pagine[p], fila);
+            b->setObjectName(QStringLiteral("pagina_%1").arg(p));
+            b->setCheckable(true);
+            b->setChecked(pagine[p].compare(m_paginaRapidi, Qt::CaseInsensitive) == 0);
+            b->setFocusPolicy(Qt::NoFocus);
+            b->setMinimumHeight(36);
+            b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            caratteri(b, 11);
+            b->setStyleSheet(stileAttivabile());
+            connect(b, &QPushButton::clicked, this, [this, nome = pagine[p]] { mostraPaginaRapidi(nome); });
+            lf->addWidget(b);
+        }
+        m_grigliaReparti->addWidget(fila, rigaRapidi, 0, 1, colonne);
+        ++rigaRapidi;
+    }
+    const auto daMostrare = m_aspetto.tastiDellaPagina(m_paginaRapidi);
+    for (int posto = 0; posto < daMostrare.size(); ++posto) {
+        const int i = daMostrare[posto];
         const auto& t = m_aspetto.tastiRapidi[i];
         // Scritte lunghe su due righe: con il testo grande non stanno nel tasto
         QString scritta = t.etichetta.isEmpty() ? t.codice : t.etichetta;
@@ -418,9 +618,18 @@ void VistaCassa::aggiornaReparti()
                                         " border-radius: 4px; }"
                                         "QPushButton:pressed { background: %2; }")
                              .arg(sfondo.name(), sfondo.darker(150).name()));
-        m_grigliaReparti->addWidget(b, rigaRapidi + i / 2, i % 2);
+        m_grigliaReparti->addWidget(b, rigaRapidi + posto / colonne, posto % colonne);
         connect(b, &QPushButton::clicked, this, [this, i] { vendiTastoRapido(i); });
     }
+}
+
+void VistaCassa::mostraPaginaRapidi(const QString& pagina)
+{
+    m_paginaRapidi = pagina;
+    aggiornaReparti();
+    // I tasti nuovi prendono subito la dimensione del testo scelta (caratteri() la applica)
+    disponi();
+    attiva();
 }
 
 void VistaCassa::caratteri(QWidget* w, int punti)
@@ -435,20 +644,24 @@ void VistaCassa::caratteri(QWidget* w, int punti)
 void VistaCassa::applicaAspetto(const AspettoCassa& aspetto)
 {
     m_aspetto = aspetto;
-    // Tastierino a sinistra: le colonne si specchiano (comandi, tastierino, scontrino)
-    m_principale->setDirection(aspetto.tastierinoASinistra ? QBoxLayout::RightToLeft : QBoxLayout::LeftToRight);
-    m_pannelloTastierino->setVisible(aspetto.mostraTastierino);
-    m_giornale->setVisible(aspetto.mostraGiornale);
+    m_aspetto.normalizza();
     if (aspetto.bloccoMinuti > 0)
         m_inattivita->start(aspetto.bloccoMinuti * 60 * 1000);
     else
         m_inattivita->stop();
     // palette() nei fogli di stile si legge una volta sola: dopo un cambio di tema si rilegge
-    const QString stile = m_tastoVerifica->styleSheet();
-    m_tastoVerifica->setStyleSheet(QString());
-    m_tastoVerifica->setStyleSheet(stile);
+    for (QWidget* w : {static_cast<QWidget*>(m_tastoVerifica), static_cast<QWidget*>(m_tastiScontrino[0]),
+                       static_cast<QWidget*>(m_tastiScontrino[1]), findChild<QWidget*>("riquadro_totale")}) {
+        const QString stile = w->styleSheet();
+        w->setStyleSheet(QString());
+        w->setStyleSheet(stile);
+    }
     // I tasti reparto e rapidi si rifanno: i loro caratteri non vanno ricordati due volte
     aggiornaReparti();
+    // Prima si dispongono i pannelli: spostati in un'altra colonna cambiano genitore, e il foglio di
+    // stile dell'applicazione (src/ui/stile) ripristina i caratteri. Poi i caratteri, poi di nuovo
+    // disponi() (senza spostamenti) per la larghezza minima delle colonne, che dipende dal testo.
+    disponi();
     QList<QPair<QPointer<QWidget>, int>> vivi;
     for (const auto& [w, punti] : m_caratteri) {
         if (!w)
@@ -459,6 +672,8 @@ void VistaCassa::applicaAspetto(const AspettoCassa& aspetto)
         vivi.append({w, punti});
     }
     m_caratteri = vivi;
+    m_contanti->caratteri(m_aspetto.scala());
+    disponi();
     aggiorna();
 }
 
@@ -718,9 +933,14 @@ void VistaCassa::quantitaRiga()
 
 void VistaCassa::rimuoviRiga()
 {
-    const int riga = m_righe->currentRow();
-    if (riga < 0)
+    stornaRiga(m_righe->currentRow());
+}
+
+void VistaCassa::stornaRiga(int riga)
+{
+    if (riga < 0 || riga >= carr().righe().size())
         return;
+    messaggio(QStringLiteral("Stornato: %1").arg(carr().righe()[riga].descrizione));
     azzeraPagamenti();
     carr().rimuovi(riga);
     aggiorna();
@@ -903,7 +1123,16 @@ void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
 
     if (!importo) {
         importo = carr().residuo();
-        if (tipo == TipoPagamento::Contanti) {
+        if (tipo == TipoPagamento::Contanti && m_aspetto.mostrato(Pannello::Contanti)) {
+            // Contanti fissi: quanto toccato nel pannello, o un importo scritto nel campo
+            // ("2000" o "20,00" + Contanti), altrimenti l'importo esatto.
+            if (m_contanti->ricevuto() > Money()) {
+                importo = m_contanti->ricevuto();
+            } else if (const auto scritto = prezzoDaTastierino(m_codice->text()); scritto && *scritto > Money()) {
+                importo = *scritto;
+                m_codice->clear();
+            }
+        } else if (tipo == TipoPagamento::Contanti) {
             DialogoContanti dialogo(carr().residuo(), this);
             if (dialogo.exec() != QDialog::Accepted)
                 return;
@@ -919,6 +1148,7 @@ void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
         importo = std::min(*importo, carr().residuo());
 
     carr().aggiungiPagamento({tipo, *importo});
+    m_contanti->azzera();   // i contanti toccati sono stati incassati
     aggiorna();
 
     // Pagamento misto: si emette solo quando lo scontrino è coperto.
@@ -970,6 +1200,7 @@ void VistaCassa::emetti()
         testo += QStringLiteral(" · ripreso lo scontrino %1").arg(altro + 1);
     }
     aggiorna();
+    m_contanti->mostraResto(totale, resto);
     messaggio(testo);
     if (resto > Money())
         m_messaggio->setFont(fontGrande(font(), m_aspetto.punti(20), true));
@@ -1046,18 +1277,48 @@ void VistaCassa::azzeraPagamenti()
     carr().impostaCodiceFiscale(cf);
 }
 
+void VistaCassa::aggiornaPromozioni()
+{
+    m_promozioni = m_archivio.promozioni();
+    aggiorna();
+}
+
 void VistaCassa::aggiorna()
 {
     m_messaggio->setFont(fontGrande(font(), m_aspetto.punti(12)));
+    // Promozioni ricalcolate a ogni cambio: diventano sconti sulle righe (stesso risultato se nulla cambia)
+    applicaPromozioni(carr(), m_promozioni, QDate::currentDate());
     const auto& righe = carr().righe();
     m_righe->setRowCount(righe.size());
     for (int i = 0; i < righe.size(); ++i) {
         const auto& r = righe[i];
-        m_righe->setItem(i, 0, cella(r.descrizione));
+        auto* descrizione = cella(r.promozione.isEmpty() ? r.descrizione : QStringLiteral("%1  · %2").arg(r.descrizione, r.promozione));
+        auto* sconto = cella(r.sconto.isZero() ? QString() : QStringLiteral("-") + r.sconto.toString(), true);
+        if (!r.promozione.isEmpty()) {
+            // Righe in promozione in verde: il cliente vede subito il risparmio
+            descrizione->setToolTip(QStringLiteral("In promozione: %1").arg(r.promozione));
+            sconto->setToolTip(descrizione->toolTip());
+            sconto->setForeground(QColor(0x2e, 0x7d, 0x32));
+            descrizione->setForeground(QColor(0x2e, 0x7d, 0x32));
+        }
+        m_righe->setItem(i, 0, descrizione);
         m_righe->setItem(i, 1, cella(r.quantita.toString(), true));
         m_righe->setItem(i, 2, cella(r.prezzoUnitario.toString(), true));
-        m_righe->setItem(i, 3, cella(r.sconto.isZero() ? QString() : QStringLiteral("-") + r.sconto.toString(), true));
+        m_righe->setItem(i, 3, sconto);
         m_righe->setItem(i, 4, cella(r.totale().toString(), true));
+        // ✕ sulla riga: storno con un tocco (dopo il clic, perché il tasto sta nella riga che sparisce)
+        auto* storna = new QPushButton(QStringLiteral("✕"));
+        storna->setObjectName(QStringLiteral("storna_%1").arg(i));
+        storna->setToolTip(QStringLiteral("Storna questa riga (F4 per la riga scelta)"));
+        storna->setFocusPolicy(Qt::NoFocus);
+        storna->setFixedWidth(m_aspetto.punti(36));
+        storna->setStyleSheet(QStringLiteral("QPushButton { color: #c62828; font-weight: bold; border: none; background: transparent; }"
+                                             "QPushButton:pressed { background: #f8d7d7; }"));
+        caratteri(storna, 13);
+        connect(storna, &QPushButton::clicked, this, [this, i] {
+            QTimer::singleShot(0, this, [this, i] { stornaRiga(i); });
+        });
+        m_righe->setCellWidget(i, 5, storna);
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -1073,13 +1334,19 @@ void VistaCassa::aggiorna()
                                              : QStringLiteral("%1 righe").arg(c.righe().size()))
                   .arg(euro(c.totale())));
     }
-    m_totale->setText(QStringLiteral("TOTALE %1").arg(euro(carr().totale())));
+    m_totale->setText(euro(carr().totale()));
     QStringList stato;
     if (!carr().codiceFiscale().isEmpty())
         stato << QStringLiteral("C.F. %1").arg(carr().codiceFiscale());
     if (!carr().pagamenti().isEmpty())
         stato << QStringLiteral("Pagato %1 — da pagare %2").arg(euro(carr().pagato()), euro(carr().residuo()));
-    m_residuo->setText(stato.join(QStringLiteral(" · ")));
+    m_residuo->setText(stato.join(QStringLiteral(" · ")).replace(QStringLiteral("€ "), QStringLiteral("€ ")));
+    m_contanti->impostaDaPagare(carr().vuoto() ? Money() : carr().residuo());
+    // Testi cambiati (totale, messaggio): la colonna non deve stringersi sotto quello che mostra
+    const int barra = style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    for (auto* area : m_scorrimenti)
+        if (area->isVisibleTo(this))
+            area->setMinimumWidth(area->widget()->minimumSizeHint().width() + barra);
     m_codice->setFocus();
     emit scontrinoCambiato(carr());
 }
@@ -1090,6 +1357,7 @@ void VistaCassa::cambiaScontrino(int indice)
         return;
     m_attivo = indice;
     m_codice->clear();
+    m_contanti->azzera();   // i contanti toccati erano del cliente dell'altro scontrino
     aggiorna();
     m_righe->clearSelection();
     if (m_righe->rowCount() > 0)

@@ -6,6 +6,7 @@
 #include "fiscal/simulatore.h"
 #include "locale/payloadvendita.h"
 #include "aspettocassa.h"
+#include "personalizzacassa.h"
 #include "schermocliente.h"
 #include "vistaaspetto.h"
 #include "vistacassa.h"
@@ -23,6 +24,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSettings>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -340,7 +343,7 @@ private slots:
         AspettoCassa a;
         a.tema = AspettoCassa::Tema::Scuro;
         a.testo = AspettoCassa::Testo::Grande;
-        a.tastierinoASinistra = true;
+        a.specchia();
         a.tastiRapidi << TastoRapido{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt}
                       << TastoRapido{QStringLiteral("Pane"), QStringLiteral("3002"), QStringLiteral("marrone"), std::nullopt};
         applicaTema(a.tema);
@@ -349,13 +352,31 @@ private slots:
         m_finestra->grab().save(cartella + "/pos_aspetto_scuro.png");
         a.tema = AspettoCassa::Tema::Contrasto;
         a.testo = AspettoCassa::Testo::MoltoGrande;
-        a.tastierinoASinistra = false;
-        a.mostraTastierino = false;
-        a.mostraGiornale = false;
+        a.specchia();
+        a.mostra(Pannello::Tastierino, false);
+        a.mostra(Pannello::Giornale, false);
         applicaTema(a.tema);
         cassa()->applicaAspetto(a);
         QTest::qWait(50);
         m_finestra->grab().save(cartella + "/pos_aspetto_contrasto.png");
+        // Contanti fissi al posto del tastierino, durante un pagamento
+        a = AspettoCassa{};
+        a.mostra(Pannello::Tastierino, false);
+        a.mostra(Pannello::Contanti, true);
+        applicaTema(a.tema);
+        cassa()->applicaAspetto(a);
+        cassa()->leggi("2*1002");
+        cassa()->findChild<QPushButton*>("taglio_1000")->click();
+        QTest::qWait(50);
+        m_finestra->grab().save(cartella + "/pos_contanti_fissi.png");
+        cassa()->paga(TipoPagamento::Contanti);
+        QTest::qWait(50);
+        m_finestra->grab().save(cartella + "/pos_contanti_fissi_resto.png");
+        m_finestra->personalizza();
+        QTest::qWait(50);
+        m_finestra->finestraPersonalizza()->grab().save(cartella + "/pos_personalizza.png");
+        m_finestra->finestraPersonalizza()->reject();
+        cassa()->applicaAspetto(AspettoCassa{});
         applicaTema(AspettoCassa::Tema::Chiaro);
 
         // Schermata cliente (monitor da 10" 1024x600)
@@ -369,6 +390,227 @@ private slots:
         QTest::qWait(50);
         cliente->grab().save(cartella + "/pos_cliente_resto.png");
         cliente->hide();
+    }
+
+    void promozioni_in_cassa()
+    {
+        // 3x2 sul latte (1,35) scaricato dal server: il terzo latte è in regalo
+        Promozione p;
+        p.id = QUuid::createUuid();
+        p.nome = QStringLiteral("Latte");
+        p.tipo = Promozione::Tipo::PrendiPaghi;
+        p.quantita = 3;
+        p.paga = 2;
+        p.dal = QDate::currentDate();
+        p.articoli.insert(m_archivio->cerca("3001")->id);
+        QVERIFY(m_archivio->sostituisciPromozioni({p}));
+        cassa()->aggiornaPromozioni();
+        QCOMPARE(cassa()->promozioni().size(), 1);
+
+        cassa()->leggi("3*3001");
+        QCOMPARE(cassa()->carrello().totale().cents(), 270);
+        QVERIFY2(testo("messaggio").contains("in promozione: Latte (3x2)"), qPrintable(testo("messaggio")));
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+            cassa()->leggi("1001");
+            m_finestra->resize(1024, 768);
+            QTest::qWait(50);
+            m_finestra->grab().save(cartella + "/pos_promozione.png");
+            cassa()->stornaRiga(1);
+        }
+        // Togliere un latte (riga da 2): la promozione non vale più
+        cassa()->stornaRiga(0);
+        cassa()->leggi("2*3001");
+        QCOMPARE(cassa()->carrello().totale().cents(), 270);
+        cassa()->leggi("3001");
+        QCOMPARE(cassa()->carrello().totale().cents(), 270);   // 3 pezzi: uno in regalo
+        cassa()->paga(TipoPagamento::Carta);
+        const auto v = m_archivio->vendite(QDate::currentDate());
+        QCOMPARE(v.size(), 1);
+        QCOMPARE(v[0].totale.cents(), 270);
+        const auto riga = v[0].payload["righe"].toArray()[0].toObject();
+        QCOMPARE(riga["sconto"].toInteger(), 135);
+        QCOMPARE(riga["promozione"].toString(), QStringLiteral("Latte (3x2)"));
+
+        // Promozione tolta dal server (sincronizzazione senza): prezzo pieno
+        QVERIFY(m_archivio->sostituisciPromozioni({}));
+        cassa()->aggiornaPromozioni();
+        cassa()->leggi("3*3001");
+        QCOMPARE(cassa()->carrello().totale().cents(), 405);
+    }
+
+    void storno_dalla_riga_e_altri_comandi()
+    {
+        // ✕ sulla riga: storna proprio quella, dopo il tocco
+        cassa()->leggi("1001");
+        cassa()->leggi("1002");
+        cassa()->leggi("3001");
+        clic("storna_1");
+        QTest::qWait(10);
+        QCOMPARE(cassa()->carrello().righe().size(), 2);
+        QCOMPARE(cassa()->carrello().righe()[1].descrizione, QStringLiteral("Latte intero 1L"));
+        QVERIFY(testo("messaggio").contains("Stornato"));
+
+        // Comandi predefiniti: chiusura Z e operatore non sono sullo schermo ma in "Altro…"
+        QVERIFY(cassa()->findChild<QPushButton*>("altro")->isVisible());
+        QVERIFY(!cassa()->findChild<QPushButton*>("chiusura_z")->isVisible());
+        QStringList nellaPagina;
+        cassa()->esegui = [&nellaPagina](QDialog& d) {
+            for (auto* b : d.findChildren<QPushButton*>())
+                if (b->objectName().startsWith("altro_"))
+                    nellaPagina << b->objectName().mid(6);
+            d.findChild<QPushButton*>("altro_storna")->click();   // e si sceglie lo storno
+            return d.result();
+        };
+        cassa()->findChild<QTableWidget*>("righe")->selectRow(0);
+        clic("altro");
+        QCOMPARE(nellaPagina, (QStringList{"quantita", "storna", "chiusura_z", "operatore"}));
+        QCOMPARE(cassa()->carrello().righe().size(), 1);   // stornata la riga scelta
+        cassa()->esegui = [](QDialog& d) { return d.exec(); };
+    }
+
+    void tasti_rapidi_a_pagine()
+    {
+        AspettoCassa a;
+        a.tastiRapidi = {{QStringLiteral("Busta"), QStringLiteral("9999"), QStringLiteral("rosso"), Money::fromCents(20), {}},
+                         {QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt, QStringLiteral("Frigo")},
+                         {QStringLiteral("Pane"), QStringLiteral("3002"), QStringLiteral("marrone"), std::nullopt, QStringLiteral("frigo")},
+                         {QStringLiteral("Spugne"), QStringLiteral("1003"), QStringLiteral("verde"), std::nullopt, QStringLiteral("Casa")}};
+        QCOMPARE(a.pagineRapidi(), (QStringList{"Rapidi", "Frigo", "Casa"}));   // maiuscole indifferenti
+        QCOMPARE(a.tastiDellaPagina(QStringLiteral("Frigo")), (QList<int>{1, 2}));
+        cassa()->applicaAspetto(a);
+
+        // Prima pagina: solo la busta; tre linguette
+        QVERIFY(cassa()->findChild<QPushButton*>("pagina_2"));
+        QVERIFY(cassa()->findChild<QPushButton*>("pagina_0")->isChecked());
+        QVERIFY(cassa()->findChild<QPushButton*>("rapido_0"));
+        QVERIFY(!cassa()->findChild<QPushButton*>("rapido_1"));
+        // Linguetta Frigo: latte e pane (indici dell'elenco intero, come prima)
+        clic("pagina_1");
+        QCOMPARE(cassa()->paginaRapidi(), QStringLiteral("Frigo"));
+        QVERIFY(!cassa()->findChild<QPushButton*>("rapido_0"));
+        QVERIFY(cassa()->findChild<QPushButton*>("pagina_1")->isChecked());
+        clic("tasto_3");
+        clic("rapido_2");
+        QCOMPARE(cassa()->carrello().righe().last().quantita, Quantita::pezzi(3));
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+            m_finestra->resize(1024, 768);
+            QTest::qWait(50);
+            m_finestra->grab().save(cartella + "/pos_pagine_rapidi.png");
+        }
+        // La pagina resta quella scelta anche dopo la vendita
+        cassa()->paga(TipoPagamento::Carta);
+        QVERIFY(cassa()->findChild<QPushButton*>("rapido_1"));
+
+        // Una sola pagina: niente linguette
+        a.tastiRapidi.resize(1);
+        cassa()->applicaAspetto(a);
+        QVERIFY(!cassa()->findChild<QWidget*>("pagine_rapidi"));
+        QVERIFY(cassa()->findChild<QPushButton*>("rapido_0"));
+
+        // Salvate e rilette con la pagina
+        const QString file = m_dir.filePath("pagine.ini");
+        AspettoCassa b;
+        b.tastiRapidi = {{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt, QStringLiteral("Frigo")}};
+        b.salva(file);
+        QCOMPARE(AspettoCassa::carica(file).tastiRapidi, b.tastiRapidi);
+        // Oltre 12 tasti in una pagina: quelli in più non si caricano
+        for (int i = 0; i < 14; ++i)
+            b.tastiRapidi << TastoRapido{QStringLiteral("T%1").arg(i), QStringLiteral("10%1").arg(i), QStringLiteral("verde"),
+                                         std::nullopt, QStringLiteral("Tanti")};
+        b.salva(file);
+        QCOMPARE(AspettoCassa::carica(file).tastiDellaPagina(QStringLiteral("Tanti")).size(), AspettoCassa::massimoTastiPerPagina);
+    }
+
+    void contanti_fissi()
+    {
+        // Pannello dei contanti sempre sullo schermo: niente finestra, il tasto Contanti incassa
+        AspettoCassa a;
+        a.mostra(Pannello::Contanti, true);
+        cassa()->applicaAspetto(a);
+        QVERIFY(cassa()->pannello(Pannello::Contanti)->isVisible());
+        cassa()->leggi("1002");   // 2,49
+        cassa()->findChild<QPushButton*>("taglio_200")->click();
+        cassa()->findChild<QPushButton*>("taglio_50")->click();
+        QVERIFY2(testo("contanti_resto").contains("RESTO") && testo("contanti_resto").contains("0,01"),
+                 qPrintable(testo("contanti_resto")));
+        clic("contanti_incassa");   // nessuna finestra modale: se si aprisse il test resterebbe fermo
+        QVERIFY(cassa()->carrello().vuoto());
+        auto v = m_archivio->vendite(QDate::currentDate());
+        QCOMPARE(v.size(), 1);
+        QCOMPARE(pagamentiDaPayload(v[0].payload).first().importo.cents(), 250);
+        // Dopo l'emissione il resto resta scritto
+        QVERIFY2(testo("contanti_resto").contains("0,01"), qPrintable(testo("contanti_resto")));
+
+        // Niente toccato: F5 incassa l'importo esatto; un importo scritto nel campo vale come ricevuto
+        cassa()->leggi("1001");   // 1,89
+        cassa()->paga(TipoPagamento::Contanti);
+        v = m_archivio->vendite(QDate::currentDate());
+        QCOMPARE(v.size(), 2);
+        cassa()->leggi("1001");
+        cassa()->findChild<QLineEdit*>("codice")->setText("500");
+        cassa()->paga(TipoPagamento::Contanti);
+        QVERIFY(cassa()->carrello().vuoto());
+        QVERIFY(testo("contanti_resto").contains("3,11"));
+        // Un tocco senza scontrino non conta
+        cassa()->findChild<QPushButton*>("taglio_1000")->click();
+        QVERIFY(!testo("contanti_ricevuto").contains("10,00"));
+    }
+
+    void comandi_scelti_e_tasti_f()
+    {
+        AspettoCassa a;
+        a.comandi = {QStringLiteral("carta"), QStringLiteral("contanti")};
+        a.colonneComandi = 2;
+        a.colonneTasti = 3;
+        a.colonnaSconto = false;
+        cassa()->applicaAspetto(a);
+        QVERIFY(cassa()->findChild<QPushButton*>("carta")->isVisible());
+        QVERIFY(!cassa()->findChild<QPushButton*>("bancomat")->isVisible());
+        QVERIFY(!cassa()->findChild<QPushButton*>("chiusura_z")->isVisible());
+        QVERIFY(cassa()->findChild<QTableWidget*>("righe")->isColumnHidden(3));
+        // Bancomat tolto dallo schermo: F7 funziona lo stesso
+        cassa()->leggi("1001");
+        QShortcut* f7 = nullptr;
+        for (auto* s : cassa()->findChildren<QShortcut*>())
+            if (s->key() == QKeySequence(Qt::Key_F7))
+                f7 = s;
+        QVERIFY(f7);
+        emit f7->activated();
+        QVERIFY(cassa()->carrello().vuoto());
+        const auto v = m_archivio->vendite(QDate::currentDate());
+        QCOMPARE(v.size(), 1);
+        QCOMPARE(pagamentiDaPayload(v[0].payload).first().tipo, TipoPagamento::Bancomat);
+    }
+
+    void personalizza_anteprima_e_annulla()
+    {
+        const auto prima = cassa()->aspetto();
+        m_finestra->personalizza();
+        auto* d = m_finestra->finestraPersonalizza();
+        QVERIFY(d && d->isVisible());
+        // Accendere i contanti fissi dalla tabella dei pannelli: la cassa li mostra subito
+        auto* tabella = d->findChild<QTableWidget*>("personalizza_pannelli");
+        for (int r = 0; r < tabella->rowCount(); ++r)
+            if (tabella->item(r, 0)->data(Qt::UserRole).toInt() == int(Pannello::Contanti))
+                tabella->item(r, 0)->setCheckState(Qt::Checked);
+        QVERIFY(cassa()->pannello(Pannello::Contanti)->isVisible());
+        QVERIFY(cassa()->aspetto().mostrato(Pannello::Contanti));
+        d->findChild<QSpinBox*>("personalizza_colonne_tasti")->setValue(4);
+        QCOMPARE(cassa()->aspetto().colonneTasti, 4);
+        // Annulla: tutto come prima, niente nel file
+        d->reject();
+        QCOMPARE(cassa()->aspetto(), prima);
+        QVERIFY(!cassa()->pannello(Pannello::Contanti)->isVisible());
+
+        // Di nuovo, e Salva: resta e finisce nel file della postazione
+        m_finestra->personalizza();
+        d = m_finestra->finestraPersonalizza();
+        d->findChild<QPushButton*>("personalizza_specchia")->click();
+        d->findChild<QPushButton*>("personalizza_salva")->click();
+        QCOMPARE(cassa()->aspetto().colonna(Pannello::Scontrino), AspettoCassa::numeroColonne - 1);
+        QCOMPARE(AspettoCassa::carica(m_dir.filePath("mdr-cassa.ini")).colonna(Pannello::Scontrino),
+                 AspettoCassa::numeroColonne - 1);
+        AspettoCassa{}.salva(m_dir.filePath("mdr-cassa.ini"));   // le altre prove partono dall'aspetto iniziale
     }
 
     void verifica_prezzo()
@@ -395,9 +637,16 @@ private slots:
         AspettoCassa a;
         a.tema = AspettoCassa::Tema::Contrasto;
         a.testo = AspettoCassa::Testo::Grande;
-        a.tastierinoASinistra = true;
-        a.mostraTastierino = false;
-        a.mostraGiornale = false;
+        a.specchia();
+        a.mostra(Pannello::Tastierino, false);
+        a.mostra(Pannello::Giornale, false);
+        a.mostra(Pannello::Contanti, true);
+        a.spostaInColonna(Pannello::Contanti, 0);
+        a.larghezze = {1, 4, 7};
+        a.comandi = {QStringLiteral("carta"), QStringLiteral("contanti")};
+        a.colonneComandi = 2;
+        a.colonneTasti = 3;
+        a.colonnaSconto = false;
         a.reparti = {2, 1};
         a.tastiRapidi = {{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt},
                          {QStringLiteral("Busta"), QStringLiteral("9999"), QStringLiteral("rosso"), Money::fromCents(20)}};
@@ -408,13 +657,37 @@ private slots:
         a.salva(file);
         QVERIFY(AspettoCassa::carica(file).tastiRapidi.isEmpty());
         QCOMPARE(a.punti(10), 12);   // +15%, arrotondato
+        // Nessun comando sullo schermo è una scelta (restano i tasti F)
+        a.comandi.clear();
+        a.salva(file);
+        QVERIFY(AspettoCassa::carica(file).comandi.isEmpty());
+
+        // File di una versione precedente: tastierino a sinistra e pannelli nascosti con le vecchie chiavi
+        const QString vecchio = m_dir.filePath("vecchio.ini");
+        {
+            QSettings s(vecchio, QSettings::IniFormat);
+            s.setValue("aspetto/tastierino_a_sinistra", true);
+            s.setValue("aspetto/mostra_tastierino", false);
+        }
+        const auto letto = AspettoCassa::carica(vecchio);
+        QVERIFY(!letto.mostrato(Pannello::Tastierino));
+        QVERIFY(letto.mostrato(Pannello::Giornale));
+        QCOMPARE(letto.colonna(Pannello::Scontrino), AspettoCassa::numeroColonne - 1);
+        QCOMPARE(letto.colonna(Pannello::Comandi), 0);
+        // Lo scontrino non si nasconde, comandi sconosciuti spariscono
+        AspettoCassa b;
+        b.mostra(Pannello::Scontrino, false);
+        b.comandi << QStringLiteral("inesistente");
+        b.normalizza();
+        QVERIFY(b.mostrato(Pannello::Scontrino));
+        QVERIFY(!b.comandi.contains("inesistente"));
     }
 
     void aspetto_applicato_alla_cassa()
     {
         AspettoCassa a;
-        a.tastierinoASinistra = true;
-        a.mostraTastierino = false;
+        a.specchia();
+        a.mostra(Pannello::Tastierino, false);
         a.reparti = {2, 3};
         a.testo = AspettoCassa::Testo::MoltoGrande;
         a.tastiRapidi = {{QStringLiteral("Latte"), QStringLiteral("3001"), QStringLiteral("blu"), std::nullopt},
@@ -425,8 +698,11 @@ private slots:
 
         QVERIFY(!cassa()->findChild<QWidget*>("tastierino")->isVisible());
         QVERIFY(cassa()->findChild<QWidget*>("giornale")->isVisible());
-        QCOMPARE(qobject_cast<QBoxLayout*>(cassa()->layout())->direction(), QBoxLayout::RightToLeft);
-        QVERIFY(cassa()->findChild<QLineEdit*>("codice")->font().pointSize() > prima);
+        // Specchiata: comandi nella prima colonna da sinistra, scontrino nell'ultima
+        QVERIFY(cassa()->findChild<QWidget*>("colonna_0")->isAncestorOf(cassa()->pannello(Pannello::Comandi)));
+        QVERIFY(cassa()->findChild<QWidget*>("colonna_2")->isAncestorOf(cassa()->pannello(Pannello::Scontrino)));
+        QVERIFY2(cassa()->findChild<QLineEdit*>("codice")->font().pointSize() > prima,
+                 qPrintable(QStringLiteral("prima %1, dopo %2").arg(prima).arg(cassa()->findChild<QLineEdit*>("codice")->font().pointSize())));
         // Reparti scelti a mano, al posto di 1 (22%) e 4 (5%)
         QVERIFY(cassa()->findChild<QPushButton*>("reparto_2"));
         QVERIFY(cassa()->findChild<QPushButton*>("reparto_3"));

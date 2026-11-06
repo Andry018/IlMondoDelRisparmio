@@ -10,7 +10,7 @@ il server vedere `README.md` e `infra/supabase/README.md`.
 ### Inizio giornata
 
 1. Accendere il registratore telematico, poi aprire la cassa.
-2. Premere **Operatore (F1)** e inserire codice e PIN. Senza operatore la cassa non vende.
+2. Premere **F1** (o **Altro… → Operatore**) e inserire codice e PIN. Senza operatore la cassa non vende.
 3. In basso a destra si vede lo stato: operazioni in coda verso il server, terminale, registratore.
    Se compare **OROLOGIO DELLA CASSA SBAGLIATO** sistemare l'ora di Windows prima di vendere.
 
@@ -28,7 +28,7 @@ quando la rete torna (in basso: "N operazioni da inviare").
 | Articolo libero con descrizione | **Articolo libero (F2)** |
 | Tasti rapidi (shopper, ecc.) | un tocco; un numero prima è la quantità (`3` + Shopper = 3 sacchetti) |
 | Cambiare quantità | scegliere la riga, **Quantità riga (F9)** |
-| Togliere una riga | scegliere la riga, **Storna riga (F4)** |
+| Togliere una riga | la **✕** rossa in fondo alla riga (oppure scegliere la riga e **F4**) |
 | Sconto | **Sconto (F3)**: % sulla riga, % sul totale, € sul totale, oppure **Arrotonda a…** (es. 5,23 → 5,00) |
 | Prezzo di un articolo senza venderlo | **Verifica prezzo (F12)** e poi leggere l'articolo |
 | Codice fiscale sullo scontrino | **Cod. fiscale (Ctrl+F)**, anche letto dalla tessera sanitaria. Con un dispositivo medico la cassa lo chiede da sola |
@@ -42,7 +42,10 @@ cerca il portafoglio), si serve il secondo, poi si torna al primo. **F11** passa
 ### Pagare
 
 **Contanti (F5)** apre la finestra dei tagli: toccare le banconote ricevute, la cassa mostra il
-resto. **Carta (F6)**, **Bancomat (F7)**, **Altri pagamenti** (Satispay, buoni pasto, non riscosso).
+resto. Con i **contanti fissi** (vedi Aspetto) banconote, monete e resto stanno sempre sullo
+schermo: si toccano mentre si passano gli articoli, poi **Incassa contanti** (o F5). Senza
+toccare niente si incassa l'importo esatto; un importo scritto nel campo (es. `2000` o `20,00`)
+vale come ricevuto. **Carta (F6)**, **Bancomat (F7)**, **Altri pagamenti** (Satispay, buoni pasto, non riscosso).
 Si possono combinare: parte in contanti e il resto con la carta; lo scontrino esce quando il
 totale è coperto. **Ristampa (Ctrl+P)** fa una copia dell'ultimo scontrino.
 
@@ -56,7 +59,7 @@ totale è coperto. **Ristampa (Ctrl+P)** fa una copia dell'ultimo scontrino.
 
 ### Fine giornata
 
-**Chiusura Z (F10)**: la cassa mostra il riepilogo (vendite, resi, incassi per pagamento, IVA) e
+**Chiusura Z** (**Altro… → Chiusura Z**, oppure **F10**): la cassa mostra il riepilogo (vendite, resi, incassi per pagamento, IVA) e
 chiede conferma. Prima vanno chiusi gli scontrini in attesa. Dopo la Z la cassa installa gli
 aggiornamenti, se ce ne sono.
 
@@ -66,10 +69,17 @@ Ogni cassa ha il suo aspetto, salvato su quel PC:
 
 - **Tema**: chiaro, scuro, alto contrasto (per luce forte o vista stanca);
 - **Testo**: normale, grande, molto grande;
-- **Disposizione**: tasti a destra o a sinistra (mancini, posizione dello scanner);
-- tastierino e giornale del registratore si possono nascondere;
+- **Personalizza la schermata della cassa…**: si apre una finestra sopra la cassa e ogni modifica
+  si vede subito. Si scelgono i pannelli (scontrino, giornale, tasti reparto e rapidi, tastierino,
+  comandi, **contanti fissi**), in quale colonna stanno e in che ordine, la larghezza delle colonne,
+  **Scambia sinistra e destra** (mancini, posizione dello scanner), quali comandi mostrare e in che
+  ordine (un comando tolto va nella pagina **Altro…** e resta sul suo tasto F; all'inizio ci sono
+  chiusura Z, operatore, quantità e storno), quanti tasti per riga, le colonne Prezzo e
+  Sconto dello scontrino, tema e testo. **Salva** la tiene, **Annulla** torna a com'era;
 - **Tasti reparto**: quali reparti mostrare;
-- **Tasti rapidi** (fino a 12): scritta, codice dell'articolo, colore, prezzo se l'articolo non c'è;
+- **Tasti rapidi**: scritta, codice dell'articolo, colore, prezzo se l'articolo non c'è e **pagina**
+  (es. Frutta, Pane, Casa). Con più pagine la cassa mostra delle linguette sopra i tasti; fino a
+  8 pagine da 12 tasti. Senza pagina il tasto va nella prima ("Rapidi");
 - **Schermata per il cliente** sul secondo monitor: righe, totale e resto, con il messaggio di benvenuto.
 
 **Salva e applica** cambia subito la cassa.
@@ -115,7 +125,13 @@ segnalata subito a chi segue il server.
 - **Carichi da approvare**: la merce ricevuta col palmare contro una fattura; si controlla e si
   approva (o si rifiuta con un motivo).
 - **Carico merce…**: carico a mano con DDT.
-- **Inventario…** e **Giacenze da file…** (conta da Excel).
+- **Inventario…**: **Nuovo inventario** (tutto il negozio o alcuni reparti), poi si conta dalla
+  gestione (codice o barcode, quantità, Invio) e dai palmari insieme. La tabella mostra contato,
+  teorico, differenza e il suo valore al costo; **Solo gli articoli con una differenza** per
+  ricontrollarli. **Chiudi e registra…** corregge le giacenze; con **Azzera gli articoli non
+  contati** va a zero tutto quello che non è stato contato (inventario completo). **Rettifica un
+  articolo…** corregge subito un solo articolo senza aprire un inventario.
+- **Giacenze da file…** (conta da Excel).
 - **Proposta d'ordine…**: per fornitore, quanto ordinare per coprire i prossimi giorni dalle vendite
   recenti, arrotondato ai colli e tolta la merce già ordinata. I giorni sono quelli di **«Si ordina
   ogni»** nella scheda del fornitore (14 se vuoto), oppure quelli scelti nella finestra. Le quantità si correggono a mano;
@@ -133,6 +149,23 @@ segnalata subito a chi segue il server.
    palmare) riempiono la colonna **Arrivato**; **Manca** dice cosa non è arrivato.
 4. **Chiudi (arrivato)** quando l'ordine è finito: quello che manca torna nella proposta.
    **Annulla ordine** per un ordine sbagliato.
+
+### Promozioni
+
+**Nuova promozione…**: nome, tipo e periodo, poi gli articoli (codice o barcode e Invio, oppure
+**+ categoria** / **+ fornitore** per aggiungerli tutti). Quattro tipi:
+
+- **Prezzo speciale** (es. 0,99 al pezzo);
+- **Sconto in percentuale** (es. -20%);
+- **Prendi N paghi M** (es. 3x2): gli articoli della promozione si possono mescolare, in regalo i
+  pezzi meno cari;
+- **N pezzi a € X** (es. 3 a 5,00), anche mescolati.
+
+La colonna **Attenzione** avvisa degli articoli **sotto costo**, di quelli già in un'altra
+promozione e delle offerte che non convengono. Le casse le applicano da sole dopo la
+sincronizzazione (anche senza rete fino alla fine del periodo): sullo scontrino la riga è verde con
+il nome della promozione, e il registratore stampa lo sconto con quel nome. **Sospendi** la ferma
+(si può riattivare), **Elimina** la cancella; gli scontrini già fatti non cambiano.
 
 ### Etichette
 

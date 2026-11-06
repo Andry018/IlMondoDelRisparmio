@@ -3,6 +3,7 @@
 #include "core/codicefiscale.h"
 #include "core/iva.h"
 #include "core/money.h"
+#include "core/promozioni.h"
 #include "core/quantita.h"
 #include "fiscal/simulatore.h"
 
@@ -93,6 +94,145 @@ private slots:
         QCOMPARE(v->prefisso, QString("21"));
         QCOMPARE(v->codiceArticolo, QString("12345"));
         QCOMPARE(v->valore, 1250);
+    }
+
+    void promozioni()
+    {
+        const QDate oggi(2026, 11, 6);
+        auto articolo = [](const char* nome, int centesimi, UnitaMisura u = UnitaMisura::Pezzo) {
+            Articolo a;
+            a.id = QUuid::createUuid();
+            a.descrizione = QString::fromLatin1(nome);
+            a.iva = {2200, {}};
+            a.unita = u;
+            a.prezzoVendita = Money::fromCents(centesimi);
+            return a;
+        };
+        const auto latte = articolo("Latte", 150);
+        const auto yogurt = articolo("Yogurt", 90);
+        const auto pasta = articolo("Pasta", 100);
+        const auto mele = articolo("Mele", 200, UnitaMisura::Kg);
+        auto promo = [&](Promozione::Tipo tipo, const QList<QUuid>& articoli) {
+            Promozione p;
+            p.id = QUuid::createUuid();
+            p.nome = QStringLiteral("Prova");
+            p.tipo = tipo;
+            p.dal = oggi.addDays(-1);
+            for (const auto& id : articoli)
+                p.articoli.insert(id);
+            return p;
+        };
+
+        // Prezzo speciale: 1,50 -> 0,99 su 2 pezzi = 1,02 di sconto; il nome finisce sulla riga
+        auto prezzo = promo(Promozione::Tipo::Prezzo, {latte.id});
+        prezzo.prezzo = Money::fromCents(99);
+        Carrello c;
+        c.aggiungi(latte, Quantita::pezzi(2));
+        c.aggiungi(pasta);
+        applicaPromozioni(c, {prezzo}, oggi);
+        QCOMPARE(c.righe()[0].scontoPromo.cents(), 102);
+        QCOMPARE(c.righe()[0].promozione, QStringLiteral("Prova (€ 0,99)"));
+        QVERIFY(c.righe()[1].promozione.isEmpty());
+        QCOMPARE(c.totale().cents(), 198 + 100);
+        // Un altro latte letto dopo: stessa riga, sconto ricalcolato
+        c.aggiungi(latte);
+        QCOMPARE(c.righe().size(), 2);
+        applicaPromozioni(c, {prezzo}, oggi);
+        QCOMPARE(c.righe()[0].scontoPromo.cents(), 153);
+        // Ricalcolare non somma: stesso risultato
+        applicaPromozioni(c, {prezzo}, oggi);
+        QCOMPARE(c.righe()[0].sconto.cents(), 153);
+        // Promozione finita ieri o che inizia domani: niente sconto
+        prezzo.al = oggi.addDays(-1);
+        applicaPromozioni(c, {prezzo}, oggi);
+        QVERIFY(c.righe()[0].sconto.isZero());
+
+        // Percentuale, anche a peso: 20% di 0,350 kg x 2,00 = 0,70 -> 0,14
+        auto percento = promo(Promozione::Tipo::Percentuale, {mele.id});
+        percento.percentualeBp = 2000;
+        Carrello m;
+        m.aggiungi(mele, Quantita::fromMillesimi(350));
+        applicaPromozioni(m, {percento}, oggi);
+        QCOMPARE(m.righe()[0].scontoPromo.cents(), 14);
+
+        // 3x2 su latte e yogurt mescolati: 2 latte + 2 yogurt = un gruppo da 3 (1,50 1,50 0,90),
+        // regalato lo yogurt; il quarto pezzo resta a prezzo pieno
+        auto tre = promo(Promozione::Tipo::PrendiPaghi, {latte.id, yogurt.id});
+        tre.quantita = 3;
+        tre.paga = 2;
+        Carrello t;
+        t.aggiungi(yogurt, Quantita::pezzi(2));
+        t.aggiungi(latte, Quantita::pezzi(2));
+        applicaPromozioni(t, {tre}, oggi);
+        QCOMPARE(t.righe()[0].scontoPromo.cents(), 90);   // uno yogurt in regalo
+        QVERIFY(t.righe()[1].scontoPromo.isZero());
+        QCOMPARE(t.totale().cents(), 2 * 90 + 2 * 150 - 90);
+        // 6 pezzi = due gruppi: in regalo i due meno cari
+        t.aggiungi(yogurt, Quantita::pezzi(2));
+        applicaPromozioni(t, {tre}, oggi);
+        QCOMPARE(t.righe()[0].scontoPromo.cents(), 180);
+
+        // 2 a € 2,50 su pasta (1,00) e latte (1,50): gruppo da 2,50 -> nessuno sconto; 2 latte = 3,00 -> 0,50
+        auto due = promo(Promozione::Tipo::QuantitaPrezzo, {latte.id, pasta.id});
+        due.quantita = 2;
+        due.prezzo = Money::fromCents(250);
+        Carrello d;
+        d.aggiungi(latte, Quantita::pezzi(3));
+        d.aggiungi(pasta);
+        applicaPromozioni(d, {due}, oggi);
+        // Dal più caro: (latte, latte) = 3,00 -> 0,50; (latte, pasta) = 2,50 -> 0
+        QCOMPARE(d.righe()[0].scontoPromo.cents(), 50);
+        QVERIFY(d.righe()[1].scontoPromo.isZero());
+        // Divisione in proporzione con i centesimi che avanzano: 3 a 1,00 su (1,50 0,90 0,90) = 3,30 -> 2,30 di sconto
+        auto treUno = promo(Promozione::Tipo::QuantitaPrezzo, {latte.id, yogurt.id});
+        treUno.quantita = 3;
+        treUno.prezzo = Money::fromCents(100);
+        Carrello e;
+        e.aggiungi(latte);
+        e.aggiungi(yogurt, Quantita::pezzi(2));
+        applicaPromozioni(e, {treUno}, oggi);
+        QCOMPARE(e.righe()[0].scontoPromo.cents() + e.righe()[1].scontoPromo.cents(), 230);
+        QCOMPARE(e.totale().cents(), 100);
+
+        // Due promozioni sullo stesso articolo: vale la più recente
+        auto vecchia = prezzo;
+        vecchia.al = {};
+        vecchia.aggiornata = QDateTime(oggi.addDays(-5), QTime(9, 0));
+        auto nuova = promo(Promozione::Tipo::Percentuale, {latte.id});
+        nuova.percentualeBp = 1000;
+        nuova.aggiornata = QDateTime(oggi.addDays(-1), QTime(9, 0));
+        Carrello s;
+        s.aggiungi(latte);
+        applicaPromozioni(s, {vecchia, nuova}, oggi);
+        QCOMPARE(s.righe()[0].scontoPromo.cents(), 15);
+
+        // Sconto a mano e promozione insieme: lo sconto a mano resta, la riga non va sotto zero
+        Carrello h;
+        h.aggiungi(latte, Quantita::pezzi(2));
+        applicaPromozioni(h, {vecchia}, oggi);   // 3,00 -> 1,98
+        h.scontoRiga(0, Money::fromCents(50));
+        QCOMPARE(h.righe()[0].scontoManuale().cents(), 50);
+        applicaPromozioni(h, {vecchia}, oggi);
+        QCOMPARE(h.righe()[0].totale().cents(), 148);
+        h.scontoRiga(0, Money::fromCents(250));   // a mano più della riga in promozione
+        applicaPromozioni(h, {vecchia}, oggi);
+        QCOMPARE(h.righe()[0].totale().cents(), 0);
+        // Articolo libero (senza id): mai in promozione
+        Carrello l;
+        l.aggiungiRiga({QUuid(), QStringLiteral("Libero"), QStringLiteral("1"), {2200, {}}, Quantita::pezzi(1), Money::fromCents(150), {}});
+        applicaPromozioni(l, {vecchia}, oggi);
+        QVERIFY(l.righe()[0].sconto.isZero());
+
+        // Andata e ritorno dall'archivio locale (stesso formato di v_promozioni_cassa)
+        const auto letta = Promozione::daJson(tre.json());
+        QVERIFY(letta);
+        QCOMPARE(letta->tipo, Promozione::Tipo::PrendiPaghi);
+        QCOMPARE(letta->articoli, tre.articoli);
+        QCOMPARE(letta->descrizione(), QStringLiteral("3x2"));
+        QVERIFY(!letta->al.isValid());
+        auto rotta = tre.json();
+        rotta["paga"] = 3;   // prendi 3 paghi 3: non ha senso
+        QVERIFY(!Promozione::daJson(rotta));
     }
 
     void carrello()

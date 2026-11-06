@@ -86,7 +86,7 @@ VistaOrdini::VistaOrdini(ClientServer& client, QWidget* parent)
     m_filtro->addItem(QStringLiteral("Da mandare"), QStringLiteral("stato=eq.bozza"));
     m_filtro->addItem(QStringLiteral("In arrivo"), QStringLiteral("stato=eq.inviato"));
     m_filtro->addItem(QStringLiteral("Tutti (ultimi 200)"), QString());
-    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
+    auto* aggiorna = pulsanteAggiorna(this);
     barra->addWidget(nuovo);
     barra->addWidget(m_filtro);
     barra->addStretch();

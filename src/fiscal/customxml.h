@@ -45,6 +45,24 @@ private:
     std::unique_ptr<QNetworkAccessManager> m_rete;
 };
 
+// Avvolge un altro trasporto e scrive ogni richiesta e risposta in un file al giorno
+// (<cartella>/rt-AAAAMMGG.log), per capire dopo cosa ha detto il registratore. I file più
+// vecchi di "giorni" si cancellano all'avvio (contengono anche i codici fiscali dei clienti).
+class TrasportoConRegistro : public TrasportoRt {
+public:
+    TrasportoConRegistro(std::unique_ptr<TrasportoRt> vero, QString cartella, int giorni = 30);
+
+    RispostaTrasporto invia(const QByteArray& xml, int attesaMs) override;
+    void nota(const QString& testo);   // riga di commento nel registro (es. "chiusura Z")
+    QString fileDiOggi() const;
+
+private:
+    void scrivi(const QByteArray& testo);
+
+    std::unique_ptr<TrasportoRt> m_vero;
+    QString m_cartella;
+};
+
 // Risposta del registratore: <response success="true" status="0"><addInfo>...</addInfo></response>
 // (o infoResp, zReportsResp...). I nodi foglia sono tenuti col loro percorso sotto la radice,
 // es. "addInfo/fiscalDoc" o "addInfo/dailyTotals/vatSalesTickets/vat1/gross".
@@ -102,6 +120,8 @@ public:
     // getInfo: matricola, azzeramento corrente, stato fiscale. Va chiamata all'avvio.
     bool leggiInformazioni(QString* errore = nullptr, int attesaMs = 5000);
     QString descrizioneInformazioni() const { return m_informazioni; }
+    // getInfo "simulation": SI = modalità addestramento, i documenti non sono fiscali.
+    bool inAddestramento() const override { return m_addestramento; }
 
     EsitoFiscale stato() override;
     EsitoFiscale emettiDocumentoCommerciale(const Carrello& carrello) override;
@@ -135,6 +155,7 @@ private:
     QString m_informazioni;
     int m_azzeramento = 0;        // azzeramento in corso (ultima Z + 1), 0 = non noto
     int m_ultimoNumero = -1;      // ultimo documento emesso, -1 = non noto
+    bool m_addestramento = false;
 };
 
 } // namespace mdr

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/modelli.h"
+#include "core/promozioni.h"
 
 #include <QDate>
 #include <QJsonObject>
@@ -110,6 +111,10 @@ public:
     QList<Reparto> reparti() const;
     std::optional<Reparto> reparto(int numero) const;
     bool salvaReparto(const Reparto& r);
+
+    // Promozioni per la cassa: si riscrivono tutte a ogni sincronizzazione (sono poche).
+    bool sostituisciPromozioni(const QList<Promozione>& promozioni);
+    QList<Promozione> promozioni() const;
 
     // --- Giornale vendite ---
     // Salva la vendita (o il reso) e la accoda per registra_vendita, in un'unica transazione.

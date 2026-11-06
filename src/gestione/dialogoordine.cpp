@@ -78,13 +78,10 @@ DialogoOrdine::DialogoOrdine(ClientServer& client, QWidget* parent)
     filtri->setColumnStretch(1, 1);
     layout->addLayout(filtri);
 
-    auto* spiega = new QLabel(QStringLiteral("Da ordinare = vendite medie × giorni da coprire + scorta minima − giacenza, "
-                                             "arrotondato ai colli. Si può correggere a mano (doppio clic)."), this);
-    spiega->setWordWrap(true);
-    layout->addWidget(spiega);
-
     m_tabella = new QTableWidget(0, NumeroColonne, this);
     m_tabella->setObjectName("ordine_tabella");
+    m_tabella->setToolTip(QStringLiteral("Da ordinare = vendite medie × giorni da coprire + scorta minima − giacenza, "
+                                         "arrotondato ai colli. Doppio clic per correggere."));
     m_tabella->setHorizontalHeaderLabels({QStringLiteral("Fornitore"), QStringLiteral("Codice"), QStringLiteral("Cod. fornitore"),
                                           QStringLiteral("Descrizione"), QStringLiteral("Giacenza"), QStringLiteral("Venduti"),
                                           QStringLiteral("Al giorno"), QStringLiteral("Ordinato"), QStringLiteral("Collo"),

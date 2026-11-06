@@ -1,5 +1,7 @@
 #include "vistaamministrazione.h"
 
+#include "comune.h"
+
 #include "dialogoimportazione.h"
 
 #include "tabellaserver.h"
@@ -198,17 +200,14 @@ VistaOperatori::VistaOperatori(ClientServer& client, QWidget* parent)
     : VistaServer(client, parent)
 {
     auto* layout = new QVBoxLayout(this);
-    auto* nota = new QLabel(QStringLiteral("Ogni persona entra con email e password (gestione, palmare) e si "
-                                           "identifica alla cassa con codice e PIN. \"Nuovo utente\" crea tutto insieme."), this);
-    nota->setWordWrap(true);
-    layout->addWidget(nota);
     auto* barra = new QHBoxLayout;
     auto* nuovo = new QPushButton(style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("Nuovo utente…"), this);
     nuovo->setObjectName("nuovo_utente");
+    nuovo->setToolTip(QStringLiteral("Email e password (gestione, palmare) e codice e PIN per la cassa, tutto insieme"));
     auto* modifica = new QPushButton(QStringLiteral("Modifica"), this);
     auto* pin = new QPushButton(QStringLiteral("Imposta PIN…"), this);
     auto* password = new QPushButton(style()->standardIcon(QStyle::SP_DialogResetButton), QStringLiteral("Cambia password…"), this);
-    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
+    auto* aggiorna = pulsanteAggiorna(this);
     barra->addWidget(nuovo);
     barra->addWidget(modifica);
     barra->addWidget(pin);

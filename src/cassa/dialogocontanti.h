@@ -3,12 +3,20 @@
 #include "core/money.h"
 
 #include <QDialog>
+#include <QList>
 
 class QLabel;
 class QLineEdit;
 class QPushButton;
 
 namespace mdr {
+
+// Tagli in euro (centesimi), dal più grande: banconote da 100 a 5, monete da 2 € a 1 cent.
+const QList<int>& tagliBanconote();
+const QList<int>& tagliMonete();
+// Tasto con la foto della banconota o della moneta ("taglio_<centesimi>"); altezza dell'immagine
+// in pixel (le monete sono tonde, le banconote larghe in proporzione).
+QPushButton* pulsanteTaglio(int centesimi, int altezza, QWidget* parent);
 
 // Incasso in contanti: si toccano banconote e monete ricevute (o si digita l'importo)
 // e la finestra mostra subito il resto da dare.

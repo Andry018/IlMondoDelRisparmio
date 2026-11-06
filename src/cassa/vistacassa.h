@@ -2,8 +2,11 @@
 
 #include "aspettocassa.h"
 #include "core/carrello.h"
+#include "core/promozioni.h"
 #include "locale/operazionicassa.h"
 
+#include <QHash>
+#include <QMap>
 #include <QPointer>
 #include <QDialog>
 #include <QWidget>
@@ -13,14 +16,19 @@
 
 class QBoxLayout;
 class QGridLayout;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
+class QScrollArea;
 class QTableWidget;
 class QTimer;
+class QVBoxLayout;
 
 namespace mdr {
+
+class PannelloContanti;
 
 // Vista cassa: lettura barcode, scontrino in corso, pagamento ed emissione sull'RT.
 // Due scontrini paralleli: si può sospendere quello in corso (cliente che cerca il portafoglio)
@@ -37,10 +45,14 @@ public:
     void log(const QString& riga);
     void attiva();          // fuoco sul campo barcode
     void aggiornaReparti(); // tasti reparto e tasti rapidi (dopo una sincronizzazione o un cambio d'aspetto)
+    void aggiornaPromozioni(); // rilette dall'archivio locale (dopo una sincronizzazione)
+    const QList<Promozione>& promozioni() const { return m_promozioni; }
 
     // Tema a parte (applicaTema, per tutta l'applicazione): disposizione, caratteri, tasti.
     void applicaAspetto(const AspettoCassa& aspetto);
     const AspettoCassa& aspetto() const { return m_aspetto; }
+    // Il pannello della schermata (per i test e la personalizzazione).
+    QWidget* pannello(Pannello p) const { return m_pannelli.value(p); }
 
     // Per i test e l'automazione: equivale a digitare il testo e premere Invio.
     void leggi(const QString& testo);
@@ -59,6 +71,13 @@ public:
     // Tasto rapido (AspettoCassa::tastiRapidi): l'articolo col suo codice, o un articolo libero
     // al 22% se manca e il tasto ha un prezzo. Un numero digitato prima (es. 3) è la quantità.
     void vendiTastoRapido(int indice);
+    // Storno di una riga dello scontrino (✕ sulla riga, F4 per quella scelta).
+    void stornaRiga(int riga);
+    // "Altro…": i comandi tolti dallo schermo (chiusura Z, operatore...) in una pagina a parte.
+    void altriComandi();
+    // Pagina dei tasti rapidi mostrata (linguette sopra i tasti quando le pagine sono più di una).
+    void mostraPaginaRapidi(const QString& pagina);
+    QString paginaRapidi() const { return m_paginaRapidi; }
     // Sconto (tasto Sconto, F3). Per le percentuali valore 10,00 = 10%; per il nuovo totale è
     // l'importo che il cliente paga. false se non si può (lo dice nel messaggio).
     enum class ModoSconto { PercentualeRiga, PercentualeTotale, EuroTotale, NuovoTotale };
@@ -109,6 +128,9 @@ private:
     void aggiorna();
     void messaggio(const QString& testo, bool errore = false);
     void caratteri(QWidget* w, int punti);   // carattere che segue la dimensione del testo scelta
+    void creaComandi();                       // tasti della colonna comandi e loro tasti F
+    void disponi();                           // pannelli nelle colonne secondo l'aspetto
+    void altriPagamenti();
 
     ArchivioLocale& m_archivio;
     OperazioniCassa& m_op;
@@ -119,6 +141,8 @@ private:
     std::array<Carrello, 2> m_carrelli;
     int m_attivo = 0;
     bool m_modoVerifica = false;
+    QString m_paginaRapidi;   // pagina dei tasti rapidi mostrata
+    QList<Promozione> m_promozioni;   // dall'archivio locale, applicate a ogni cambio dello scontrino
     std::array<QPushButton*, 2> m_tastiScontrino{};
     QPushButton* m_tastoVerifica = nullptr;
 
@@ -129,8 +153,13 @@ private:
     QLabel* m_messaggio = nullptr;
     QPlainTextEdit* m_giornale = nullptr;
     QGridLayout* m_grigliaReparti = nullptr;
-    QBoxLayout* m_principale = nullptr;
-    QWidget* m_pannelloTastierino = nullptr;
+    QGridLayout* m_grigliaComandi = nullptr;
+    QHBoxLayout* m_principale = nullptr;
+    std::array<QScrollArea*, AspettoCassa::numeroColonne> m_scorrimenti{};
+    std::array<QVBoxLayout*, AspettoCassa::numeroColonne> m_colonne{};
+    QMap<Pannello, QWidget*> m_pannelli;
+    QHash<QString, QPushButton*> m_comandi;   // chiave di tuttiIComandi()
+    PannelloContanti* m_contanti = nullptr;
     QTimer* m_inattivita = nullptr;
 };
 

@@ -1,5 +1,6 @@
 #include "vistaaspetto.h"
 
+#include "comune.h"
 #include "locale/archiviolocale.h"
 
 #include <QCheckBox>
@@ -56,23 +57,20 @@ VistaAspetto::VistaAspetto(ArchivioLocale& archivio, AspettoCassa aspetto, QWidg
     m_testo->addItem(QStringLiteral("Normale"), int(AspettoCassa::Testo::Normale));
     m_testo->addItem(QStringLiteral("Grande (+15%)"), int(AspettoCassa::Testo::Grande));
     m_testo->addItem(QStringLiteral("Molto grande (+30%)"), int(AspettoCassa::Testo::MoltoGrande));
-    m_posizione = new QComboBox(schermo);
-    m_posizione->setObjectName("aspetto_posizione");
-    m_posizione->addItem(QStringLiteral("Scontrino a sinistra, tasti a destra"), false);
-    m_posizione->addItem(QStringLiteral("Tasti a sinistra, scontrino a destra"), true);
-    m_tastierino = new QCheckBox(QStringLiteral("Tastierino numerico sullo schermo"), schermo);
-    m_tastierino->setToolTip(QStringLiteral("Con una tastiera fisica si può togliere e lasciare più spazio ai tasti"));
-    m_giornale = new QCheckBox(QStringLiteral("Giornale del registratore sotto lo scontrino"), schermo);
+    auto* personalizza = new QPushButton(style()->standardIcon(QStyle::SP_DesktopIcon),
+                                         QStringLiteral("Personalizza la schermata della cassa…"), schermo);
+    personalizza->setObjectName("aspetto_personalizza");
+    personalizza->setMinimumHeight(44);
+    personalizza->setToolTip(QStringLiteral("Pannelli, colonne, comandi, contanti fissi: si vede subito sulla cassa"));
+    connect(personalizza, &QPushButton::clicked, this, &VistaAspetto::personalizza);
+    form->addRow(personalizza);
     form->addRow(QStringLiteral("Tema"), m_tema);
     form->addRow(QStringLiteral("Testo"), m_testo);
-    form->addRow(QStringLiteral("Disposizione"), m_posizione);
     m_cliente = new QCheckBox(QStringLiteral("Schermata per il cliente sul secondo monitor"), schermo);
     m_cliente->setObjectName("aspetto_schermo_cliente");
     m_cliente->setToolTip(QStringLiteral("Righe, totale e resto su un secondo schermo rivolto al cliente"));
     m_messaggioCliente = new QLineEdit(schermo);
     m_messaggioCliente->setPlaceholderText(QStringLiteral("Messaggio quando non c'è uno scontrino"));
-    form->addRow(m_tastierino);
-    form->addRow(m_giornale);
     form->addRow(m_cliente);
     m_blocco = new QComboBox(schermo);
     m_blocco->setObjectName("aspetto_blocco");
@@ -91,26 +89,23 @@ VistaAspetto::VistaAspetto(ArchivioLocale& archivio, AspettoCassa aspetto, QWidg
     m_reparti = new QListWidget(gruppoReparti);
     m_reparti->setObjectName("aspetto_reparti");
     lr->addWidget(m_reparti);
-    auto* notaReparti = new QLabel(QStringLiteral("Nessuno spuntato: i reparti al 22% e al 5%."), gruppoReparti);
-    notaReparti->setWordWrap(true);
-    lr->addWidget(notaReparti);
+    lr->addWidget(nota(QStringLiteral("Nessuno spuntato: i reparti al 22% e al 5%."), gruppoReparti));
     sinistra->addWidget(gruppoReparti, 1);
     colonne->addLayout(sinistra, 2);
 
     // Destra: tasti rapidi
-    auto* gruppoRapidi = new QGroupBox(QStringLiteral("Tasti rapidi (massimo %1)").arg(AspettoCassa::massimoTastiRapidi), this);
+    auto* gruppoRapidi = new QGroupBox(QStringLiteral("Tasti rapidi (fino a %1 pagine da %2)")
+                                           .arg(AspettoCassa::massimoPagine)
+                                           .arg(AspettoCassa::massimoTastiPerPagina),
+                                       this);
     auto* lt = new QVBoxLayout(gruppoRapidi);
-    auto* spiega = new QLabel(QStringLiteral("Un tocco e l'articolo è nello scontrino; un numero digitato prima è la "
-                                             "quantità. Il prezzo serve solo se l'articolo non è in archivio "
-                                             "(si vende come articolo libero al 22%)."),
-                              gruppoRapidi);
-    spiega->setWordWrap(true);
-    lt->addWidget(spiega);
     m_rapidi = new QTableWidget(0, NumeroColonne, gruppoRapidi);
     m_rapidi->setObjectName("aspetto_tasti_rapidi");
+    m_rapidi->setToolTip(QStringLiteral("Un numero digitato prima del tasto è la quantità. Il prezzo serve solo se "
+                                        "l'articolo non è in archivio (articolo libero al 22%). Pagine diverse = linguette in cassa."));
     m_rapidi->setHorizontalHeaderLabels({QStringLiteral("Scritta sul tasto"), QStringLiteral("Codice o barcode"),
                                          QStringLiteral("Articolo"), QStringLiteral("Colore"),
-                                         QStringLiteral("Prezzo se manca")});
+                                         QStringLiteral("Prezzo se manca"), QStringLiteral("Pagina")});
     m_rapidi->verticalHeader()->hide();
     m_rapidi->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_rapidi->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -154,7 +149,11 @@ VistaAspetto::VistaAspetto(ArchivioLocale& archivio, AspettoCassa aspetto, QWidg
             m_stato->setText(QStringLiteral("Al massimo %1 tasti rapidi.").arg(AspettoCassa::massimoTastiRapidi));
             return;
         }
-        aggiungiRiga({});
+        // Il tasto nuovo va nella stessa pagina della riga scelta
+        TastoRapido nuovo;
+        if (const int r = m_rapidi->currentRow(); r >= 0)
+            nuovo.pagina = m_rapidi->item(r, Pagina)->text().trimmed();
+        aggiungiRiga(nuovo);
         m_rapidi->setCurrentCell(m_rapidi->rowCount() - 1, Etichetta);
         m_rapidi->editItem(m_rapidi->item(m_rapidi->rowCount() - 1, Etichetta));
     });
@@ -192,9 +191,6 @@ void VistaAspetto::mostra(const AspettoCassa& a)
     m_salvato = a;
     m_tema->setCurrentIndex(std::max(0, m_tema->findData(int(a.tema))));
     m_testo->setCurrentIndex(std::max(0, m_testo->findData(int(a.testo))));
-    m_posizione->setCurrentIndex(a.tastierinoASinistra ? 1 : 0);
-    m_tastierino->setChecked(a.mostraTastierino);
-    m_giornale->setChecked(a.mostraGiornale);
     m_cliente->setChecked(a.schermoCliente);
     m_blocco->setCurrentIndex(std::max(0, m_blocco->findData(a.bloccoMinuti)));
     m_messaggioCliente->setText(a.messaggioCliente);
@@ -231,6 +227,8 @@ void VistaAspetto::aggiungiRiga(const TastoRapido& t)
     m_rapidi->setItem(r, Articolo, articolo);
     m_rapidi->setItem(r, Prezzo, new QTableWidgetItem(t.prezzoSeManca ? t.prezzoSeManca->toString() : QString()));
     m_rapidi->item(r, Prezzo)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_rapidi->setItem(r, Pagina, new QTableWidgetItem(t.pagina));
+    m_rapidi->item(r, Pagina)->setToolTip(QStringLiteral("Vuota = la prima pagina (\"Rapidi\")"));
     auto* colore = new QComboBox(m_rapidi);
     for (const auto& c : coloriTasti())
         colore->addItem(quadratino(c.sfondo), c.titolo, c.nome);
@@ -271,15 +269,8 @@ void VistaAspetto::sposta(int verso)
         return;
     // aspettoScelto salta le righe senza codice: si sposta sui dati della tabella
     QList<TastoRapido> righe;
-    for (int i = 0; i < m_rapidi->rowCount(); ++i) {
-        TastoRapido t;
-        t.etichetta = m_rapidi->item(i, Etichetta)->text();
-        t.codice = m_rapidi->item(i, Codice)->text();
-        t.colore = qobject_cast<QComboBox*>(m_rapidi->cellWidget(i, Colore))->currentData().toString();
-        if (const auto p = Money::parse(m_rapidi->item(i, Prezzo)->text()); p && *p > Money())
-            t.prezzoSeManca = p;
-        righe << t;
-    }
+    for (int i = 0; i < m_rapidi->rowCount(); ++i)
+        righe << tastoDellaRiga(i);
     righe.swapItemsAt(r, dest);
     m_rapidi->setRowCount(0);
     for (const auto& t : righe)
@@ -289,12 +280,11 @@ void VistaAspetto::sposta(int verso)
 
 AspettoCassa VistaAspetto::aspettoScelto() const
 {
-    AspettoCassa a;
+    // La disposizione (pannelli, comandi, colonne) si cambia da "Personalizza": resta quella salvata
+    AspettoCassa a = m_salvato;
+    a.reparti.clear();
     a.tema = AspettoCassa::Tema(m_tema->currentData().toInt());
     a.testo = AspettoCassa::Testo(m_testo->currentData().toInt());
-    a.tastierinoASinistra = m_posizione->currentData().toBool();
-    a.mostraTastierino = m_tastierino->isChecked();
-    a.mostraGiornale = m_giornale->isChecked();
     a.schermoCliente = m_cliente->isChecked();
     a.bloccoMinuti = m_blocco->currentData().toInt();
     a.messaggioCliente = m_messaggioCliente->text().trimmed().isEmpty() ? AspettoCassa{}.messaggioCliente
@@ -304,16 +294,25 @@ AspettoCassa VistaAspetto::aspettoScelto() const
             a.reparti << item->data(Qt::UserRole).toInt();
     a.tastiRapidi.clear();
     for (int i = 0; i < m_rapidi->rowCount(); ++i) {
-        TastoRapido t;
-        t.etichetta = m_rapidi->item(i, Etichetta)->text().trimmed();
-        t.codice = m_rapidi->item(i, Codice)->text().trimmed();
-        t.colore = qobject_cast<QComboBox*>(m_rapidi->cellWidget(i, Colore))->currentData().toString();
-        if (const auto p = Money::parse(m_rapidi->item(i, Prezzo)->text()); p && *p > Money())
-            t.prezzoSeManca = p;
+        TastoRapido t = tastoDellaRiga(i);
+        t.etichetta = t.etichetta.trimmed();
+        t.codice = t.codice.trimmed();
         if (!t.codice.isEmpty())
             a.tastiRapidi << t;
     }
     return a;
+}
+
+TastoRapido VistaAspetto::tastoDellaRiga(int i) const
+{
+    TastoRapido t;
+    t.etichetta = m_rapidi->item(i, Etichetta)->text();
+    t.codice = m_rapidi->item(i, Codice)->text();
+    t.colore = qobject_cast<QComboBox*>(m_rapidi->cellWidget(i, Colore))->currentData().toString();
+    if (const auto p = Money::parse(m_rapidi->item(i, Prezzo)->text()); p && *p > Money())
+        t.prezzoSeManca = p;
+    t.pagina = m_rapidi->item(i, Pagina)->text().trimmed();
+    return t;
 }
 
 void VistaAspetto::salva()
@@ -326,7 +325,23 @@ void VistaAspetto::salva()
             return;
         }
     }
-    m_salvato = aspettoScelto();
+    const auto scelto = aspettoScelto();
+    const auto pagine = scelto.pagineRapidi();
+    if (pagine.size() > AspettoCassa::massimoPagine) {
+        QMessageBox::warning(this, QStringLiteral("Tasti rapidi"),
+                             QStringLiteral("Al massimo %1 pagine di tasti rapidi (ora sono %2).")
+                                 .arg(AspettoCassa::massimoPagine).arg(pagine.size()));
+        return;
+    }
+    for (const auto& p : pagine) {
+        if (const int n = scelto.tastiDellaPagina(p).size(); n > AspettoCassa::massimoTastiPerPagina) {
+            QMessageBox::warning(this, QStringLiteral("Tasti rapidi"),
+                                 QStringLiteral("La pagina \"%1\" ha %2 tasti: al massimo %3 per pagina.")
+                                     .arg(p).arg(n).arg(AspettoCassa::massimoTastiPerPagina));
+            return;
+        }
+    }
+    m_salvato = scelto;
     emit aspettoCambiato(m_salvato);
     m_stato->setText(QStringLiteral("Salvato: la cassa usa già il nuovo aspetto."));
 }

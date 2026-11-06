@@ -2,6 +2,8 @@
 // ripresa dopo una risposta persa, totali della chiusura. Il registratore è finto.
 #include "fiscal/customxml.h"
 
+#include <QFile>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include <functional>
@@ -412,6 +414,49 @@ private slots:
         QVERIFY(richieste[1].contains("getDailyTotals"));
         QVERIFY(richieste[2].contains("<printerFiscalReport>"));
         QVERIFY(richieste[2].contains("printZReport"));
+    }
+
+    void registro_e_addestramento()
+    {
+        QTemporaryDir dir;
+        // Un registro di 40 giorni fa si cancella, uno di ieri resta
+        const auto vecchio = dir.filePath(QStringLiteral("rt-%1.log").arg(QDate::currentDate().addDays(-40).toString("yyyyMMdd")));
+        const auto ieri = dir.filePath(QStringLiteral("rt-%1.log").arg(QDate::currentDate().addDays(-1).toString("yyyyMMdd")));
+        for (const auto& f : {vecchio, ieri}) {
+            QFile x(f);
+            QVERIFY(x.open(QIODevice::WriteOnly));
+        }
+        QList<QByteArray> richieste;
+        bool simulazione = true;
+        auto trasporto = std::make_unique<TrasportoConRegistro>(
+            std::make_unique<TrasportoFinto>(richieste, [&](const QByteArray&) {
+                RispostaTrasporto r;
+                r.ricevuta = true;
+                r.corpo = QStringLiteral("<?xml version=\"1.0\"?><infoResp success=\"true\" status=\"0\">"
+                                         "<serialNumber>STMTE000123</serialNumber><zSetNumber>3</zSetNumber>"
+                                         "<simulation>%1</simulation></infoResp>")
+                              .arg(simulazione ? "SI" : "NO")
+                              .toUtf8();
+                return r;
+            }),
+            dir.path());
+        const QString oggi = trasporto->fileDiOggi();
+        QVERIFY(!QFile::exists(vecchio));
+        QVERIFY(QFile::exists(ieri));
+
+        StampanteCustomXml rt(std::move(trasporto), ConfigurazioneCustom::predefinita());
+        QVERIFY(rt.leggiInformazioni());
+        QVERIFY(rt.inAddestramento());
+        simulazione = false;
+        QVERIFY(rt.leggiInformazioni());
+        QVERIFY(!rt.inAddestramento());
+
+        QFile f(oggi);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QString testo = QString::fromUtf8(f.readAll());
+        QCOMPARE(testo.count(QStringLiteral("---- richiesta")), 2);
+        QVERIFY(testo.contains(QStringLiteral("getInfo")));
+        QVERIFY(testo.contains(QStringLiteral("<simulation>NO</simulation>")));
     }
 
     // Con il registratore finto acceso (strumenti/rt-finto/rt_finto.py) e MDR_RT_FINTO=127.0.0.1:8099:

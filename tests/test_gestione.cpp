@@ -12,6 +12,14 @@
 #include "filetabella.h"
 #include "vistaordini.h"
 #include "tabellaserver.h"
+#include "serverlocale.h"
+#include "vistapromozioni.h"
+#include "stile.h"
+#include <QApplication>
+#include <QFontDatabase>
+#include <QTabBar>
+#include "locale/clientserver.h"
+#include <QCheckBox>
 
 #include <QJsonArray>
 #include <QUuid>
@@ -51,6 +59,13 @@ class TestGestione : public QObject {
     std::unique_ptr<FinestraGestione> m_finestra;
 
 private slots:
+    // Come main.cpp di mdr-gestione: le misure (1024x768) valgono solo con lo stile vero
+    void initTestCase()
+    {
+        QApplication::setStyle(QStringLiteral("Fusion"));
+        applicaStile(TemaStile::Chiaro);
+    }
+
     void ricarico_e_margine_come_systemapp()
     {
         // ACE candeggina: costo 2,15, prezzo 3,40 IVA 22% → SystemApp mostra 29,623% e 22,853%
@@ -108,7 +123,7 @@ private slots:
             "ripristino": null, "dimensione_database": 157286400, "vendite_in_ritardo": 0,
             "avvisi": ["Prova di ripristino da fare (almeno una al mese)"]})json").object());
         const QString server = c.findChild<QLabel*>("cruscotto_server")->text();
-        QVERIFY2(server.contains("11 MB") && server.contains("150 MB") && server.contains("Prova di ripristino: mai"), qPrintable(server));
+        QVERIFY2(server.contains("11 MB") && server.contains("150 MB") && server.contains("prova di ripristino mai"), qPrintable(server));
         QVERIFY(server.contains("da fare (almeno una al mese)"));
         QSignalSpy apri(&c, &VistaCruscotto::apri);
         c.findChild<QPushButton*>("da_fare_prezzi_da_rivedere")->click();
@@ -340,23 +355,32 @@ private slots:
         QStringList titoli;
         for (int i = 0; i < schede->count(); ++i)
             titoli << schede->tabText(i);
-        QCOMPARE(titoli, (QStringList{"Cruscotto", "Articoli", "Magazzino", "Ordini", "Etichette", "Vendite", "Fatture", "Clienti", "Fornitori",
+        QCOMPARE(titoli, (QStringList{"Cruscotto", "Articoli", "Magazzino", "Ordini", "Etichette", "Promozioni", "Vendite", "Fatture", "Clienti", "Fornitori",
                                       "Chiusure", "Resi da verificare", "Operatori", "Negozio", "Palmare",
                                       "Impostazioni"}));
     }
 
     void ogni_scheda_sta_in_1024()
     {
-        // Cassa e gestione stanno su ogni PC, anche sul POS a 1024x768
+        // Cassa e gestione stanno su ogni PC, anche sul POS a 1024x768: col carattere di Windows e
+        // il menu laterale, ogni scheda deve stare nella larghezza che resta accanto al menu.
+        const QFont prima = QApplication::font();
+        if (QFontDatabase::families().contains(QStringLiteral("Segoe UI")))
+            QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
         auto* schede = m_finestra->findChild<QTabWidget*>();
+        const int menu = schede->tabBar()->sizeHint().width();
         QStringList troppo;
         for (int i = 0; i < schede->count(); ++i) {
             const int larga = schede->widget(i)->minimumSizeHint().width();
-            if (larga > 1000)
+            if (!qEnvironmentVariableIsEmpty("MDR_MISURE"))
+                qInfo("%s: larga almeno %d (menu %d)", qPrintable(schede->tabText(i)), larga, menu);
+            if (menu + larga > 1010)
                 troppo << QStringLiteral("%1=%2").arg(schede->tabText(i)).arg(larga);
         }
-        QVERIFY2(troppo.isEmpty(), qPrintable(troppo.join(", ")));
-        QVERIFY2(m_finestra->minimumSizeHint().width() <= 1024, qPrintable(QString::number(m_finestra->minimumSizeHint().width())));
+        const int finestra = m_finestra->minimumSizeHint().width();
+        QApplication::setFont(prima);
+        QVERIFY2(troppo.isEmpty(), qPrintable(QStringLiteral("menu %1, schede: %2").arg(menu).arg(troppo.join(", "))));
+        QVERIFY2(finestra <= 1024, qPrintable(QString::number(finestra)));
     }
 
     void senza_server_schede_del_server_spente()
@@ -401,6 +425,64 @@ private slots:
         schede->setCurrentIndex(articoli + 1);
         schede->setCurrentIndex(articoli);   // tornando su Articoli la tabella si aggiorna
         QCOMPARE(tabella->rowCount(), prima + 1);
+    }
+
+    void dialogo_promozione()
+    {
+        auto* client = m_finestra->findChild<ClientServer*>();
+        // Prezzo speciale 0,99: l'articolo che costa 1,20 è sotto costo
+        DialogoPromozione d(*client, {}, QJsonArray{
+            QJsonObject{{"id", "a1"}, {"codice", "1001"}, {"descrizione", "Latte"}, {"prezzo_vendita", 150}, {"costo_ultimo", 120}},
+            QJsonObject{{"id", "a2"}, {"codice", "1002"}, {"descrizione", "Pasta"}, {"prezzo_vendita", 100}, {"costo_ultimo", 60}},
+            QJsonObject{{"articolo_id", "a2"}, {"codice", "1002"}, {"descrizione", "Doppione"}},   // già in elenco
+        });
+        QCOMPARE(d.numeroArticoli(), 2);
+        QVERIFY(d.controlla().contains("nome"));
+        d.findChild<QLineEdit*>("promo_nome")->setText("Volantino");
+        QVERIFY(d.controlla().contains("prezzo speciale"));
+        d.findChild<QLineEdit*>("promo_prezzo")->setText("0,99");
+        QVERIFY(d.controlla().isEmpty());
+        auto* tabella = d.findChild<QTableWidget*>("promo_articoli");
+        QCOMPARE(tabella->item(0, 3)->text(), QStringLiteral("0,99"));
+        QVERIFY(tabella->item(0, 5)->text().contains("sotto costo"));
+        QVERIFY(tabella->item(1, 5)->text().isEmpty());
+        QVERIFY(d.findChild<QLabel*>("promo_riepilogo")->text().contains("1 sotto costo"));
+        auto p = d.dati();
+        QCOMPARE(p["tipo"].toString(), QStringLiteral("prezzo"));
+        QCOMPARE(p["prezzo"].toInteger(), 99);
+        QCOMPARE(p["articoli"].toArray().size(), 2);
+        QVERIFY(!p["al"].isNull());   // nuova: due settimane, non senza fine
+
+        // 3x2: prezzo medio al pezzo e controllo paga < prendi
+        d.findChild<QComboBox*>("promo_tipo")->setCurrentIndex(2);
+        QCOMPARE(tabella->item(0, 3)->text(), QStringLiteral("≈ 1,00"));   // 1,50 x 2 / 3
+        d.findChild<QSpinBox*>("promo_paga")->setValue(3);
+        QVERIFY(d.controlla().contains("meno di quanto si prende"));
+        d.findChild<QSpinBox*>("promo_paga")->setValue(2);
+        d.findChild<QCheckBox*>("promo_senza_fine")->setChecked(true);
+        p = d.dati();
+        QCOMPARE(p["quantita"].toInt(), 3);
+        QCOMPARE(p["paga"].toInt(), 2);
+        QVERIFY(p["al"].isNull());
+        QVERIFY(!p.contains("prezzo"));
+    }
+
+    void server_locale_assente_non_si_avvia()
+    {
+        // PC senza server del negozio: l'attività pianificata non c'è, l'esito è "non avviato"
+        // (una volta sola) e la gestione resta com'è.
+        int esiti = 0;
+        bool avviato = true;
+        avviaServerLocale(m_finestra.get(), [&](bool a) {
+            ++esiti;
+            avviato = a;
+        }, QStringLiteral("MDR attivita inesistente %1").arg(QUuid::createUuid().toString(QUuid::Id128)));
+        QTRY_COMPARE_WITH_TIMEOUT(esiti, 1, 15000);
+        QVERIFY(!avviato);
+        QTest::qWait(200);
+        QCOMPARE(esiti, 1);
+        m_finestra->attendiServer();   // senza server configurato non c'è niente da aspettare
+        QVERIFY(m_finestra->ruolo().isEmpty());
     }
 };
 

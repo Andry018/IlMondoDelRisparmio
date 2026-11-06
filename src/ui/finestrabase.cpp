@@ -12,6 +12,8 @@
 #include <QShortcut>
 #include <QStatusBar>
 #include <QTabWidget>
+
+#include "stile.h"
 #include <QTime>
 #include <QTimer>
 #include <QUrl>
@@ -42,7 +44,12 @@ FinestraBase::FinestraBase(Postazione postazione, ArchivioLocale& archivio, Impo
                                       QFileInfo(m_fileImpostazioni).absolutePath(), this);
     m_aggiornatore->configura(impostazioni.repositoryAggiornamenti, impostazioni.tokenAggiornamenti);
 
-    m_schede = new QTabWidget(this);
+    // Gestione: menu laterale con icone (le schede sono tante); cassa: linguette in alto, che
+    // lasciano tutta la larghezza dello schermo del POS alla vendita.
+    if (postazione == Postazione::Gestione)
+        m_schede = new SchedeLaterali(this);
+    else
+        m_schede = new QTabWidget(this);
     m_schede->setFocusPolicy(Qt::NoFocus);
     setCentralWidget(m_schede);
     m_impostazioni = new VistaImpostazioni(postazione, std::move(impostazioni), archivio, *m_sync,
@@ -68,14 +75,18 @@ ClientServer& FinestraBase::client() const
     return m_sync->client();
 }
 
-void FinestraBase::aggiungiScheda(QWidget* vista, const QString& titolo)
+void FinestraBase::aggiungiScheda(QWidget* vista, const QString& titolo, const QString& icona)
 {
-    m_schede->addTab(vista, titolo);
+    const int i = m_schede->addTab(vista, titolo);
+    if (auto* laterali = qobject_cast<SchedeLaterali*>(m_schede))
+        laterali->impostaIcona(i, icona);
+    else if (!icona.isEmpty())
+        m_schede->setTabIcon(i, iconaMenu(icona, coloriAttuali().testoSecondario, 32));
 }
 
 void FinestraBase::completa()
 {
-    m_schede->addTab(m_impostazioni, QStringLiteral("Impostazioni"));
+    aggiungiScheda(m_impostazioni, QStringLiteral("Impostazioni"), QStringLiteral("impostazioni"));
     for (int i = 0; i < m_schede->count(); ++i) {
         auto* s = new QShortcut(QKeySequence(Qt::ALT | Qt::Key(Qt::Key_1 + i)), this);
         connect(s, &QShortcut::activated, this, [this, i] { m_schede->setCurrentIndex(i); });

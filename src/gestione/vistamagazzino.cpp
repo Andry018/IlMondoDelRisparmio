@@ -1,6 +1,7 @@
 #include "vistamagazzino.h"
 
 #include "dialogoimportazione.h"
+#include "dialoginventari.h"
 #include "dialogoordine.h"
 
 #include "comune.h"
@@ -816,10 +817,11 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* carico = new QPushButton(style()->standardIcon(QStyle::SP_ArrowDown), QStringLiteral("Carico merce…"), this);
     auto* daFattura = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogDetailedView), QStringLiteral("Controlla fattura…"), this);
     auto* inventario = new QPushButton(style()->standardIcon(QStyle::SP_FileDialogListView), QStringLiteral("Inventario…"), this);
-    auto* aggiorna = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("Aggiorna"), this);
+    auto* aggiorna = pulsanteAggiorna(this);
     carico->setObjectName("carico");
     daFattura->setObjectName("carico_da_fattura");
     inventario->setObjectName("inventario");
+    inventario->setToolTip(QStringLiteral("Inventario completo o di alcuni reparti (anche con i palmari), oppure la rettifica di un articolo"));
     barra->addWidget(carico);
     barra->addWidget(daFattura);
     auto* importa = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Giacenze da file…"), this);
@@ -853,8 +855,9 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* approvare = new QWidget(divisore);
     auto* lap = new QVBoxLayout(approvare);
     lap->setContentsMargins(0, 0, 0, 0);
-    lap->addWidget(new QLabel(QStringLiteral("<b>Carichi da approvare</b> — merce letta dal palmare: le giacenze cambiano "
-                                             "solo dopo l'approvazione (doppio clic per controllare)"), approvare));
+    lap->addWidget(titoloSezione(QStringLiteral("Carichi da approvare"),
+                                 QStringLiteral("Merce letta dal palmare: le giacenze cambiano solo dopo l'approvazione. "
+                                                "Doppio clic per controllare."), approvare));
     m_daApprovare = new TabellaServer({
         {"proposto_at", QStringLiteral("Quando"), ColonnaServer::Testo,
          [](const QJsonObject& r) {
@@ -880,8 +883,9 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* passive = new QWidget(divisore);
     auto* lpa = new QVBoxLayout(passive);
     lpa->setContentsMargins(0, 0, 0, 0);
-    lpa->addWidget(new QLabel(QStringLiteral("<b>Fatture in entrata da controllare</b> — arrivate dallo SDI: il carico va controllato e approvato "
-                                             "(doppio clic)"), passive));
+    lpa->addWidget(titoloSezione(QStringLiteral("Fatture in entrata da controllare"),
+                                 QStringLiteral("Arrivate dallo SDI: il carico va controllato e approvato. Doppio clic per aprirla."),
+                                 passive));
     m_passive = new TabellaServer({
         {"data", QStringLiteral("Data"), ColonnaServer::Data},
         {"numero", QStringLiteral("Numero")},
@@ -909,8 +913,8 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* sopra = new QWidget(divisore);
     auto* ls = new QVBoxLayout(sopra);
     ls->setContentsMargins(0, 0, 0, 0);
-    ls->addWidget(new QLabel(QStringLiteral("<b>Sotto scorta</b> — articoli con la scorta minima impostata, da riordinare"),
-                             sopra));
+    ls->addWidget(titoloSezione(QStringLiteral("Sotto scorta"),
+                                QStringLiteral("Articoli con la scorta minima impostata, da riordinare"), sopra));
     m_sottoscorta = new TabellaServer({
         {"codice", QStringLiteral("Codice")},
         {"descrizione", QStringLiteral("Articolo")},
@@ -928,7 +932,7 @@ VistaMagazzino::VistaMagazzino(ClientServer& client, QWidget* parent)
     auto* sotto = new QWidget(divisore);
     auto* lb = new QVBoxLayout(sotto);
     lb->setContentsMargins(0, 0, 0, 0);
-    lb->addWidget(new QLabel(QStringLiteral("<b>Ultimi carichi</b>"), sotto));
+    lb->addWidget(titoloSezione(QStringLiteral("Ultimi carichi"), QString(), sotto));
     m_carichi = new TabellaServer({
         {"data", QStringLiteral("Data"), ColonnaServer::Data},
         {"numero", QStringLiteral("N."), ColonnaServer::Testo,
@@ -1050,7 +1054,11 @@ void VistaMagazzino::controllaPrezzi(const QStringList& articoli)
 
 void VistaMagazzino::apriInventario()
 {
-    DialogoInventario d(m_client, this);
+    DialogoInventari d(m_client, this);
+    connect(&d, &DialogoInventari::rettificaArticolo, this, [this, &d] {
+        DialogoInventario singolo(m_client, &d);
+        singolo.exec();
+    });
     d.exec();
     aggiorna();
 }

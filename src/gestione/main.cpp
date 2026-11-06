@@ -4,6 +4,8 @@
 #include "installazioneaggiornamento.h"
 #include "italiano.h"
 #include "locale/archiviolocale.h"
+#include "serverlocale.h"
+#include "stile.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -23,6 +25,7 @@ int main(int argc, char* argv[])
     QApplication::setApplicationVersion(QStringLiteral(MDR_VERSIONE));
     QApplication::setStyle(QStringLiteral("Fusion"));
     mdr::usaItaliano(app);   // pulsanti standard (Annulla, Sì/No...) e date in italiano
+    mdr::applicaStile(mdr::TemaStile::Chiaro);   // aspetto comune (src/ui/stile)
 
     QCommandLineParser opzioni;
     opzioni.setApplicationDescription(QStringLiteral("Gestionale di Mondo del Risparmio"));
@@ -77,6 +80,12 @@ int main(int argc, char* argv[])
     } else {
         principale.showMaximized();
     }
+    // Sul PC del server: si avvia il server del negozio (database e servizi) se non è già acceso,
+    // e si aspetta che risponda. Sugli altri PC l'attività non esiste e non succede nulla.
+    mdr::avviaServerLocale(&principale, [&principale](bool avviato) {
+        if (avviato)
+            principale.attendiServer();
+    });
     if (opzioni.isSet(confermaAvvio)) {
         QTimer::singleShot(3000, &principale, [cartellaDati = dati.absolutePath()] {
             mdr::confermaAvvioRiuscito(cartellaDati);

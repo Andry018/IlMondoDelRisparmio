@@ -10,6 +10,10 @@ mdr_test(test_core)
 mdr_test(test_locale)
 mdr_test(test_custom)
 
+# Prova a mano sul registratore Custom vero (in addestramento): non è in ctest, vedi il file.
+add_executable(mdr-prova-rt prova_rt_vero.cpp)
+target_link_libraries(mdr-prova-rt PRIVATE mdr_core mdr_fiscal)
+
 mdr_test(test_sync)
 mdr_test(test_aggiornamento)
 

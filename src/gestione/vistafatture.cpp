@@ -297,10 +297,7 @@ VistaFatture::VistaFatture(ClientServer& client, QWidget* parent)
     m_tabella->testoVuoto = QStringLiteral("Nessuna fattura");
     m_tabella->evidenzia = daCorreggere;
     layout->addWidget(m_tabella, 1);
-    auto* aiuto = new QLabel(QStringLiteral("Fatture in rosso: correggere i dati (cliente nella scheda Clienti, dati del "
-                                            "negozio nella scheda Negozio) e premere «Rigenera e reinvia» entro 5 giorni."), this);
-    aiuto->setWordWrap(true);
-    layout->addWidget(aiuto);
+    layout->addWidget(nota(QStringLiteral("In rosso: dati da correggere (Clienti o Negozio), poi «Rigenera e reinvia» entro 5 giorni."), this));
 
     connect(m_filtro, &QComboBox::currentIndexChanged, this, &VistaFatture::aggiorna);
     connect(nuova, &QPushButton::clicked, this, &VistaFatture::nuovaFattura);
@@ -357,10 +354,7 @@ void VistaFatture::bolloTrimestrale()
     tabella->testoVuoto = QStringLiteral("Nessuna fattura con bollo nell'anno");
     tabella->evidenzia = [](const QJsonObject& r) { return r.value("non_consegnate").toInt() > 0; };
     l->addWidget(tabella, 1);
-    auto* nota = new QLabel(QStringLiteral("Righe in rosso: fatture con bollo non ancora consegnate dallo SDI, da "
-                                           "controllare prima del versamento. Le scadenze le indica il commercialista."), &d);
-    nota->setWordWrap(true);
-    l->addWidget(nota);
+    l->addWidget(mdr::nota(QStringLiteral("In rosso: fatture con bollo non ancora consegnate dallo SDI, da controllare prima del versamento."), &d));
     auto* chiudi = new QDialogButtonBox(QDialogButtonBox::Close, &d);
     l->addWidget(chiudi);
     connect(chiudi, &QDialogButtonBox::rejected, &d, &QDialog::reject);

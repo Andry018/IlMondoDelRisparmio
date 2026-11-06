@@ -66,6 +66,83 @@ QString nomeTaglio(int centesimi)
 
 } // namespace
 
+const QList<int>& tagliBanconote()
+{
+    static const QList<int> t = [] {
+        QList<int> x;
+        for (const auto& b : banconote)
+            x << b.centesimi;
+        return x;
+    }();
+    return t;
+}
+
+const QList<int>& tagliMonete()
+{
+    static const QList<int> t = [] {
+        QList<int> x;
+        for (const auto& m : monete)
+            x << m.centesimi;
+        return x;
+    }();
+    return t;
+}
+
+QPushButton* pulsanteTaglio(int centesimi, int altezza, QWidget* parent)
+{
+    caricaRisorseEuro();
+    const bool banconota = centesimi >= 500;
+    const Taglio* t = nullptr;
+    for (const auto& x : banconote)
+        if (x.centesimi == centesimi)
+            t = &x;
+    for (const auto& x : monete)
+        if (x.centesimi == centesimi)
+            t = &x;
+    auto* b = new QPushButton(nomeTaglio(centesimi), parent);
+    b->setObjectName(QStringLiteral("taglio_%1").arg(centesimi));
+    b->setToolTip(nomeTaglio(centesimi));
+    b->setFocusPolicy(Qt::NoFocus);
+    if (banconota) {
+        // Le foto delle banconote sono 150x78
+        const QSize icona(altezza * 150 / 78, altezza);
+        b->setMinimumSize(icona + QSize(10, 10));
+        b->setFont(fontGrande(b->font(), std::max(9, altezza / 5), true));
+        const QPixmap immagine(QStringLiteral(":/euro/banconota_%1").arg(centesimi));
+        if (!immagine.isNull()) {
+            b->setText({});
+            b->setIcon(immagine);
+            b->setIconSize(icona);
+            b->setStyleSheet(QStringLiteral("QPushButton { background: transparent; border: 2px solid transparent;"
+                                            " border-radius: 6px; }"
+                                            "QPushButton:pressed { border-color: white; background: #444; }"));
+        } else if (t) {
+            b->setStyleSheet(QStringLiteral("QPushButton { background: %1; color: %2; border-radius: 6px; }"
+                                            "QPushButton:pressed { border: 3px solid white; }")
+                                 .arg(QLatin1String(t->sfondo), QLatin1String(t->testo)));
+        }
+    } else {
+        const int lato = altezza + 8;
+        b->setFixedSize(lato, lato);
+        b->setFont(fontGrande(b->font(), std::max(8, altezza / 6), true));
+        if (const auto immagine = immagineMoneta(centesimi, altezza); !immagine.isNull()) {
+            b->setText({});
+            b->setIcon(immagine);
+            b->setIconSize(QSize(altezza, altezza));
+            b->setStyleSheet(QStringLiteral("QPushButton { background: transparent; border: 2px solid transparent;"
+                                            " border-radius: %1px; }"
+                                            "QPushButton:pressed { border-color: white; background: #444; }")
+                                 .arg(lato / 2));
+        } else if (t) {
+            b->setStyleSheet(QStringLiteral("QPushButton { background: %1; color: %2; border-radius: %3px; }"
+                                            "QPushButton:pressed { border: 3px solid white; }")
+                                 .arg(QLatin1String(t->sfondo), QLatin1String(t->testo))
+                                 .arg(lato / 2));
+        }
+    }
+    return b;
+}
+
 DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
     : QDialog(parent)
     , m_daPagare(daPagare)
@@ -81,54 +158,18 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
 
     // Banconote su una riga, monete su due.
     auto* gridBanconote = new QHBoxLayout;
-    for (const auto& t : banconote) {
-        auto* b = new QPushButton(nomeTaglio(t.centesimi), this);
-        b->setObjectName(QStringLiteral("taglio_%1").arg(t.centesimi));
-        b->setMinimumSize(110, 70);
-        b->setFont(fontGrande(font(), 16, true));
-        b->setToolTip(nomeTaglio(t.centesimi));
-        const QPixmap immagine(QStringLiteral(":/euro/banconota_%1").arg(t.centesimi));
-        if (!immagine.isNull()) {
-            b->setText({});
-            b->setIcon(immagine);
-            b->setIconSize(QSize(150, 78));
-            b->setMinimumSize(160, 88);
-            b->setStyleSheet(QStringLiteral("QPushButton { background: transparent; border: 2px solid transparent;"
-                                            " border-radius: 6px; }"
-                                            "QPushButton:pressed { border-color: white; background: #444; }"));
-        } else {
-            b->setStyleSheet(QStringLiteral("QPushButton { background: %1; color: %2; border-radius: 6px; }"
-                                            "QPushButton:pressed { border: 3px solid white; }")
-                                 .arg(QLatin1String(t.sfondo), QLatin1String(t.testo)));
-        }
-        b->setFocusPolicy(Qt::NoFocus);
-        connect(b, &QPushButton::clicked, this, [this, c = t.centesimi] { aggiungi(Money::fromCents(c)); });
+    for (const int c : tagliBanconote()) {
+        auto* b = pulsanteTaglio(c, 78, this);
+        connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         gridBanconote->addWidget(b);
     }
     layout->addLayout(gridBanconote);
 
     auto* gridMonete = new QGridLayout;
-    for (int i = 0; i < int(std::size(monete)); ++i) {
-        const auto& t = monete[i];
-        auto* b = new QPushButton(nomeTaglio(t.centesimi), this);
-        b->setObjectName(QStringLiteral("taglio_%1").arg(t.centesimi));
-        b->setFixedSize(84, 84);
-        b->setFont(fontGrande(font(), 12, true));
-        b->setToolTip(nomeTaglio(t.centesimi));
-        if (const auto immagine = immagineMoneta(t.centesimi, 76); !immagine.isNull()) {
-            b->setText({});
-            b->setIcon(immagine);
-            b->setIconSize(QSize(76, 76));
-            b->setStyleSheet(QStringLiteral("QPushButton { background: transparent; border: 2px solid transparent;"
-                                            " border-radius: 42px; }"
-                                            "QPushButton:pressed { border-color: white; background: #444; }"));
-        } else {
-            b->setStyleSheet(QStringLiteral("QPushButton { background: %1; color: %2; border-radius: 42px; }"
-                                            "QPushButton:pressed { border: 3px solid white; }")
-                                 .arg(QLatin1String(t.sfondo), QLatin1String(t.testo)));
-        }
-        b->setFocusPolicy(Qt::NoFocus);
-        connect(b, &QPushButton::clicked, this, [this, c = t.centesimi] { aggiungi(Money::fromCents(c)); });
+    for (int i = 0; i < tagliMonete().size(); ++i) {
+        const int c = tagliMonete()[i];
+        auto* b = pulsanteTaglio(c, 76, this);
+        connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         gridMonete->addWidget(b, i / 4, i % 4);
     }
     auto* righeMonete = new QHBoxLayout;

@@ -14,3 +14,6 @@ CMakeUserPresets.json
 # Claude Code: nel repository solo skill e impostazioni condivise
 /.claude/worktrees/
 /.claude/settings.local.json
+
+# Grafo del codice di graphify (strumento locale)
+graphify-out/

@@ -1,5 +1,6 @@
 #include "vistaclienti.h"
 
+#include "comune.h"
 #include "dialogoimportazione.h"
 
 #include "tabellaserver.h"
@@ -43,11 +44,8 @@ public:
         setWindowTitle(c.isEmpty() ? QStringLiteral("Nuovo cliente") : QStringLiteral("Modifica cliente"));
         setMinimumWidth(520);
         auto* form = new QFormLayout(this);
-        auto* nota = new QLabel(QStringLiteral("Per la fattura servono: ragione sociale oppure nome e cognome, "
-                                               "partita IVA o codice fiscale, indirizzo, CAP e comune. Senza codice "
-                                               "destinatario né PEC la fattura va nel cassetto fiscale del cliente."), this);
-        nota->setWordWrap(true);
-        form->addRow(nota);
+        form->addRow(mdr::nota(QStringLiteral("Per la fattura: ragione sociale (o nome e cognome), partita IVA o codice "
+                                              "fiscale, indirizzo. Senza codice SDI né PEC va nel cassetto fiscale."), this));
         for (const auto& [campo, etichetta] : campiCliente) {
             auto* e = new QLineEdit(c.value(campo).toString(), this);
             m_campi.insert(campo, e);

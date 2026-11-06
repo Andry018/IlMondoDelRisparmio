@@ -31,7 +31,8 @@ public:
     Aggiornatore* aggiornatore() const { return m_aggiornatore; }
 
 protected:
-    void aggiungiScheda(QWidget* vista, const QString& titolo);
+    // icona: nome per iconaMenu (stile.h), es. "magazzino"
+    void aggiungiScheda(QWidget* vista, const QString& titolo, const QString& icona = {});
     void completa();
     void sincronizzaPresto();
 

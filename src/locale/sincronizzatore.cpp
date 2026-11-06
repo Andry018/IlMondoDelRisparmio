@@ -1,5 +1,7 @@
 #include "sincronizzatore.h"
 
+#include "core/promozioni.h"
+
 #include <QDateTime>
 #include <QJsonArray>
 #include <QRegularExpression>
@@ -166,7 +168,34 @@ void Sincronizzatore::scarica(const QString& nome, const QString& vista, int off
             scarica(QStringLiteral("operatori"), QStringLiteral("v_operatori_cassa"), 0,
                     m_archivio.marcatore(QStringLiteral("operatori")));
         else
+            scaricaPromozioni();
+    });
+}
+
+void Sincronizzatore::scaricaPromozioni()
+{
+    // Tutte insieme e sostituite in blocco: sono poche, e una tolta dal server deve sparire anche qui
+    m_client->leggi(QStringLiteral("v_promozioni_cassa?select=*&order=updated_at.desc"), [this](const RispostaServer& r) {
+        if (r.stato == 404) {   // server senza la migrazione delle promozioni: si va avanti senza
             fine(true);
+            return;
+        }
+        if (r.stato != 200) {
+            emit messaggio(QStringLiteral("Promozioni non scaricate: %1").arg(r.errore));
+            fine(false);
+            return;
+        }
+        QList<Promozione> promozioni;
+        for (const auto& v : r.json().array())
+            if (const auto p = Promozione::daJson(v.toObject()))
+                promozioni << *p;
+        if (!m_archivio.sostituisciPromozioni(promozioni)) {
+            emit messaggio(QStringLiteral("Promozioni non salvate: %1").arg(m_archivio.ultimoErrore()));
+            fine(false);
+            return;
+        }
+        m_promozioni = int(promozioni.size());
+        fine(true);
     });
 }
 

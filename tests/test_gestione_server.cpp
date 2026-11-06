@@ -4,6 +4,11 @@
 //   $env:MDR_CHIAVE_SVILUPPO = (chiave in %LOCALAPPDATA%\Mondo del Risparmio\server-sviluppo\chiavi.txt)
 // Con MDR_SCREENSHOT=cartella salva un'immagine di ogni scheda a 1024x768.
 
+#include "core/quantita.h"
+#include "core/promozioni.h"
+#include "dialoginventari.h"
+#include "vistapromozioni.h"
+#include "stile.h"
 #include "dimostrativi.h"
 #include "finestragestione.h"
 #include "locale/archiviolocale.h"
@@ -14,6 +19,11 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QLabel>
+#include <QLineEdit>
+#include <QTime>
+#include <QTimer>
+
+#include <algorithm>
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -85,8 +95,11 @@ private slots:
     void initTestCase()
     {
         // Per le immagini il font di sistema di Windows (vedi test_cassa).
-        if (!qEnvironmentVariableIsEmpty("MDR_SCREENSHOT"))
+        if (!qEnvironmentVariableIsEmpty("MDR_SCREENSHOT")) {
             QApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
+            QApplication::setStyle(QStringLiteral("Fusion"));
+            applicaStile(TemaStile::Chiaro);   // come main.cpp di mdr-gestione
+        }
     }
 
     // QSKIP qui salta il test intero (in una funzione di aiuto salterebbe solo quella).
@@ -100,6 +113,129 @@ private slots:
     {
         m_finestra.reset();
         m_archivio.reset();
+    }
+
+    void inventario_dalla_gestione()
+    {
+        // Inventario completo dalla gestione: apri, conta (si aggiunge e si sostituisce), chiudi.
+        apri(QStringLiteral("responsabile@negozio.lan"));
+        auto* client = m_finestra->findChild<ClientServer*>();
+        DialogoInventari d(*client, m_finestra.get());
+        d.show();
+        auto* nuovo = d.findChild<QPushButton*>("nuovo_inventario");
+        QTest::qWait(1500);   // elenco degli inventari letto dal server
+        if (!nuovo->isEnabled())
+            QSKIP("C'è già un inventario aperto sul server di sviluppo: ricrearlo con avvia.ps1 -Nuovo");
+
+        // La finestra "Nuovo inventario" è modale: la si conferma appena compare (tutto il negozio)
+        QTimer::singleShot(300, [] {
+            if (auto* m = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+                m->accept();
+        });
+        nuovo->click();
+        auto* chiudi = d.findChild<QPushButton*>("chiudi_inventario");
+        QTRY_VERIFY_WITH_TIMEOUT(chiudi->isEnabled(), 5000);
+
+        auto conta = [&](const QString& codice, const QString& quantita, int modo) {
+            auto* c = d.findChild<QLineEdit*>("conta_codice");
+            c->setText(codice);
+            QTest::keyClick(c, Qt::Key_Return);
+            QTRY_VERIFY_WITH_TIMEOUT(d.focusWidget() == d.findChild<QLineEdit*>("conta_quantita"), 5000);
+            d.findChild<QComboBox*>("conta_modo")->setCurrentIndex(modo);
+            d.findChild<QLineEdit*>("conta_quantita")->setText(quantita);
+            d.findChild<QPushButton*>("registra_conta")->click();
+            QTRY_VERIFY_WITH_TIMEOUT(d.findChild<QLabel*>("esito_conta")->text().contains("contati in tutto"), 5000);
+        };
+        conta(QStringLiteral("1001"), QStringLiteral("2"), 0);
+        conta(QStringLiteral("8000000000019"), QStringLiteral("3"), 0);   // stesso articolo dal barcode: si somma
+        QVERIFY(d.findChild<QLabel*>("esito_conta")->text().contains("contati in tutto 5"));
+        auto* righe = d.findChild<TabellaServer*>("righe_inventario");
+        QTRY_VERIFY_WITH_TIMEOUT(righe->righe().size() == 1
+                                     && righe->righe().first().toObject().value("contato").toInteger() == 5000, 5000);
+        // Correzione (sostituisce) con la giacenza teorica: la chiusura non cambia il magazzino e
+        // gli altri test (sotto scorta) restano validi.
+        const qint64 teorica = righe->righe().first().toObject().value("giacenza_teorica").toInteger();
+        if (teorica < 0)
+            QSKIP("Giacenza negativa dell'articolo 1001: ricreare il server con -Nuovo");
+        const QString testo = Quantita::fromMillesimi(teorica).toString();
+        conta(QStringLiteral("1001"), testo, 1);
+        QVERIFY(d.findChild<QLabel*>("esito_conta")->text().contains("contati in tutto " + testo));
+        QTRY_VERIFY_WITH_TIMEOUT(righe->righe().first().toObject().value("differenza").toInteger() == 0, 5000);
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+            conta(QStringLiteral("1002"), QStringLiteral("1"), 0);   // una riga con differenza (cambia il magazzino)
+            QTest::qWait(800);
+            d.grab().save(cartella + "/gestione_inventari.png");
+        }
+
+        // Chiusura senza azzerare: la conferma e poi il riepilogo sono QMessageBox modali, chiuse
+        // appena compaiono (Sì sulla conferma, OK sul riepilogo).
+        QStringList finestre;
+        QTimer risponditore;
+        risponditore.setInterval(100);
+        connect(&risponditore, &QTimer::timeout, [&finestre] {
+            auto* m = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (!m)
+                return;
+            finestre << m->windowTitle();
+            if (auto* si = m->button(QMessageBox::Yes))
+                si->click();
+            else
+                m->accept();
+        });
+        risponditore.start();
+        chiudi->click();
+        QTRY_VERIFY_WITH_TIMEOUT(!chiudi->isEnabled() && d.findChild<QLabel*>("stato_inventario")->text().contains("Chiuso"), 8000);
+        risponditore.stop();
+        QCOMPARE(finestre, (QStringList{"Chiudi inventario", "Inventario chiuso"}));
+        QVERIFY(d.findChild<QPushButton*>("nuovo_inventario")->isEnabled());
+    }
+
+    void promozione_dalla_gestione_alla_cassa()
+    {
+        apri(QStringLiteral("responsabile@negozio.lan"));
+        auto* client = m_finestra->findChild<ClientServer*>();
+        DialogoPromozione d(*client, {}, {}, m_finestra.get());
+        d.show();
+        d.findChild<QLineEdit*>("promo_nome")->setText(QStringLiteral("Prova 3x2 %1").arg(QTime::currentTime().toString("HHmmss")));
+        d.findChild<QComboBox*>("promo_tipo")->setCurrentIndex(2);   // prendi N paghi M
+        auto* codice = d.findChild<QLineEdit*>("promo_codice");
+        codice->setText(QStringLiteral("1001"));
+        QTest::keyClick(codice, Qt::Key_Return);
+        QTRY_COMPARE_WITH_TIMEOUT(d.numeroArticoli(), 1, 5000);
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+            codice->setText(QStringLiteral("1002"));
+            QTest::keyClick(codice, Qt::Key_Return);
+            QTRY_COMPARE_WITH_TIMEOUT(d.numeroArticoli(), 2, 5000);
+            QTest::qWait(300);
+            d.grab().save(cartella + "/gestione_promozione.png");
+        }
+        const QString id = d.dati().value("id").toString();
+        d.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click();
+        QTRY_COMPARE_WITH_TIMEOUT(d.result(), int(QDialog::Accepted), 5000);
+
+        // La scheda la mostra in corso, con il numero sulla linguetta
+        vai(QStringLiteral("Promozioni"));
+        auto* elenco = m_finestra->findChild<TabellaServer*>("promozioni");
+        QTRY_VERIFY_WITH_TIMEOUT(std::any_of(elenco->righe().begin(), elenco->righe().end(), [&](const QJsonValue& v) {
+            return v.toObject().value("id").toString() == id && v.toObject().value("stato").toString() == QLatin1String("in corso");
+        }), 5000);
+        foto(QStringLiteral("promozioni"));
+
+        // E la cassa la scarica (stessa vista della sincronizzazione)
+        bool letta = false;
+        client->leggi(QStringLiteral("v_promozioni_cassa?id=eq.") + id, [&letta](const RispostaServer& r) {
+            const auto righe = r.json().array();
+            if (r.ok() && righe.size() == 1) {
+                const auto p = Promozione::daJson(righe.first().toObject());
+                letta = p && p->tipo == Promozione::Tipo::PrendiPaghi && !p->articoli.isEmpty();
+            }
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(letta, 5000);
+
+        // Eliminata: sparisce
+        bool tolta = false;
+        client->rpc(QStringLiteral("elimina_promozione"), {{"p_id", id}}, [&tolta](const RispostaServer& r) { tolta = r.ok(); });
+        QTRY_VERIFY_WITH_TIMEOUT(tolta, 5000);
     }
 
     void responsabile_vede_tutto()
@@ -315,6 +451,9 @@ private slots:
             auto nome = titolo.toLower();
             nome.replace(QRegularExpression("[^a-z0-9]+"), "_");
             m_finestra->grab().save(cartella + QStringLiteral("/gestione_%1_%2.png").arg(i, 2, 10, QChar('0')).arg(nome));
+            // Con i dati veri ogni scheda deve stare accanto al menu nei 1024 punti del POS
+            QVERIFY2(m_finestra->width() <= 1024,
+                     qPrintable(QStringLiteral("%1 allarga la finestra a %2").arg(titolo).arg(m_finestra->width())));
         }
     }
 

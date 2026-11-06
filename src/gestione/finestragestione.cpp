@@ -13,6 +13,7 @@
 #include "vistacontrolli.h"
 #include "vistamagazzino.h"
 #include "vistapalmare.h"
+#include "vistapromozioni.h"
 #include "vistareport.h"
 
 #include <QJsonArray>
@@ -57,6 +58,7 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_paginaArticoli->addWidget(m_articoliServer);
     m_magazzino = new VistaMagazzino(client(), schede());
     m_etichette = new VistaEtichette(client(), schede());
+    m_promozioni = new VistaPromozioni(client(), schede());
     m_ordini = new VistaOrdini(client(), schede());
     m_report = new VistaReport(client(), schede());
     m_fatture = new VistaFatture(client(), schede());
@@ -66,25 +68,26 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     m_resi = new VistaResi(client(), schede());
     m_operatori = new VistaOperatori(client(), schede());
     m_negozio = new VistaNegozio(client(), schede());
-    m_vistaServer = {m_cruscotto, m_magazzino, m_ordini, m_etichette, m_report, m_fatture, m_clienti, m_fornitori, m_chiusure, m_resi,
-                     m_operatori, m_negozio};
-    aggiungiScheda(m_cruscotto, QStringLiteral("Cruscotto"));
-    aggiungiScheda(m_paginaArticoli, QStringLiteral("Articoli"));
-    aggiungiScheda(m_magazzino, QStringLiteral("Magazzino"));
-    aggiungiScheda(m_ordini, QStringLiteral("Ordini"));
-    aggiungiScheda(m_etichette, QStringLiteral("Etichette"));
-    aggiungiScheda(m_report, QStringLiteral("Vendite"));
-    aggiungiScheda(m_fatture, QStringLiteral("Fatture"));
-    aggiungiScheda(m_clienti, QStringLiteral("Clienti"));
-    aggiungiScheda(m_fornitori, QStringLiteral("Fornitori"));
-    aggiungiScheda(m_chiusure, QStringLiteral("Chiusure"));
-    aggiungiScheda(m_resi, QStringLiteral("Resi da verificare"));
-    aggiungiScheda(m_operatori, QStringLiteral("Operatori"));
-    aggiungiScheda(m_negozio, QStringLiteral("Negozio"));
+    m_vistaServer = {m_cruscotto, m_magazzino, m_ordini, m_etichette, m_promozioni, m_report, m_fatture, m_clienti, m_fornitori,
+                     m_chiusure, m_resi, m_operatori, m_negozio};
+    aggiungiScheda(m_cruscotto, QStringLiteral("Cruscotto"), QStringLiteral("cruscotto"));
+    aggiungiScheda(m_paginaArticoli, QStringLiteral("Articoli"), QStringLiteral("articoli"));
+    aggiungiScheda(m_magazzino, QStringLiteral("Magazzino"), QStringLiteral("magazzino"));
+    aggiungiScheda(m_ordini, QStringLiteral("Ordini"), QStringLiteral("ordini"));
+    aggiungiScheda(m_etichette, QStringLiteral("Etichette"), QStringLiteral("etichette"));
+    aggiungiScheda(m_promozioni, QStringLiteral("Promozioni"), QStringLiteral("promozioni"));
+    aggiungiScheda(m_report, QStringLiteral("Vendite"), QStringLiteral("vendite"));
+    aggiungiScheda(m_fatture, QStringLiteral("Fatture"), QStringLiteral("fatture"));
+    aggiungiScheda(m_clienti, QStringLiteral("Clienti"), QStringLiteral("clienti"));
+    aggiungiScheda(m_fornitori, QStringLiteral("Fornitori"), QStringLiteral("fornitori"));
+    aggiungiScheda(m_chiusure, QStringLiteral("Chiusure"), QStringLiteral("chiusure"));
+    aggiungiScheda(m_resi, QStringLiteral("Resi da verificare"), QStringLiteral("resi"));
+    aggiungiScheda(m_operatori, QStringLiteral("Operatori"), QStringLiteral("operatori"));
+    aggiungiScheda(m_negozio, QStringLiteral("Negozio"), QStringLiteral("negozio"));
     // QR per collegare i palmari: non serve l'accesso, solo server e chiave delle Impostazioni
     m_palmare = new VistaPalmare(schede());
     m_palmare->impostazioni(impostazioni);
-    aggiungiScheda(m_palmare, QStringLiteral("Palmare"));
+    aggiungiScheda(m_palmare, QStringLiteral("Palmare"), QStringLiteral("palmare"));
 
     m_statoAccesso = new QLabel(this);
     statusBar()->addPermanentWidget(m_statoAccesso);
@@ -118,6 +121,10 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     connect(m_ordini, &VistaOrdini::cambiato, this, [this](int n) {
         schede()->setTabText(schede()->indexOf(m_ordini), n ? QStringLiteral("Ordini (%1)").arg(n) : QStringLiteral("Ordini"));
         schede()->setTabToolTip(schede()->indexOf(m_ordini), n ? QStringLiteral("%1 ordini da mandare o in arrivo").arg(n) : QString());
+    });
+    connect(m_promozioni, &VistaPromozioni::cambiato, this, [this](int n) {
+        schede()->setTabText(schede()->indexOf(m_promozioni), n ? QStringLiteral("Promozioni (%1)").arg(n) : QStringLiteral("Promozioni"));
+        schede()->setTabToolTip(schede()->indexOf(m_promozioni), n ? QStringLiteral("%1 promozioni in corso").arg(n) : QString());
     });
     connect(m_etichette, &VistaEtichette::cambiato, this, [this](int n) {
         schede()->setTabText(schede()->indexOf(m_etichette), n ? QStringLiteral("Etichette (%1)").arg(n) : QStringLiteral("Etichette"));
@@ -191,6 +198,14 @@ void FinestraGestione::verificaAccesso()
     client().rpc(QStringLiteral("ruolo_corrente"), {}, [io](const RispostaServer& r) {
         if (!io)
             return;
+        io->m_nonRaggiungibile = !r.ok() && r.stato == 0;
+        if (io->m_nonRaggiungibile && io->m_attesaServer > 0) {
+            --io->m_attesaServer;
+            io->abilita({}, QStringLiteral("Avvio del server del negozio in corso…"));
+            QTimer::singleShot(3000, io, &FinestraGestione::verificaAccesso);
+            return;
+        }
+        io->m_attesaServer = 0;
         if (!r.ok()) {
             io->abilita({}, r.stato == 0 ? QStringLiteral("Server non raggiungibile: %1").arg(r.errore)
                                          : QStringLiteral("Accesso non riuscito: %1").arg(r.errore));
@@ -201,6 +216,16 @@ void FinestraGestione::verificaAccesso()
                                ? QStringLiteral("Account non abilitato sul server (operatore disattivato o non configurato)")
                                : QStringLiteral("Collegato come %1 (%2)").arg(io->m_email, ruolo));
     });
+}
+
+void FinestraGestione::attendiServer()
+{
+    const bool inAttesa = m_attesaServer > 0;
+    m_attesaServer = 40;
+    // La prima verifica è già tornata con "non raggiungibile": si ricomincia da qui. Se è ancora
+    // in corso (o è già in attesa) ci pensa la sua risposta.
+    if (m_nonRaggiungibile && !inAttesa)
+        verificaAccesso();
 }
 
 void FinestraGestione::abilita(const QString& ruolo, const QString& messaggio)

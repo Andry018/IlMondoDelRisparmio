@@ -4,10 +4,13 @@
 #include "aspettocassa.h"
 #include "locale/operazionicassa.h"
 
+#include <QPointer>
+
 class QLabel;
 
 namespace mdr {
 
+class PersonalizzaCassa;
 class SchermoCliente;
 class VistaAspetto;
 class VistaCassa;
@@ -25,6 +28,9 @@ public:
     VistaVendite* vendite() const { return m_vendite; }
     VistaAspetto* aspetto() const { return m_aspetto; }
     SchermoCliente* schermoCliente() const { return m_schermoCliente; }
+    // Modalità "Personalizza la schermata": finestra sopra la cassa, anteprima dal vivo.
+    void personalizza();
+    PersonalizzaCassa* finestraPersonalizza() const;
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -41,6 +47,7 @@ private:
     VistaVendite* m_vendite = nullptr;
     VistaAspetto* m_aspetto = nullptr;
     SchermoCliente* m_schermoCliente = nullptr;
+    QPointer<PersonalizzaCassa> m_personalizza;
     void applicaAspetto(const AspettoCassa& a);
     QString m_fileImpostazioni;   // anche l'aspetto della cassa sta lì ([aspetto])
 
@@ -48,6 +55,7 @@ private:
     QLabel* m_statoCoda = nullptr;
     QLabel* m_statoOperatore = nullptr;
     QLabel* m_avviso = nullptr;   // orologio sbagliato, account di un altro terminale
+    QLabel* m_addestramento = nullptr;   // registratore in addestramento: documenti non fiscali
     QString m_terminale;
     void controllaServer();
 };
