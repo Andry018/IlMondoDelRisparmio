@@ -1121,6 +1121,31 @@ articolo.
 Realtime: `inventari_conte` ed `etichette_richieste` sono pubblicate (la gestione vede arrivare
 le conte).
 
+<a id="promozioni"></a>
+## Promozioni (migrazione `20261106000000_promozioni.sql`)
+
+Quattro tipi su un elenco di articoli, in un periodo (`dal`, `al` compreso, `al` null = senza fine):
+
+| `tipo` | Campi | Esempio |
+|---|---|---|
+| `prezzo` | `prezzo` (centesimi, al pezzo) | volantino: 0,99 |
+| `percentuale` | `percentuale_bp` (1–10000) | -20% |
+| `prendi_paghi` | `quantita` = N, `paga` = M (M < N) | 3x2, articoli mescolati, regalati i meno cari |
+| `quantita_prezzo` | `quantita` = N, `prezzo` = X | 3 a 5,00 |
+
+| RPC / vista | Ruoli | Note |
+|---|---|---|
+| `salva_promozione(p)` | amministratore, responsabile | `p = { id, nome, tipo, dal?, al?, attiva?, prezzo?, percentuale_bp?, quantita?, paga?, note?, articoli: [uuid…] }` → uuid. Crea o riscrive (articoli compresi). Errori `P0001`: `Promozione senza articoli`, `Nome della promozione mancante`, `… si deve pagare meno di quanto si prende`, `Dati della promozione non validi …`, `Articolo inesistente nella promozione` |
+| `elimina_promozione(p_id)` | amministratore, responsabile | le vendite non sono legate alle promozioni: si possono cancellare |
+| `v_promozioni` | tutti | `id, nome, tipo, dal, al, attiva, prezzo, percentuale_bp, quantita, paga, note, created_at, updated_at, creato_da, stato (in corso / programmata / finita / sospesa), articoli` |
+| `v_promozioni_articoli` | tutti | `promozione_id, articolo_id, codice, descrizione, prezzo_vendita, costo_ultimo, attivo, prezzo_promozione` (prezzo e percentuale), `altre_promozioni` (attive negli stessi giorni) |
+| `v_promozioni_cassa` | tutti | attive, non finite (da ieri) e che iniziano entro 7 giorni, con `articoli` uuid[]: la cassa le scarica tutte a ogni sincronizzazione e controlla le date da sola |
+
+**Applicazione**: la cassa (`src/core/promozioni`) le trasforma in sconti sulle righe dello
+scontrino (`sconto` comprende la promozione), quindi `registra_vendita`, registratore e report non
+cambiano. Nel payload la riga porta anche `promozione` (nome) e `sconto_promozione`: il server li
+ignora. Un articolo in più promozioni valide prende quella con `updated_at` più recente.
+
 ## Realtime
 
 Pubblicate su Realtime (`supabase_realtime`): `articoli`, `articoli_barcode`, `giacenze`,
@@ -1210,7 +1235,7 @@ client non vedono. Le fatture passive dei fornitori arrivano in `fatture_passive
 | 7 | Stesso UUID con dati diversi ignorato | **Risolto**: errore |
 | 8 | Carico senza righe con errore tecnico | **Risolto** |
 | 9 | I resi non verificano la vendita di origine né le quantità già rese | **Gestito**: accettati (sono già fiscali) e segnalati in `v_resi_da_verificare` |
-| 10 | `verifica_pin` senza limite di tentativi | Aperto: la verifica normale è offline in cassa; accesso solo da account abilitati |
+| 10 | `verifica_pin` senza limite di tentativi | **Non serve** (5/11/2026): le casse ricevono già sale e hash dei PIN (`v_operatori_cassa`) per lavorare offline, quindi chi ha l'account di una cassa può provare i PIN sul proprio PC senza passare dal server; un limite qui non proteggerebbe nulla e nessun client usa `verifica_pin`. Il PIN identifica l'operatore su una cassa già autenticata, non è una password: la protezione vera è l'account del terminale (login bloccato dopo 10 errori) |
 | 11 | Imposta di bollo (2 € su fatture esenti/non imponibili oltre 77,47 €) | **Risolto**: sempre dichiarata; addebito al cliente con `impostazioni.addebita_bollo` (default no) |
 | 12 | Fatture passive: XML, righe e carico in magazzino | **Risolto** (9/10/2026): [Carichi dalle fatture passive](#carichi-passive) |
 | 13 | Verifica sul servizio vero | **Fatto in sandbox** (8/10/2026): TD01, privato con bollo/esente e TD04 generate dal database, inviate dal connettore e consegnate (`DELIVERED`). In produzione serve la partita IVA vera |

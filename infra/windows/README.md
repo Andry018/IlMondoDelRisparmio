@@ -43,6 +43,12 @@ PostgREST e Caddy si scaricano con versione e impronta SHA-256 fisse (in `instal
 
 - All'accensione PostgreSQL parte da solo, poi l'attività "MDR Server" avvia PostgREST e Caddy
   (aspetta che il database risponda) e li controlla ogni 15 secondi: se uno si ferma lo riavvia.
+- Se PostgreSQL si ferma (servizio spento a mano o caduto), "MDR Server" lo riavvia.
+- **Aprendo mdr-gestione sul PC del server** si avvia anche il server, se non è già acceso
+  (`schtasks /Run "MDR Server"`): la gestione scrive "Avvio del server del negozio in corso…" e
+  si collega appena risponde (al massimo due minuti). Non serve essere amministratori:
+  l'installazione permette agli utenti del PC di avviare quell'attività (non di modificarla). Sugli
+  altri PC l'attività non c'è e non succede nulla.
 - Le casse accese prima del server vendono lo stesso e inviano tutto appena il server risponde.
 - Il cruscotto della gestione avvisa se ci sono **vendite non ancora in un backup** da più di 4
   ore e mezza (non l'età del backup: i giorni di chiusura non danno avvisi), se un backup o una

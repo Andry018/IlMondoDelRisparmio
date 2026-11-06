@@ -211,6 +211,18 @@ if (-not $SenzaAttivita) {
     $azione = New-ScheduledTaskAction -Execute $ps -Argument "$comune `"$script\avvia_servizi.ps1`" -Cartella `"$Cartella`""
     $imp = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
     Register-ScheduledTask -TaskName "MDR Server" -Action $azione -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal $utente -Settings $imp -Force | Out-Null
+    # mdr-gestione avvia il server quando si apre (schtasks /Run) senza essere amministratore: gli
+    # utenti del PC (S-1-5-11, AU) possono leggere e avviare questa attivita', non modificarla.
+    # Va rifatto a ogni installazione: -Force ricrea l'attivita' con i permessi predefiniti.
+    try {
+        $pianificatore = New-Object -ComObject Schedule.Service
+        $pianificatore.Connect()
+        $attivitaServer = $pianificatore.GetFolder("\").GetTask("MDR Server")
+        $sd = $attivitaServer.GetSecurityDescriptor(4)   # 4 = solo la DACL
+        if ($sd -notlike "*(A;;GRGX;;;AU)*") { $attivitaServer.SetSecurityDescriptor($sd + "(A;;GRGX;;;AU)", 0) }
+    } catch {
+        Write-Host "ATTENZIONE: la gestione non potra' avviare il server da sola ($($_.Exception.Message))"
+    }
 
     # Backup: 5 minuti dopo l'accensione e poi ogni 4 ore finche' il PC e' acceso
     $partenza = New-ScheduledTaskTrigger -AtStartup
