@@ -94,7 +94,9 @@ DialogoImportazione::DialogoImportazione(ClientServer& client, TipoImportazione 
     m_importa = new QPushButton(QStringLiteral("Importa"), this);
     m_importa->setObjectName("importa");
     m_importa->setEnabled(false);
+    m_importa->setDefault(true);   // il tasto principale (colore del negozio) è Importa
     m_chiudi = new QPushButton(QStringLiteral("Chiudi"), this);
+    m_chiudi->setAutoDefault(false);
     pulsanti->addWidget(m_importa);
     pulsanti->addWidget(m_chiudi);
     layout->addLayout(pulsanti);

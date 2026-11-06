@@ -18,6 +18,7 @@ struct RigaCarrello {
     bool dispositivoMedico = false;
     Money scontoPromo;      // parte di "sconto" che viene da una promozione (si ricalcola da sola)
     QString promozione;     // nome della promozione applicata, vuoto se nessuna
+    QUuid promozioneId;     // la stessa promozione sul server (risultati in v_promozioni)
 
     Money scontoManuale() const { return sconto - scontoPromo; }
 
@@ -43,9 +44,14 @@ public:
     // stampa riga per riga, il server non cambia); i centesimi che avanzano vanno sulla riga più
     // grande. false (e niente cambia) se l'importo non è tra 0 e il totale escluso.
     bool scontoTotale(Money importo);
-    // Sconti delle promozioni, uno per riga (importo e nome): sostituiscono quelli di prima e
-    // lasciano gli sconti fatti a mano (applicaPromozioni in promozioni.h).
-    void impostaScontiPromo(const QList<QPair<Money, QString>>& sconti);
+    // Sconti delle promozioni, uno per riga: sostituiscono quelli di prima e lasciano gli sconti
+    // fatti a mano (applicaPromozioni in promozioni.h).
+    struct ScontoPromo {
+        Money importo;
+        QString nome;
+        QUuid id;
+    };
+    void impostaScontiPromo(const QList<ScontoPromo>& sconti);
     void svuota();
 
     const QList<RigaCarrello>& righe() const { return m_righe; }

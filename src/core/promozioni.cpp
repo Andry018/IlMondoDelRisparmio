@@ -97,7 +97,7 @@ QJsonObject Promozione::json() const
 void applicaPromozioni(Carrello& carrello, const QList<Promozione>& promozioni, const QDate& giorno)
 {
     const auto& righe = carrello.righe();
-    QList<QPair<Money, QString>> sconti(righe.size());
+    QList<Carrello::ScontoPromo> sconti(righe.size());
 
     // Promozioni valide oggi, dalla più recente: un articolo in più promozioni prende la prima
     QList<const Promozione*> valide;
@@ -133,7 +133,7 @@ void applicaPromozioni(Carrello& carrello, const QList<Promozione>& promozioni, 
                 const Money sconto = p.tipo == Promozione::Tipo::Prezzo ? lordo - p.prezzo * r.quantita
                                                                         : lordo.percentuale(p.percentualeBp);
                 if (sconto > Money())   // prezzo speciale più alto del normale: non conviene, non vale
-                    sconti[i] = {sconto, nome};
+                    sconti[i] = {sconto, nome, p.id};
             }
             continue;
         }
@@ -177,7 +177,7 @@ void applicaPromozioni(Carrello& carrello, const QList<Promozione>& promozioni, 
         }
         for (auto r = perRiga.cbegin(); r != perRiga.cend(); ++r)
             if (r.value() > Money())
-                sconti[r.key()] = {r.value(), nome};
+                sconti[r.key()] = {r.value(), nome, p.id};
     }
     carrello.impostaScontiPromo(sconti);
 }

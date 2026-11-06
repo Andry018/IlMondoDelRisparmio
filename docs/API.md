@@ -1142,9 +1142,15 @@ Quattro tipi su un elenco di articoli, in un periodo (`dal`, `al` compreso, `al`
 | `v_promozioni_cassa` | tutti | attive, non finite (da ieri) e che iniziano entro 7 giorni, con `articoli` uuid[]: la cassa le scarica tutte a ogni sincronizzazione e controlla le date da sola |
 
 **Applicazione**: la cassa (`src/core/promozioni`) le trasforma in sconti sulle righe dello
-scontrino (`sconto` comprende la promozione), quindi `registra_vendita`, registratore e report non
-cambiano. Nel payload la riga porta anche `promozione` (nome) e `sconto_promozione`: il server li
-ignora. Un articolo in più promozioni valide prende quella con `updated_at` più recente.
+scontrino (`sconto` comprende la promozione), quindi registratore e report non cambiano. Un articolo
+in più promozioni valide prende quella con `updated_at` più recente.
+
+**Risultati** (migrazione `20261107000000_promozioni_vendite.sql`): nelle righe di
+`registra_vendita` la cassa manda `promozione_id`, `promozione` (nome) e `sconto_promozione` (la parte
+di `sconto` dovuta alla promozione). Si salvano in `vendite_righe`; un `promozione_id` sconosciuto non
+fa rifiutare la vendita (riga salvata senza collegamento) e `sconto_promozione` è limitato allo
+sconto della riga. `v_promozioni` ha in fondo `scontrini, pezzi, incasso, sconti` (vendite
+completate meno i resi).
 
 ## Realtime
 

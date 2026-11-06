@@ -214,6 +214,9 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
         b->setMinimumHeight(56);
         b->setFont(fontGrande(font(), 13));
     }
+    // Il tasto predefinito (Invio, colore del negozio) è Conferma, non Annulla
+    annulla->setAutoDefault(false);
+    m_conferma->setDefault(true);
     bottoni->addWidget(annulla);
     bottoni->addWidget(m_conferma, 2);
     layout->addLayout(bottoni);

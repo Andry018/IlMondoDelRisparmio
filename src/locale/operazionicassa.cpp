@@ -4,6 +4,8 @@
 
 #include <QJsonArray>
 
+#include <algorithm>
+
 namespace mdr {
 
 namespace {
@@ -122,6 +124,9 @@ RigaCarrello OperazioniCassa::rigaReso(const RigaCarrello& originale, Quantita q
     r.quantita = quantita;
     r.sconto = Money::fromCents(
         dividiArrotondando(originale.sconto.cents() * quantita.millesimi(), originale.quantita.millesimi()));
+    // La parte della promozione in proporzione, mai più dello sconto della riga resa
+    r.scontoPromo = std::min(r.sconto, Money::fromCents(dividiArrotondando(originale.scontoPromo.cents() * quantita.millesimi(),
+                                                                           originale.quantita.millesimi())));
     return r;
 }
 

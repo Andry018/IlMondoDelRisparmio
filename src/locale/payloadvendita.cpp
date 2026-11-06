@@ -43,10 +43,12 @@ QJsonObject payloadRegistraVendita(const Carrello& carrello, const QUuid& id,
             {"natura", r.iva.natura.isEmpty() ? QJsonValue() : r.iva.natura},
             {"numero_reparto", r.reparto.toInt()},
         };
-        // Promozione applicata (parte di "sconto"): il server la ignora, resta nel giornale della cassa
+        // Promozione applicata (parte di "sconto"): il server la tiene per i risultati delle promozioni
         if (!r.promozione.isEmpty()) {
             riga.insert("promozione", r.promozione);
             riga.insert("sconto_promozione", qint64(r.scontoPromo.cents()));
+            if (!r.promozioneId.isNull())
+                riga.insert("promozione_id", r.promozioneId.toString(QUuid::WithoutBraces));
         }
         righe.append(riga);
     }
@@ -102,6 +104,7 @@ QList<RigaCarrello> righeDaPayload(const QJsonObject& payload)
         riga.sconto = Money::fromCents(r.value("sconto").toInteger());
         riga.promozione = r.value("promozione").toString();
         riga.scontoPromo = Money::fromCents(r.value("sconto_promozione").toInteger());
+        riga.promozioneId = QUuid::fromString(r.value("promozione_id").toString());
         out.append(riga);
     }
     return out;

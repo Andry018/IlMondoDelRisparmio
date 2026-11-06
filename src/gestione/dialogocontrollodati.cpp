@@ -133,8 +133,11 @@ void DialogoControlloDati::mostraRiepilogo(const QJsonObject& c)
         const QString chiave = item->data(Qt::UserRole).toString();
         const int n = c.value(chiave).toInt();
         item->setText(QStringLiteral("%1  (%2)").arg(nomeProblema(chiave)).arg(QLocale().toString(n)));
-        item->setForeground(n == 0 ? QBrush(QColor(0x2e, 0x7d, 0x32)) : palette().text());
-        item->setIcon(style()->standardIcon(n == 0 ? QStyle::SP_DialogApplyButton : QStyle::SP_MessageBoxWarning));
+        // Niente da sistemare: grigio. Qualcosa da sistemare: testo pieno e in grassetto.
+        item->setForeground(n == 0 ? palette().placeholderText() : palette().text());
+        QFont f = item->font();
+        f.setBold(n > 0);
+        item->setFont(f);
     }
     m_stato->setText(QStringLiteral("%1 articoli in vendita controllati. Scegliere un problema a sinistra; doppio clic su un "
                                     "articolo per aprirlo.").arg(QLocale().toString(attivi)));

@@ -110,6 +110,11 @@ VistaPromozioni::VistaPromozioni(ClientServer& client, QWidget* parent)
          }},
         {"stato", QStringLiteral("Stato")},
         {"articoli", QStringLiteral("Articoli"), ColonnaServer::Intero},
+        // Risultati (vendite completate meno i resi, dalle casse aggiornate a novembre 2026)
+        {"scontrini", QStringLiteral("Scontrini"), ColonnaServer::Intero},
+        {"pezzi", QStringLiteral("Pezzi venduti"), ColonnaServer::Quantita},
+        {"incasso", QStringLiteral("Incasso €"), ColonnaServer::Euro},
+        {"sconti", QStringLiteral("Sconti dati €"), ColonnaServer::Euro},
         {"creato_da", QStringLiteral("Creata da")},
     }, this);
     m_elenco->setObjectName("promozioni");

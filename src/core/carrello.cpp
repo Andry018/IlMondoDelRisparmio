@@ -56,16 +56,17 @@ void Carrello::scontoPercentualeRiga(int indice, int basisPoints)
     }
 }
 
-void Carrello::impostaScontiPromo(const QList<QPair<Money, QString>>& sconti)
+void Carrello::impostaScontiPromo(const QList<ScontoPromo>& sconti)
 {
     for (int i = 0; i < m_righe.size() && i < sconti.size(); ++i) {
         auto& r = m_righe[i];
         const Money manuale = r.scontoManuale();
         // La promozione non porta la riga sotto zero insieme allo sconto a mano
         const Money massimo = r.prezzoUnitario * r.quantita - manuale;
-        const Money promo = std::max(Money(), std::min(sconti[i].first, massimo));
+        const Money promo = std::max(Money(), std::min(sconti[i].importo, massimo));
         r.scontoPromo = promo;
-        r.promozione = promo.isZero() ? QString() : sconti[i].second;
+        r.promozione = promo.isZero() ? QString() : sconti[i].nome;
+        r.promozioneId = promo.isZero() ? QUuid() : sconti[i].id;
         r.sconto = manuale + promo;
     }
 }

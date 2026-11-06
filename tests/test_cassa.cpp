@@ -430,6 +430,8 @@ private slots:
         const auto riga = v[0].payload["righe"].toArray()[0].toObject();
         QCOMPARE(riga["sconto"].toInteger(), 135);
         QCOMPARE(riga["promozione"].toString(), QStringLiteral("Latte (3x2)"));
+        QCOMPARE(riga["promozione_id"].toString(), p.id.toString(QUuid::WithoutBraces));   // per i risultati sul server
+        QCOMPARE(riga["sconto_promozione"].toInteger(), 135);
 
         // Promozione tolta dal server (sincronizzazione senza): prezzo pieno
         QVERIFY(m_archivio->sostituisciPromozioni({}));

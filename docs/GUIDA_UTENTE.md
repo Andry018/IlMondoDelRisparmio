@@ -27,7 +27,7 @@ quando la rete torna (in basso: "N operazioni da inviare").
 | Articolo libero | prezzo sul tastierino e poi il **tasto del reparto**: `250` + reparto = 2,50 € (con la virgola: `2,50`) |
 | Articolo libero con descrizione | **Articolo libero (F2)** |
 | Tasti rapidi (shopper, ecc.) | un tocco; un numero prima è la quantità (`3` + Shopper = 3 sacchetti) |
-| Cambiare quantità | scegliere la riga, **Quantità riga (F9)** |
+| Cambiare quantità | scegliere la riga, **F9** (o **Altro… → Quantità riga**) |
 | Togliere una riga | la **✕** rossa in fondo alla riga (oppure scegliere la riga e **F4**) |
 | Sconto | **Sconto (F3)**: % sulla riga, % sul totale, € sul totale, oppure **Arrotonda a…** (es. 5,23 → 5,00) |
 | Prezzo di un articolo senza venderlo | **Verifica prezzo (F12)** e poi leggere l'articolo |
@@ -36,8 +36,15 @@ quando la rete torna (in basso: "N operazioni da inviare").
 
 ### Due clienti insieme
 
-I due tasti gialli in alto sono due scontrini separati: si mette in attesa il primo (cliente che
-cerca il portafoglio), si serve il secondo, poi si torna al primo. **F11** passa dall'uno all'altro.
+I tasti **Scontrino 1** e **Scontrino 2** in alto sono due scontrini separati (quello in uso è
+colorato): si mette in attesa il primo (cliente che cerca il portafoglio), si serve il secondo, poi
+si torna al primo. **F11** passa dall'uno all'altro.
+
+### Comandi usati di rado
+
+Sullo schermo ci sono i comandi di ogni scontrino. **Altro…** apre una pagina con gli altri
+(chiusura Z, operatore, quantità della riga, storno): un tocco e si torna alla vendita. I tasti F
+funzionano sempre, anche per i comandi che stanno in Altro….
 
 ### Pagare
 
@@ -80,7 +87,7 @@ Ogni cassa ha il suo aspetto, salvato su quel PC:
 - **Tasti rapidi**: scritta, codice dell'articolo, colore, prezzo se l'articolo non c'è e **pagina**
   (es. Frutta, Pane, Casa). Con più pagine la cassa mostra delle linguette sopra i tasti; fino a
   8 pagine da 12 tasti. Senza pagina il tasto va nella prima ("Rapidi");
-- **Schermata per il cliente** sul secondo monitor: righe, totale e resto, con il messaggio di benvenuto.
+- **Schermata per il cliente** sul secondo monitor (per quando ci sarà un monitor compatibile col POS).
 
 **Salva e applica** cambia subito la cassa.
 
@@ -88,8 +95,10 @@ Ogni cassa ha il suo aspetto, salvato su quel PC:
 
 ## 2. La gestione (`mdr-gestione`)
 
-Si accede dalla scheda **Impostazioni** con l'utente del negozio. Le schede in alto con un numero
-tra parentesi hanno qualcosa da fare.
+Si usa su un monitor normale. Si accede dalla voce **Impostazioni** (in fondo al menu a sinistra)
+con l'utente del negozio. Il **menu a sinistra** porta alle varie parti; le voci con un numero tra
+parentesi hanno qualcosa da fare (es. "Magazzino (2)"). **Alt+1**, **Alt+2**… passano da una voce
+all'altra. Passando il mouse su titoli e tabelle compare una breve spiegazione; il tasto ⟳ aggiorna.
 
 ### Cruscotto
 
@@ -100,7 +109,7 @@ gli articoli più venduti e lo stato delle casse. Si può guardare un giorno pas
 **Da fare**: ogni riga porta alla scheda giusta (carichi da approvare, fatture da controllare, prezzi
 da rivedere, sottoscorta, etichette, resi da verificare, chiusure che non quadrano).
 
-In alto lo **stato del server**: ultimo backup e ultima prova di ripristino. Una riga rossa con ⚠ va
+In alto lo **stato del server**: ultimo backup e ultima prova di ripristino. Una riga rossa va
 segnalata subito a chi segue il server.
 
 ### Articoli
@@ -167,6 +176,9 @@ sincronizzazione (anche senza rete fino alla fine del periodo): sullo scontrino 
 il nome della promozione, e il registratore stampa lo sconto con quel nome. **Sospendi** la ferma
 (si può riattivare), **Elimina** la cancella; gli scontrini già fatti non cambiano.
 
+Nell'elenco, per ogni promozione: **Scontrini**, **Pezzi venduti**, **Incasso** e **Sconti dati**
+(resi già tolti), per capire se ha funzionato e quanto è costata.
+
 ### Etichette
 
 L'elenco delle etichette da stampare (prezzi cambiati, richieste dal palmare o dalla scheda). Si
@@ -208,4 +220,5 @@ Senza Wi-Fi il palmare continua a contare e spuntare: invia tutto quando la rete
 | "N operazioni da inviare" che non scende | il server non risponde: la cassa continua a vendere; avvisare chi segue il server |
 | Operazioni **RIFIUTATE** (in rosso) | scheda Vendite della cassa: il server ha rifiutato i dati, avvisare il responsabile |
 | Registratore non disponibile | controllare che sia acceso e in rete, poi Impostazioni > prova registratore |
-| ⚠ nello stato del server (Cruscotto) | backup non riuscito o vecchio: avvisare subito chi segue il server |
+| Riga rossa nello stato del server (Cruscotto) | backup non riuscito o vecchio: avvisare subito chi segue il server |
+| In basso a sinistra in cassa **REGISTRATORE IN ADDESTRAMENTO** | il registratore è in prova: gli scontrini non sono fiscali, non vendere; far rimettere il registratore in servizio |

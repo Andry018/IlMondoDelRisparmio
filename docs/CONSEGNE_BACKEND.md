@@ -32,6 +32,7 @@ Branch: `worktree-backend-api-docs` (worktree `.claude/worktrees/backend-api-doc
 | `20261018000600_controllo_dati_completo` | `controllo_dati_elenco` senza il tetto di 5000 righe (esportazione Excel a pagine) | `test_controllo_dati.sql` |
 | `20261019000000_salute_orari_negozio` | `salute_server`: avviso sulle vendite non ancora in un backup (server acceso solo in orario) invece dell'età del backup; campo `vendite_senza_backup` | `test_salute_orari.sql` |
 | `20261106000000_promozioni` | `promozioni`, `promozioni_articoli`, `salva_promozione`, `elimina_promozione`, `v_promozioni`, `v_promozioni_articoli`, `v_promozioni_cassa` (prezzo speciale, %, prendi N paghi M, N a € X) | `test_promozioni.sql` |
+| `20261107000000_promozioni_vendite` | `vendite_righe.promozione_id/promozione/sconto_promozione`, `registra_vendita` che li salva, risultati in fondo a `v_promozioni` | `test_promozioni_vendite.sql` |
 
 Altro: `infra/connettore-sdi/` (connettore Openapi, systemd), `test_sicurezza.sql` (RLS, anon,
 search_path su tutto lo schema), `test_api_http.py` (contratto HTTP con PostgREST vero),

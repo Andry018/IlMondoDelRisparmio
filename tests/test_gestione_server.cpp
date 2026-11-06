@@ -420,6 +420,54 @@ private slots:
 
     // MDR_SCREENSHOT=cartella: un'immagine di ogni scheda a 1024x768, come amministratore e senza
     // modificare dati, quindi anche sul database con i dati importati da SystemApp.
+    // MDR_SCREENSHOT: le finestre di dialogo principali, aperte col loro tasto come farebbe l'utente
+    // (sono quasi tutte interne al loro file): si fotografano e si chiudono senza salvare.
+    void schermate_finestre()
+    {
+        const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT");
+        if (cartella.isEmpty())
+            QSKIP("MDR_SCREENSHOT non impostata");
+        apri(QStringLiteral("admin@negozio.lan"));
+        const QList<QPair<QString, QString>> finestre{
+            {QStringLiteral("Magazzino"), QStringLiteral("carico")},
+            {QStringLiteral("Magazzino"), QStringLiteral("inventario")},
+            {QStringLiteral("Magazzino"), QStringLiteral("proposta_ordine")},
+            {QStringLiteral("Articoli"), QStringLiteral("nuovo_articolo")},
+            {QStringLiteral("Articoli"), QStringLiteral("controllo_dati")},
+            {QStringLiteral("Promozioni"), QStringLiteral("nuova_promozione")},
+            {QStringLiteral("Fatture"), QStringLiteral("nuova_fattura")},
+        };
+        for (const auto& [scheda, tasto] : finestre) {
+            for (int i = 0; i < schede()->count(); ++i)
+                if (schede()->tabText(i).startsWith(scheda))
+                    schede()->setCurrentIndex(i);
+            QTest::qWait(800);
+            auto* b = schede()->currentWidget()->findChild<QPushButton*>(tasto);
+            QVERIFY2(b, qPrintable(tasto));
+            // Si guarda ogni 300 ms se la finestra è comparsa; dopo un secondo (dati caricati) la foto
+            bool fatta = false;
+            int giri = 0;
+            QTimer controllo;
+            controllo.setInterval(300);
+            connect(&controllo, &QTimer::timeout, [&] {
+                QDialog* d = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                for (auto* w : QApplication::topLevelWidgets())   // anche quelle non modali (Controllo dati)
+                    if (!d && w->isVisible() && qobject_cast<QDialog*>(w))
+                        d = qobject_cast<QDialog*>(w);
+                if (!d || ++giri < 4)
+                    return;
+                d->grab().save(cartella + QStringLiteral("/finestra_%1.png").arg(tasto));
+                qInfo().noquote() << QStringLiteral("%1: %2x%3").arg(tasto).arg(d->width()).arg(d->height());
+                fatta = true;
+                controllo.stop();
+                d->reject();
+            });
+            controllo.start();
+            b->click();
+            QTRY_VERIFY_WITH_TIMEOUT(fatta, 15000);
+        }
+    }
+
     void schermate()
     {
         const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT");

@@ -98,6 +98,7 @@ public:
             {"totale", QStringLiteral("Totale €"), ColonnaServer::Euro},
         }, m_pagine);
         m_vendite->testoVuoto = QStringLiteral("Nessuna vendita recente");
+        m_vendite->tabella()->horizontalHeader()->setStretchLastSection(true);   // tutta la larghezza
         m_pagine->addWidget(m_vendite);
 
         auto* paginaRighe = new QWidget(m_pagine);

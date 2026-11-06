@@ -89,7 +89,9 @@ public:
 
         m_righe = new QTableWidget(0, 4, this);
         m_righe->setHorizontalHeaderLabels({QStringLiteral("Codice"), QStringLiteral("Articolo"),
-                                            QStringLiteral("Quantità"), QStringLiteral("Costo unitario netto €")});
+                                            QStringLiteral("Quantità"), QStringLiteral("Costo netto €")});
+        m_righe->horizontalHeaderItem(3)->setToolTip(QStringLiteral("Costo unitario netto (IVA esclusa)"));
+        m_righe->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
         m_righe->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
         m_righe->verticalHeader()->setVisible(false);
         layout->addWidget(m_righe, 1);
