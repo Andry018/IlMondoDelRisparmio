@@ -230,6 +230,35 @@ private slots:
         QVERIFY(p3.errori.first().contains("codice"));
     }
 
+    void articoli_ricarico_collo_lotto_dispositivo()
+    {
+        // Stesse colonne di estrai.ps1 (SystemApp): ricarico %, pezzi per collo, lotto, detraibile
+        TabellaFile f;
+        f.intestazioni = {"codice", "descrizione", "aliquota", "ricarico", "pezzi_collo", "lotto", "dispositivo_medico"};
+        f.righe = {
+            {"R1", "Con tutto", "22", "30,50", "12", "si", "si"},
+            {"R2", "Ricarico zero", "22", "0", "", "no", "no"},
+            {"R3", "Collo sbagliato", "22", "", "0", "", ""},
+            {"R4", "Lotto sbagliato", "22", "", "", "forse", ""},
+        };
+        RiferimentiImportazione rif;
+        rif.repartiPerAliquota = {{"2200", 11}};
+        const auto p = preparaImportazione(TipoImportazione::Articoli, f, abbinaColonne(TipoImportazione::Articoli, f.intestazioni), rif);
+        QCOMPARE(p.righe.size(), 2);
+        const auto& r1 = p.righe[0].dati;
+        QCOMPARE(r1.value("ricarico_bp").toInt(), 3050);
+        QCOMPARE(r1.value("pezzi_collo").toInt(), 12);
+        QCOMPARE(r1.value("richiede_lotto").toBool(), true);
+        QCOMPARE(r1.value("dispositivo_medico").toBool(), true);
+        const auto& r2 = p.righe[1].dati;
+        QVERIFY(r2.contains("ricarico_bp") && r2.value("ricarico_bp").isNull());   // 0 = nessun ricarico voluto
+        QVERIFY(!r2.contains("pezzi_collo"));
+        QCOMPARE(r2.value("richiede_lotto").toBool(), false);
+        const QString errori = p.errori.join('\n');
+        QVERIFY2(errori.contains("pezzi per collo \"0\""), qPrintable(errori));
+        QVERIFY2(errori.contains("\"forse\" in Lotto richiesto"), qPrintable(errori));
+    }
+
     void preparazione_anagrafiche_e_giacenze()
     {
         TabellaFile c;

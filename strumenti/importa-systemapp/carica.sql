@@ -45,7 +45,7 @@ $$;
 -- --- File ------------------------------------------------------------------------------------
 create temp table s_articoli (codice text, descrizione text, prezzo text, costo text, aliquota text, natura text,
     reparto text, unita text, categoria text, scorta_minima text, fornitore text, codice_fornitore text,
-    attivo text, creato text);
+    attivo text, creato text, ricarico text, pezzi_collo text, lotto text, dispositivo_medico text);
 create temp table s_barcode (barcode text, codice text);
 create temp table s_fornitori (codice text, ragione_sociale text, partita_iva text, codice_fiscale text,
     indirizzo text, cap text, comune text, provincia text, nazione text, telefono text, email text, pec text,
@@ -161,7 +161,11 @@ select distinct on (trim(s.codice))
        greatest(coalesce(pg_temp.cent(s.prezzo), 0), 0) as prezzo, greatest(coalesce(pg_temp.cent(s.costo), 0), 0) as costo,
        greatest(coalesce(pg_temp.milli(s.scorta_minima), 0), 0) as scorta, f.id as fornitore_id,
        nullif(trim(s.codice_fornitore), '') as codice_fornitore, coalesce(pg_temp.vero(s.attivo), true) as attivo,
-       coalesce(pg_temp.ora(s.creato), now()) as creato
+       coalesce(pg_temp.ora(s.creato), now()) as creato,
+       nullif(greatest(coalesce(pg_temp.bp(s.ricarico), 0), 0), 0) as ricarico_bp,
+       greatest(coalesce(pg_temp.num(s.pezzi_collo)::int, 1), 1) as pezzi_collo,
+       coalesce(pg_temp.vero(s.lotto), false) as richiede_lotto,
+       coalesce(pg_temp.vero(s.dispositivo_medico), false) as dispositivo_medico
   from s_articoli s
   left join categorie c on c.parent_id is null and c.nome = trim(s.categoria)
   left join reparti rn on rn.numero_rt = pg_temp.num(s.reparto)::int
@@ -184,14 +188,17 @@ begin
 end $$;
 
 insert into articoli (codice, descrizione, categoria_id, reparto_id, unita, prezzo_vendita, costo_ultimo,
-                      scorta_minima, fornitore_abituale_id, attivo, created_at)
-select codice, descrizione, categoria_id, reparto_id, unita, prezzo, costo, scorta, fornitore_id, attivo, creato
+                      scorta_minima, fornitore_abituale_id, attivo, created_at,
+                      ricarico_bp, pezzi_collo, richiede_lotto, dispositivo_medico)
+select codice, descrizione, categoria_id, reparto_id, unita, prezzo, costo, scorta, fornitore_id, attivo, creato,
+       ricarico_bp, pezzi_collo, richiede_lotto, dispositivo_medico
   from s_art
 on conflict (codice) do update set
     descrizione = excluded.descrizione, categoria_id = excluded.categoria_id, reparto_id = excluded.reparto_id,
     unita = excluded.unita, prezzo_vendita = excluded.prezzo_vendita, costo_ultimo = excluded.costo_ultimo,
     scorta_minima = excluded.scorta_minima, fornitore_abituale_id = excluded.fornitore_abituale_id,
-    attivo = excluded.attivo, updated_at = now();
+    attivo = excluded.attivo, ricarico_bp = excluded.ricarico_bp, pezzi_collo = excluded.pezzi_collo,
+    richiede_lotto = excluded.richiede_lotto, dispositivo_medico = excluded.dispositivo_medico, updated_at = now();
 
 insert into articoli_fornitori (articolo_id, fornitore_id, codice_fornitore, costo)
 select a.id, s.fornitore_id, s.codice_fornitore, s.costo

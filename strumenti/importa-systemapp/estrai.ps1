@@ -97,7 +97,11 @@ SELECT RTRIM(a.fcodart) AS codice,
        $(Testo 'f.ID_anag_clifor') AS fornitore,
        $(Testo 'f.fcodart_forn') AS codice_fornitore,
        CASE WHEN a.flag_eliminato_logicamente = 1 OR a.flag_blocca_vendita = 1 THEN 'no' ELSE 'si' END AS attivo,
-       CONVERT(varchar(19), a.data_creazione, 120) AS creato
+       CONVERT(varchar(19), a.data_creazione, 120) AS creato,
+       CASE WHEN a.flag_usa_RICARICO = 1 AND a.fricarico > 0 THEN $(D2 'a.fricarico') END AS ricarico,
+       CASE WHEN a.pz_collo > 1 THEN CAST(a.pz_collo AS varchar(10)) END AS pezzi_collo,
+       CASE WHEN a.RICHIESTO_LOTTO = 1 THEN 'si' ELSE 'no' END AS lotto,
+       CASE WHEN a.DETRAIBILE = 1 THEN 'si' ELSE 'no' END AS dispositivo_medico
   FROM Articoli a
   LEFT JOIN TAB_Iva i ON i.id_aliquota = a.fiva
   LEFT JOIN TAB_Livello_Articoli_1 l ON l.id_livello_1 = a.id_livello_1

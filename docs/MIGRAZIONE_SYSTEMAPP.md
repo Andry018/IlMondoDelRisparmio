@@ -26,6 +26,7 @@ disco interno.
 | `TAB_Iva.frepcas` | 5 | `reparti` | numero del reparto sull'RT per aliquota: 22%→1, 10%→2, 4%→3, esente→4, 5%→5. Negli articoli `frepcas` è sempre 0: il reparto si ricava dall'IVA |
 | `TAB_Livello_Articoli_1` | 69 | `categorie` | 12.599 articoli su 14.446 non hanno categoria |
 | `Articoli` | 14.446 | `articoli` | codice, descrizione, prezzo (= prezzo di cassa), costo, IVA, unità (PZ 14.437, KG 9), data di creazione |
+| `Articoli.fricarico` (con `flag_usa_RICARICO`), `pz_collo`, `RICHIESTO_LOTTO`, `DETRAIBILE` | 5.917 / 3 / 19 / 21 | `ricarico_bp`, `pezzi_collo`, `richiede_lotto`, `dispositivo_medico` | dal 5/11/2026; ricarico solo se usato e maggiore di zero, pezzi per collo solo se più di 1 |
 | `Articoli` (codice) + `Alternativi` | 9.302 + 8.821 | `articoli_barcode` | il codice articolo è quasi sempre l'EAN (13.843 codici di 13 cifre); `Alternativi` sono gli altri barcode. Nessun barcode duplicato o condiviso da due articoli |
 | `Articoli_Sco_Min_Max_Ubicaz` | 15.237 | `articoli.scorta_minima` | una sola scorta minima impostata: quasi inutile |
 | `Anag_CliFor` tipo C | 81 | `clienti` | 68 con P.IVA, 58 con codice SDI, 32 con PEC |
@@ -96,8 +97,7 @@ Script in `strumenti/importa-systemapp/` (provati il 15/10/2026 sul server di sv
    Sul server del negozio serve l'utente `postgres` (scrive nelle tabelle senza RLS: lo storico vendite non
    può passare dalle API).
 3. **Controllo**: conteggi stampati alla fine (file contro database) e qualche articolo provato in cassa.
-4. **Giorno del passaggio**: dopo l'ultima chiusura Z di SystemApp, nuova copia dei database a programma
-   chiuso, estrazione e caricamento sul server del negozio, poi le casse si sincronizzano.
+4. **Giorno del passaggio**: lista completa in [PASSAGGIO.md](PASSAGGIO.md).
 
 ### Risultato della prova (copia del 14/10/2026)
 
@@ -128,6 +128,13 @@ Tre correzioni necessarie emerse con i dati veri:
 - indice su `articoli_barcode (articolo_id)` nell'archivio locale della cassa;
 - la sincronizzazione chiede pagine finché ne arriva una vuota (PostgREST di Supabase restituisce
   al massimo 1000 righe per richiesta: con un limite più basso si sarebbe fermata alla prima).
+
+### Prova del 5/11/2026
+
+Estrazione completa (stessi conteggi del 14/10) e caricamento sul server di sviluppo, con i campi
+nuovi della scheda articolo: 5.917 ricarichi (massimo 100%), 3 articoli con pezzi per collo, 19 con
+lotto richiesto, 21 dispositivi medici. Le stesse colonne (`ricarico`, `pezzi_collo`, `lotto`,
+`dispositivo_medico`) valgono anche in **Importa da file** della gestione.
 
 Reparti: lo script li allinea alla programmazione del registratore usata da SystemApp
 (22%→1, 10%→2, 4%→3, esente N4→4, 5%→5). Il seed di sviluppo aveva 5%→4 ed esente→5.

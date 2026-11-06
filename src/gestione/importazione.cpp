@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 #include <cmath>
 #include <QSet>
+#include <tuple>
 
 namespace mdr {
 
@@ -49,6 +50,10 @@ QList<CampoImportazione> campiImportazione(TipoImportazione t)
             {"codice_fornitore", QStringLiteral("Cod. del fornitore"), {"cod_fornitore", "codice_art_fornitore"}, false, ""},
             {"barcode", QStringLiteral("Barcode"), {"codice_a_barre", "barcodes", "ean", "codice_ean"}, false, "8001234567890"},
             {"attivo", QStringLiteral("In vendita"), {"attivo_si_no", "in_vendita"}, false, "si"},
+            {"ricarico", QStringLiteral("Ricarico %"), {"fricarico", "ricarico_perc", "ricarico_percentuale"}, false, "30"},
+            {"pezzi_collo", QStringLiteral("Pezzi per collo"), {"pz_collo", "collo", "pezzi_per_collo"}, false, "1"},
+            {"lotto", QStringLiteral("Lotto richiesto"), {"richiede_lotto", "richiesto_lotto"}, false, "no"},
+            {"dispositivo_medico", QStringLiteral("Dispositivo medico"), {"detraibile", "disp_medico"}, false, "no"},
         };
     case TipoImportazione::Barcode:
         return {
@@ -429,6 +434,34 @@ void articolo(const Lettore& l, int numero, QSet<QString>& codiciVisti, const Ri
             return;
         }
         a.insert(QStringLiteral("attivo"), *s);
+    }
+    if (const QString v = l.testo(QStringLiteral("ricarico")); !v.isEmpty()) {
+        const auto bp = leggiAliquota(v);   // "30" o "30,5" (%) -> punti base, come l'IVA
+        if (!bp || *bp < 0) {
+            p.errori << prefisso + QStringLiteral("ricarico \"%1\" non valido").arg(v);
+            return;
+        }
+        a.insert(QStringLiteral("ricarico_bp"), *bp > 0 ? QJsonValue(*bp) : QJsonValue());
+    }
+    if (const QString v = l.testo(QStringLiteral("pezzi_collo")); !v.isEmpty()) {
+        bool ok = false;
+        const int n = v.toInt(&ok);
+        if (!ok || n < 1) {
+            p.errori << prefisso + QStringLiteral("pezzi per collo \"%1\" non validi (numero intero da 1)").arg(v);
+            return;
+        }
+        a.insert(QStringLiteral("pezzi_collo"), n);
+    }
+    for (const auto& [campo, chiave, nome] : {std::tuple{"lotto", "richiede_lotto", "Lotto richiesto"},
+                                              std::tuple{"dispositivo_medico", "dispositivo_medico", "Dispositivo medico"}}) {
+        if (const QString v = l.testo(QString::fromLatin1(campo)); !v.isEmpty()) {
+            const auto s = leggiSiNo(v);
+            if (!s) {
+                p.errori << prefisso + QStringLiteral("\"%1\" in %2: usare si o no").arg(v, QString::fromLatin1(nome));
+                return;
+            }
+            a.insert(QString::fromLatin1(chiave), *s);
+        }
     }
     if (const QString v = l.testo(QStringLiteral("categoria")); !v.isEmpty()) {
         const int id = rif.categorie.value(v.toLower());
