@@ -18,9 +18,9 @@ trovare i problemi adesso e non il giorno del passaggio.
       caricamento: `estrai.ps1`, poi `carica.ps1 -Prova` (solo conteggi) e `carica.ps1` sul server.
       I conteggi finali devono essere uguali ai file.
 - [ ] Gestione: creare gli utenti (scheda Operatori) con codice e PIN, un account per ogni cassa.
-- [ ] Una cassa con il **registratore in modalità addestramento** (col tecnico): impostazioni
-      (server, chiave, account della cassa, indirizzo del registratore), *Prova collegamento*,
-      poi vendite in contanti e carta, uno sconto, un reso, un annullo, una chiusura Z.
+- [ ] Una cassa con il **registratore in modalità addestramento** (col tecnico): al primo avvio la
+      cassa apre la **prima installazione guidata** (server e chiave da `config\chiavi.txt`, account
+      della cassa, codice CASSA1, indirizzo del registratore con *Prova registratore*), poi vendite in contanti e carta, uno sconto, un reso, un annullo, una chiusura Z.
       In gestione → Chiusure la Z deve quadrare.
 - [ ] Staccare il cavo di rete della cassa, fare due vendite, riattaccarlo: devono arrivare al
       server (gestione → Vendite) senza doppioni.
@@ -47,7 +47,8 @@ Alla fine il database di prova si butta: il giorno del passaggio si ricarica tut
 3. [ ] Sul server: ricreare il database pulito (se c'è quello della prova) o installare da capo.
 4. [ ] `estrai.ps1` e `carica.ps1` sul server. Controllare i conteggi e `anomalie.txt`.
 5. [ ] Backup subito (`backup.ps1`), prima di qualsiasi vendita.
-6. [ ] Casse: impostazioni con l'account di ogni cassa, prima sincronizzazione (14.000 articoli:
+6. [ ] Casse: prima installazione guidata (o `mdr-cassa --prima-installazione` se la cassa era
+       già configurata) con l'account di ogni cassa, prima sincronizzazione (14.000 articoli:
        una decina di secondi), *Prova collegamento* col registratore **vero** (non addestramento).
 7. [ ] Uno scontrino vero di prova da pochi centesimi, poi il suo annullo. In gestione → Vendite
        devono comparire tutti e due.

@@ -7,6 +7,8 @@
 #include "italiano.h"
 #include "locale/archiviolocale.h"
 #include "locale/operazionicassa.h"
+#include "primainstallazione.h"
+#include "stile.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -42,8 +44,10 @@ int main(int argc, char* argv[])
                                 QStringLiteral("Finestra di dimensione fissa, es. 1024x768 (prove)."), QStringLiteral("LxA"));
     QCommandLineOption confermaAvvio(QStringLiteral("conferma-avvio"),
                                      QStringLiteral("Usata da aggiorna.ps1: conferma che la nuova versione parte."));
+    QCommandLineOption primaInstallazione(QStringLiteral("prima-installazione"),
+                                          QStringLiteral("Rifà la prima installazione guidata (server, accesso, registratore)."));
     opzioni.addVersionOption();
-    opzioni.addOptions({terminale, cartella, schermoIntero, finestra, confermaAvvio});
+    opzioni.addOptions({terminale, cartella, schermoIntero, finestra, confermaAvvio, primaInstallazione});
     opzioni.process(app);
 
     QDir dati(opzioni.isSet(cartella)
@@ -61,7 +65,18 @@ int main(int argc, char* argv[])
     if (!opzioni.isSet(confermaAvvio) && mdr::installaSePronto(dati.absolutePath()))
         return 0;
 
+    // Primo avvio (nessun file di impostazioni) o richiesta: procedura guidata. "Più tardi" la
+    // ripropone al prossimo avvio; intanto la cassa parte come postazione di prova.
+    const bool primoAvvio = !QFileInfo::exists(fileImpostazioni);
     auto impostazioni = mdr::Impostazioni::carica(fileImpostazioni);
+    if ((primoAvvio || opzioni.isSet(primaInstallazione)) && !opzioni.isSet(confermaAvvio)) {
+        mdr::applicaStile(mdr::TemaStile::Chiaro);   // poi la cassa mette il suo tema
+        mdr::PrimaInstallazione guida(mdr::Postazione::Cassa, impostazioni);
+        if (guida.exec() == QDialog::Accepted) {
+            impostazioni = guida.impostazioni();
+            impostazioni.salva(fileImpostazioni);
+        }
+    }
     if (opzioni.isSet(terminale))
         impostazioni.terminale = opzioni.value(terminale).toUpper();
 

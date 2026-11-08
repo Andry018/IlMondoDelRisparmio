@@ -76,6 +76,7 @@ QPushButton:pressed, QPushButton:checked { background: %6; border-color: %5; }
 QPushButton:disabled { color: %7; background: %8; border-color: %4; }
 QPushButton:default { background: %5; color: %9; border-color: %10; font-weight: 600; }
 QPushButton:default:pressed { background: %10; }
+QPushButton:default:disabled { color: %7; background: %8; border-color: %4; }
 QLineEdit, QPlainTextEdit, QTextEdit {
     background: %2; color: %3; border: 1px solid %4; border-radius: 5px; padding: 4px 6px;
     selection-background-color: %5; selection-color: %9;

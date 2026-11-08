@@ -11,6 +11,7 @@ add_library(mdr_ui STATIC
     installazioneaggiornamento.h installazioneaggiornamento.cpp
     italiano.h           italiano.cpp
     stile.h              stile.cpp
+    primainstallazione.h primainstallazione.cpp
 )
 target_include_directories(mdr_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(mdr_ui PUBLIC mdr_core mdr_locale Qt6::Widgets)

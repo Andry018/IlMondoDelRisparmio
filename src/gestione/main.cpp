@@ -4,12 +4,14 @@
 #include "installazioneaggiornamento.h"
 #include "italiano.h"
 #include "locale/archiviolocale.h"
+#include "primainstallazione.h"
 #include "serverlocale.h"
 #include "stile.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFileInfo>
 #include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
@@ -36,8 +38,10 @@ int main(int argc, char* argv[])
                                 QStringLiteral("Finestra di dimensione fissa, es. 1024x768 (prove)."), QStringLiteral("LxA"));
     QCommandLineOption confermaAvvio(QStringLiteral("conferma-avvio"),
                                      QStringLiteral("Usata da aggiorna.ps1: conferma che la nuova versione parte."));
+    QCommandLineOption primaInstallazione(QStringLiteral("prima-installazione"),
+                                          QStringLiteral("Rifà la prima installazione guidata (server e accesso)."));
     opzioni.addVersionOption();
-    opzioni.addOptions({cartella, finestra, confermaAvvio});
+    opzioni.addOptions({cartella, finestra, confermaAvvio, primaInstallazione});
     opzioni.process(app);
 
     // Cartella e file propri, separati da quelli di mdr-cassa: i due programmi possono girare
@@ -56,7 +60,16 @@ int main(int argc, char* argv[])
     if (!opzioni.isSet(confermaAvvio) && mdr::installaSePronto(dati.absolutePath()))
         return 0;
 
-    const auto impostazioni = mdr::Impostazioni::carica(fileImpostazioni);
+    // Primo avvio o richiesta: procedura guidata (vedi mdr-cassa)
+    const bool primoAvvio = !QFileInfo::exists(fileImpostazioni);
+    auto impostazioni = mdr::Impostazioni::carica(fileImpostazioni);
+    if ((primoAvvio || opzioni.isSet(primaInstallazione)) && !opzioni.isSet(confermaAvvio)) {
+        mdr::PrimaInstallazione guida(mdr::Postazione::Gestione, impostazioni);
+        if (guida.exec() == QDialog::Accepted) {
+            impostazioni = guida.impostazioni();
+            impostazioni.salva(fileImpostazioni);
+        }
+    }
 
     mdr::ArchivioLocale archivio(fileArchivio);
     if (!archivio.apri()) {

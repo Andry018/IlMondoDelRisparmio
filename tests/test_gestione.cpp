@@ -14,6 +14,8 @@
 #include "tabellaserver.h"
 #include "serverlocale.h"
 #include "vistapromozioni.h"
+#include "riepilogocommercialista.h"
+#include "primainstallazione.h"
 #include "stile.h"
 #include <QApplication>
 #include <QFontDatabase>
@@ -43,6 +45,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -465,6 +468,111 @@ private slots:
         QCOMPARE(p["paga"].toInt(), 2);
         QVERIFY(p["al"].isNull());
         QVERIFY(!p.contains("prezzo"));
+    }
+
+    void riepilogo_per_il_commercialista()
+    {
+        // Marzo: chiude il primo trimestre, quindi c'è anche il bollo
+        DatiMese d;
+        d.mese = QDate(2026, 3, 1);
+        auto riga = [](const char* giorno, int bp, const char* natura, qint64 totale, qint64 imponibile) {
+            return QJsonObject{{"giorno", giorno}, {"numero_reparto", 1}, {"aliquota_bp", bp}, {"natura", natura},
+                               {"totale", totale}, {"imponibile", imponibile}, {"imposta", totale - imponibile}};
+        };
+        d.venduto = {riga("2026-03-02", 2200, "", 12200, 10000), riga("2026-03-02", 400, "", 10400, 10000),
+                     riga("2026-03-03", 2200, "", -1220, -1000),   // reso
+                     riga("2026-03-03", 0, "N2", 500, 500)};
+        d.incassi = {QJsonObject{{"giorno", "2026-03-02"}, {"terminale_id", "CASSA1"}, {"tipo_pagamento", "contanti"}, {"importo", 20000}},
+                     QJsonObject{{"giorno", "2026-03-02"}, {"terminale_id", "CASSA1"}, {"tipo_pagamento", "carta"}, {"importo", 2600}}};
+        d.chiusure = {QJsonObject{{"data_ora", "2026-03-02T20:00:00+00:00"}, {"terminale_id", "CASSA1"}, {"rt_matricola", "99MEY000001"},
+                                  {"rt_azzeramento", 12}, {"totale_rt", 22600}, {"totale_server", 22600}, {"differenza", 0}, {"quadra", true}},
+                      QJsonObject{{"data_ora", "2026-03-03T20:00:00+00:00"}, {"terminale_id", "CASSA1"}, {"rt_matricola", "99MEY000001"},
+                                  {"rt_azzeramento", 13}, {"totale_rt", 0}, {"totale_server", -720}, {"differenza", 720}, {"quadra", false}}};
+        d.fatture = {QJsonObject{{"numero_documento", "1/2026"}, {"data", "2026-03-05"}, {"tipo", "fattura"}, {"cliente", "Rossi Srl"},
+                                 {"imponibile", 10000}, {"imposta", 2200}, {"totale", 12200}, {"stato", "consegnata"}},
+                     QJsonObject{{"numero_documento", "NC1/2026"}, {"data", "2026-03-06"}, {"tipo", "nota_credito"}, {"cliente", "Rossi Srl"},
+                                 {"imponibile", 1000}, {"imposta", 220}, {"totale", 1220}, {"stato", "consegnata"}}};
+        d.passive = {QJsonObject{{"numero", "A55"}, {"data", "2026-03-10"}, {"tipo_documento", "TD01"}, {"fornitore_nome", "Grossista"},
+                                 {"fornitore_partita_iva", "01234567890"}, {"imponibile", 50000}, {"imposta", 11000}, {"totale", 61000}}};
+        d.bolli = {QJsonObject{{"anno", 2026}, {"trimestre", 1}, {"codice_tributo", "2521"}, {"importo", 400}}};
+
+        const auto fogli = fogliCommercialista(d);
+        QCOMPARE(fogli.size(), 7);
+        QMap<QString, QString> voci;
+        for (const auto& r : fogli[0].righe)
+            voci[r.value(0)] = r.value(1);
+        QCOMPARE(voci.value("Corrispettivi (vendite meno resi) €"), QStringLiteral("218,80"));   // 122+104-12,20+5
+        QCOMPARE(voci.value("Corrispettivi: IVA €"), QStringLiteral("23,80"));                  // 22 + 4 - 2,20
+        QCOMPARE(voci.value("  IVA 22% (lordo) €"), QStringLiteral("109,80"));
+        QCOMPARE(voci.value("  Esente N2 (lordo) €"), QStringLiteral("5,00"));
+        QCOMPARE(voci.value("Incassato in contanti €"), QStringLiteral("200,00"));
+        QCOMPARE(voci.value("Chiusure Z che non quadrano"), QStringLiteral("1"));
+        QCOMPARE(voci.value("Fatture emesse: totale €"), QStringLiteral("109,80"));             // la nota di credito toglie
+        QCOMPARE(voci.value("Fatture ricevute: IVA €"), QStringLiteral("110,00"));
+        QCOMPARE(voci.value("Imposta di bollo 1° trimestre (codice tributo 2521) €"), QStringLiteral("4,00"));
+
+        // Aliquote: prima la più alta, poi le esenti, in fondo il totale
+        const auto& aliquote = fogli[1];
+        QCOMPARE(aliquote.righe.size(), 4);
+        QCOMPARE(aliquote.righe[0].value(0), QStringLiteral("IVA 22%"));
+        QCOMPARE(aliquote.righe[1].value(0), QStringLiteral("IVA 4%"));
+        QCOMPARE(aliquote.righe[3], (QStringList{"Totale", "218,80", "195,00", "23,80"}));
+        // Per giorno: una colonna per aliquota
+        const auto& giorni = fogli[2];
+        QCOMPARE(giorni.intestazioni.size(), 5);
+        QCOMPARE(giorni.righe[1], (QStringList{"03/03/2026", "-7,20", "-12,20", "0,00", "5,00"}));
+
+        // Aprile non chiude il trimestre: niente bollo
+        d.mese = QDate(2026, 4, 1);
+        const auto aprile = fogliCommercialista(d);
+        for (const auto& r : aprile[0].righe)
+            QVERIFY(!r.value(0).contains("bollo"));
+
+        // Nell'Excel gli importi sono numeri e si rileggono uguali
+        const auto letto = leggiXlsx(scriviXlsx(fogli));
+        QVERIFY(letto);
+        QCOMPARE(letto->righe.size(), fogli[0].righe.size());
+        const QByteArray xlsx = scriviXlsx(fogli);
+        QVERIFY(xlsx.contains("<v>218.80</v>") || xlsx.contains("<v>218.8</v>"));
+    }
+
+    void prima_installazione_della_gestione()
+    {
+        // chiavi.txt del server: si prende l'indirizzo di rete, non 127.0.0.1
+        const auto chiavi = leggiChiavi(QStringLiteral("Server Mondo del Risparmio\r\nserver = http://127.0.0.1:8000\r\n"
+                                                       "server = http://192.168.1.10:8000\r\nanon_key = eyJabc.def.ghi\r\n"));
+        QCOMPARE(chiavi.server, QStringLiteral("http://192.168.1.10:8000"));
+        QCOMPARE(chiavi.chiave, QStringLiteral("eyJabc.def.ghi"));
+        QVERIFY(leggiChiavi(QStringLiteral("server = http://<indirizzo di questo PC>:8000\nanon_key = x")).server.isEmpty());
+
+        PrimaInstallazione guida(Postazione::Gestione, Impostazioni{});
+        guida.show();
+        QVERIFY(!guida.findChild<QLineEdit*>("guida_terminale"));   // niente cassa e registratore
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Server));
+        QVERIFY(!guida.button(QWizard::NextButton)->isEnabled());   // si va avanti solo dopo la prova
+        // Indirizzo senza http: si completa; nessuno risponde, la pagina resta ferma
+        guida.findChild<QLineEdit*>("guida_server")->setText("127.0.0.1:1");
+        guida.findChild<QLineEdit*>("guida_chiave")->setText("eyJchiave");
+        guida.findChild<QPushButton*>("guida_prova_server")->click();
+        auto* stato = guida.findChild<QLabel*>("guida_stato_server");
+        QTRY_VERIFY_WITH_TIMEOUT(stato->text().contains("non raggiungibile"), 8000);
+        QCOMPARE(guida.findChild<QLineEdit*>("guida_server")->text(), QStringLiteral("http://127.0.0.1:1"));
+        QVERIFY(!guida.collegato());
+        QVERIFY(!guida.button(QWizard::NextButton)->isEnabled());
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty())
+        {
+            QTest::qWait(100);   // prima si ridisegna (testi cambiati)
+            guida.grab().save(cartella + "/guida_server.png");
+        }
+
+        // Solo prova: dritti al riepilogo, senza server
+        guida.back();
+        guida.findChild<QRadioButton*>("modo_prova")->setChecked(true);
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Fine));
+        QVERIFY(guida.findChild<QLabel*>("guida_riepilogo")->text().contains("Postazione di prova"));
+        QVERIFY(guida.impostazioni().server.isEmpty());
     }
 
     void server_locale_assente_non_si_avvia()

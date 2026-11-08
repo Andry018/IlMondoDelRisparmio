@@ -3,6 +3,7 @@
 #include <QRegularExpression>
 
 #include "comune.h"
+#include "riepilogocommercialista.h"
 #include "core/modelli.h"
 #include "tabellaserver.h"
 
@@ -91,7 +92,15 @@ VistaReport::VistaReport(ClientServer& client, QWidget* parent)
         barra->addWidget(b);
     }
     barra->addStretch();
-    // Per il commercialista o per i conti: il periodo mostrato, un foglio per tabella
+    auto* commercialista = new QPushButton(QStringLiteral("Per il commercialista…"), this);
+    commercialista->setObjectName("pulsante_commercialista");
+    commercialista->setToolTip(QStringLiteral("Riepilogo del mese: corrispettivi per aliquota, incassi, chiusure Z, fatture, bollo"));
+    connect(commercialista, &QPushButton::clicked, this, [this] {
+        DialogoCommercialista d(m_client, this);
+        d.exec();
+    });
+    barra->addWidget(commercialista);
+    // Per i conti: il periodo mostrato, un foglio per tabella
     barra->addWidget(pulsanteEsporta(this, QStringLiteral("vendite"), [this] {
         FoglioXlsx periodo{QStringLiteral("Periodo"), {QStringLiteral("Dal"), QStringLiteral("Al"), QStringLiteral("Riepilogo")},
                            {{m_dal->date().toString("dd/MM/yyyy"), m_al->date().toString("dd/MM/yyyy"),

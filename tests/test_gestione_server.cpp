@@ -8,6 +8,8 @@
 #include "core/promozioni.h"
 #include "dialoginventari.h"
 #include "vistapromozioni.h"
+#include "riepilogocommercialista.h"
+#include "primainstallazione.h"
 #include "stile.h"
 #include "dimostrativi.h"
 #include "finestragestione.h"
@@ -17,6 +19,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDateEdit>
 #include <QDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -406,6 +409,81 @@ private slots:
         foto(QStringLiteral("fatture"));
     }
 
+    void riepilogo_commercialista_dal_server()
+    {
+        // Tutte le viste del riepilogo rispondono al responsabile (niente errori di permessi o di colonne)
+        apri(QStringLiteral("responsabile@negozio.lan"));
+        vai(QStringLiteral("Vendite"));
+        bool fatto = false;
+        QTimer::singleShot(0, this, [&fatto] {
+            auto* d = qobject_cast<DialogoCommercialista*>(QApplication::activeModalWidget());
+            QVERIFY(d);
+            QTRY_VERIFY_WITH_TIMEOUT(d->pronto() || d->findChild<QLabel*>("commercialista_stato")->text().startsWith("Non letto"), 10000);
+            QVERIFY2(d->pronto(), qPrintable(d->findChild<QLabel*>("commercialista_stato")->text()));
+            QVERIFY(d->findChild<QTableWidget*>("commercialista_anteprima")->rowCount() >= 14);   // mese vuoto, senza bollo
+            QVERIFY(d->findChild<QPushButton*>("commercialista_salva")->isEnabled());
+            // Il mese in corso: le vendite di prova sono di questi giorni
+            d->findChild<QDateEdit*>("commercialista_mese")->setDate(QDate::currentDate());
+            QVERIFY(!d->pronto());
+            QTRY_VERIFY_WITH_TIMEOUT(d->pronto(), 10000);
+            QCOMPARE(d->dati().mese.day(), 1);
+            QVERIFY(!d->dati().venduto.isEmpty());
+            QVERIFY(!fogliCommercialista(d->dati())[1].righe.isEmpty());
+            d->reject();
+            fatto = true;
+        });
+        m_finestra->findChild<QPushButton*>("pulsante_commercialista")->click();
+        QVERIFY(fatto);
+    }
+
+    void prima_installazione_col_server()
+    {
+        // Tutta la procedura contro il server di sviluppo: chiave sbagliata, poi giusta, accesso
+        PrimaInstallazione guida(Postazione::Gestione, Impostazioni{});
+        guida.show();
+        guida.next();
+        auto* server = guida.findChild<QLineEdit*>("guida_server");
+        auto* chiave = guida.findChild<QLineEdit*>("guida_chiave");
+        auto* stato = guida.findChild<QLabel*>("guida_stato_server");
+        server->setText(qEnvironmentVariable("MDR_SERVER_SVILUPPO"));
+        chiave->setText("chiave-sbagliata");
+        guida.provaServer();
+        QTRY_VERIFY_WITH_TIMEOUT(stato->text().contains("chiave è sbagliata"), 8000);
+        chiave->setText(qEnvironmentVariable("MDR_CHIAVE_SVILUPPO"));
+        guida.provaServer();
+        QTRY_VERIFY_WITH_TIMEOUT(guida.collegato(), 8000);
+        QVERIFY(guida.button(QWizard::NextButton)->isEnabled());
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Accesso));
+        auto* esito = guida.findChild<QLabel*>("guida_stato_accesso");
+        guida.findChild<QLineEdit*>("guida_email")->setText("responsabile@negozio.lan");
+        guida.findChild<QLineEdit*>("guida_password")->setText("sbagliata");
+        guida.accedi();
+        QTRY_VERIFY_WITH_TIMEOUT(esito->text().contains("non riuscito"), 8000);
+        QVERIFY(!guida.button(QWizard::NextButton)->isEnabled());
+        guida.findChild<QLineEdit*>("guida_password")->setText("prova");
+        guida.accedi();
+        QTRY_VERIFY_WITH_TIMEOUT(guida.autenticato(), 8000);
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty())
+        {
+            QTest::qWait(100);   // prima si ridisegna (testi cambiati)
+            guida.grab().save(cartella + "/guida_accesso.png");
+        }
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Fine));
+        const auto imp = guida.impostazioni();
+        QCOMPARE(imp.email, QStringLiteral("responsabile@negozio.lan"));
+        QVERIFY(!imp.refreshToken.isEmpty());
+        QVERIFY(imp.server.startsWith("http"));
+
+        // La gestione aperta con queste impostazioni e' gia' collegata, senza rifare l'accesso
+        m_archivio = std::make_unique<ArchivioLocale>(QStringLiteral(":memory:"));
+        QVERIFY(m_archivio->apri());
+        m_finestra = std::make_unique<FinestraGestione>(*m_archivio, imp, m_dir.filePath("guida.ini"), QStringLiteral("prova"));
+        m_finestra->show();
+        QTRY_VERIFY_WITH_TIMEOUT(m_finestra->ruolo() == QLatin1String("responsabile"), 10000);
+    }
+
     void amministratore_operatori()
     {
         apri(QStringLiteral("admin@negozio.lan"));
@@ -436,6 +514,7 @@ private slots:
             {QStringLiteral("Articoli"), QStringLiteral("controllo_dati")},
             {QStringLiteral("Promozioni"), QStringLiteral("nuova_promozione")},
             {QStringLiteral("Fatture"), QStringLiteral("nuova_fattura")},
+            {QStringLiteral("Vendite"), QStringLiteral("pulsante_commercialista")},
         };
         for (const auto& [scheda, tasto] : finestre) {
             for (int i = 0; i < schede()->count(); ++i)

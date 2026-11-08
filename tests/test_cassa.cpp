@@ -7,6 +7,7 @@
 #include "locale/payloadvendita.h"
 #include "aspettocassa.h"
 #include "personalizzacassa.h"
+#include "primainstallazione.h"
 #include "schermocliente.h"
 #include "vistaaspetto.h"
 #include "vistacassa.h"
@@ -24,6 +25,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -1163,6 +1165,78 @@ private slots:
         const auto usb = Impostazioni::carica(m_dir.filePath("mdr-cassa.ini"));
         QCOMPARE(usb.rtConnessione, ConnessioneRt::Usb);
         QCOMPARE(usb.rtPorta, QStringLiteral("COM3"));
+    }
+    void prima_installazione_della_cassa()
+    {
+        // Postazione di prova: da Benvenuto si salta a cassa e registratore
+        PrimaInstallazione guida(Postazione::Cassa, Impostazioni{});
+        int prove = 0;
+        guida.impostaProvaRt([&prove](const QString& indirizzo) {
+            ++prove;
+            EsitoProvaRt e;
+            e.ok = indirizzo == QLatin1String("192.168.1.50");
+            e.matricola = QStringLiteral("99MEY012345");
+            e.errore = QStringLiteral("nessuna risposta");
+            e.addestramento = true;
+            return e;
+        });
+        guida.resize(640, 520);
+        guida.show();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Benvenuto));
+        guida.findChild<QRadioButton*>("modo_prova")->setChecked(true);
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Cassa));
+
+        auto* terminale = guida.findChild<QLineEdit*>("guida_terminale");
+        auto* connessione = guida.findChild<QComboBox*>("guida_rt_connessione");
+        auto* indirizzo = guida.findChild<QLineEdit*>("guida_rt_indirizzo");
+        auto* stato = guida.findChild<QLabel*>("guida_stato_rt");
+        terminale->setText("cassa 2");   // lo spazio non va
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Cassa));
+        QVERIFY(stato->text().contains("Codice della cassa"));
+        terminale->setText("cassa2");
+        connessione->setCurrentIndex(connessione->findData(int(ConnessioneRt::Rete)));
+        indirizzo->setText("192.168.1");
+        guida.findChild<QPushButton*>("guida_prova_rt")->click();
+        QCOMPARE(prove, 0);   // indirizzo sbagliato: non si prova nemmeno
+        indirizzo->setText("192.168.1.51");
+        guida.findChild<QPushButton*>("guida_prova_rt")->click();
+        QVERIFY(stato->text().contains("non risponde"));
+        indirizzo->setText("192.168.1.50");
+        guida.findChild<QPushButton*>("guida_prova_rt")->click();
+        QCOMPARE(prove, 2);
+        QVERIFY(stato->text().contains("99MEY012345"));
+        QVERIFY(stato->text().contains("addestramento"));
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty())
+        {
+            QTest::qWait(100);   // prima si ridisegna (testi cambiati)
+            guida.grab().save(cartella + "/guida_cassa.png");
+        }
+        guida.next();
+        QCOMPARE(guida.currentId(), int(PrimaInstallazione::Fine));
+        const QString riepilogo = guida.findChild<QLabel*>("guida_riepilogo")->text();
+        QVERIFY(riepilogo.contains("CASSA2"));
+        QVERIFY(riepilogo.contains("provato, matricola 99MEY012345"));
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty())
+        {
+            QTest::qWait(100);   // prima si ridisegna (testi cambiati)
+            guida.grab().save(cartella + "/guida_fine.png");
+        }
+
+        const auto imp = guida.impostazioni();
+        QCOMPARE(imp.terminale, QStringLiteral("CASSA2"));
+        QCOMPARE(imp.rtConnessione, ConnessioneRt::Rete);
+        QCOMPARE(imp.rtIndirizzo, QStringLiteral("192.168.1.50"));
+        QCOMPARE(imp.rtMatricola, QStringLiteral("99MEY012345"));
+        QVERIFY(imp.server.isEmpty());
+        QVERIFY(guida.width() <= 1024 && guida.height() <= 768);
+
+        // Cambiato l'indirizzo dopo la prova: nel riepilogo "non provato"
+        guida.back();
+        indirizzo->setText("192.168.1.60");
+        guida.next();
+        QVERIFY(guida.findChild<QLabel*>("guida_riepilogo")->text().contains("non provato"));
     }
 };
 

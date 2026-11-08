@@ -12,6 +12,7 @@ add_library(mdr_gestione STATIC
     vistafatture.h       vistafatture.cpp
     vistaamministrazione.h vistaamministrazione.cpp
     filetabella.h        filetabella.cpp
+    riepilogocommercialista.h riepilogocommercialista.cpp
     importazione.h       importazione.cpp
     importatore.h        importatore.cpp
     dialogoimportazione.h dialogoimportazione.cpp

@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
 #include <QStringDecoder>
 #include <QXmlStreamReader>
 #include <QtEndian>
@@ -434,11 +435,22 @@ QByteArray xmlFoglio(const FoglioXlsx& f)
     for (int i = 0; i < larghezze.size(); ++i)
         x += QStringLiteral("<col min=\"%1\" max=\"%1\" width=\"%2\" customWidth=\"1\"/>").arg(i + 1).arg(larghezze[i]);
     x += QStringLiteral("</cols><sheetData>");
+    // Importi ("12,50", "-1.234,56": due decimali con la virgola) come numeri veri con formato #.##0,00:
+    // in Excel si sommano e si ordinano. Codici, barcode, date e quantità restano testo.
+    static const QRegularExpression importo(QStringLiteral("^-?(\\d{1,3}(\\.\\d{3})+|\\d+),\\d{2}$"));
     auto riga = [&](int n, const QStringList& celle, bool grassetto) {
         x += QStringLiteral("<row r=\"%1\">").arg(n);
-        for (int i = 0; i < celle.size(); ++i)
+        for (int i = 0; i < celle.size(); ++i) {
+            const QString& c = celle[i];
+            if (!grassetto && importo.match(c).hasMatch()) {
+                QString v = c;
+                v.remove(QLatin1Char('.')).replace(QLatin1Char(','), QLatin1Char('.'));
+                x += QStringLiteral("<c r=\"%1%2\" s=\"2\"><v>%3</v></c>").arg(colonnaExcel(i)).arg(n).arg(v);
+                continue;
+            }
             x += QStringLiteral("<c r=\"%1%2\" t=\"inlineStr\"%3><is><t xml:space=\"preserve\">%4</t></is></c>")
-                     .arg(colonnaExcel(i)).arg(n).arg(grassetto ? QStringLiteral(" s=\"1\"") : QString(), escXml(celle[i]));
+                     .arg(colonnaExcel(i)).arg(n).arg(grassetto ? QStringLiteral(" s=\"1\"") : QString(), escXml(c));
+        }
         x += QStringLiteral("</row>");
     };
     riga(1, f.intestazioni, true);
@@ -516,8 +528,10 @@ QByteArray scriviXlsx(const QList<FoglioXlsx>& fogli)
         "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>"
         "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>"
         "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>"
-        "<cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
-        "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/></cellXfs>"
+        "<cellXfs count=\"3\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
+        "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>"
+        // 4 = #,##0.00 (Excel lo mostra con i separatori italiani)
+        "<xf numFmtId=\"4\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/></cellXfs>"
         "</styleSheet>";
     const QByteArray radice =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"

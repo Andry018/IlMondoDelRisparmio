@@ -3,6 +3,21 @@
 Come si usano ogni giorno la **cassa**, la **gestione** e il **palmare**. Per l'installazione e
 il server vedere `README.md` e `infra/supabase/README.md`.
 
+### Primo avvio su un PC nuovo
+
+Cassa e gestione, aperte la prima volta, propongono la **prima installazione guidata**:
+
+1. *Collegare al server del negozio* (o *Solo per provare*, con gli articoli di esempio).
+2. Indirizzo e chiave del server: si copiano da `config\chiavi.txt` sul PC del server, oppure
+   *Apri chiavi.txt…* (anche da una chiavetta). *Prova collegamento* dice se sono giusti.
+3. Accesso: per la cassa l'account della cassa (es. `cassa1@negozio.lan`), creato in gestione →
+   Operatori; per la gestione il proprio.
+4. Solo cassa: codice (CASSA1, CASSA2…) e indirizzo IP del registratore, con *Prova registratore*
+   (avvisa se è in addestramento).
+
+*Più tardi* la ripropone al prossimo avvio. Per rifarla: avviare il programma con
+`--prima-installazione`. Tutto si può cambiare anche dopo, nella scheda Impostazioni.
+
 ---
 
 ## 1. La cassa (`mdr-cassa`)
