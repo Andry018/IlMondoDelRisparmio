@@ -28,7 +28,8 @@ Push-Location $radice
 try {
     & cmake --preset msys2-release -DMDR_BUILD_TESTS=OFF -DMDR_BUILD_DESKTOP=ON | Out-Null
     Verifica "configurazione cmake"
-    & cmake --build --preset release --target mdr-cassa mdr-gestione mdr-prova-rt
+    # Due compilazioni alla volta: in release (-O3) con tutti i core finiva la memoria
+    & cmake --build --preset release -j 2 --target mdr-cassa mdr-gestione mdr-prova-rt
     Verifica "compilazione"
 } finally {
     Pop-Location

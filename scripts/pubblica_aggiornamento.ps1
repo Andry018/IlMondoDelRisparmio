@@ -39,10 +39,15 @@ if (-not $header.Contains($matches[1])) {
 }
 
 # 2. La versione non deve essere gia' pubblicata.
-$gh = Get-Command gh -ErrorAction SilentlyContinue
+# gh dal PATH o dalla cartella dove lo mette winget (le finestre aperte prima dell'installazione
+# non hanno il PATH nuovo).
+$gh = (Get-Command gh -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if (-not $gh -and (Test-Path "$env:ProgramFiles\GitHub CLI\gh.exe")) { $gh = "$env:ProgramFiles\GitHub CLI\gh.exe" }
 if (-not $Prova) {
     if (-not $gh) { Ferma "GitHub CLI non trovato: winget install GitHub.cli ; poi gh auth login" }
-    & gh release view $tag --repo $Repository *> $null
+    & $gh auth status *> $null
+    if ($LASTEXITCODE -ne 0) { Ferma "GitHub CLI non collegato: gh auth login" }
+    & $gh release view $tag --repo $Repository *> $null
     if ($LASTEXITCODE -eq 0) { Ferma "la versione $tag esiste gia': aumentare VERSION in CMakeLists.txt" }
 }
 
@@ -68,6 +73,6 @@ if ($Prova) {
 
 # 4. Pubblicazione: diventa la "latest" che le casse controllano.
 if (-not $Note) { $Note = "Mondo del Risparmio $versione (cassa e gestione)" }
-& gh release create $tag $zip "$zip.sig" --repo $Repository --title "Mondo del Risparmio $versione" --notes $Note
+& $gh release create $tag $zip "$zip.sig" --repo $Repository --title "Mondo del Risparmio $versione" --notes $Note
 if ($LASTEXITCODE -ne 0) { Ferma "gh release create non riuscito" }
 Write-Host "Pubblicata $tag. Le casse la scaricano entro 4 ore (o subito con Impostazioni > Controlla ora)." -ForegroundColor Green
