@@ -1,5 +1,7 @@
-﻿#include "locale/archiviolocale.h"
+﻿#include "fiscal/simulatore.h"
+#include "locale/archiviolocale.h"
 #include "locale/firma.h"
+#include "locale/operazionicassa.h"
 #include "locale/sincronizzatore.h"
 #include "locale/payloadvendita.h"
 
@@ -275,6 +277,98 @@ private slots:
         QCOMPARE(coda[0].rpc, QStringLiteral("registra_chiusura"));
         QCOMPARE(coda[0].corpo["p"].toObject()["totale"].toInt(), 500);
         QCOMPARE(db.statoRt("RT1").azzeramento, 5);
+    }
+
+    // Documento uscito dal registratore ma non salvato nell'archivio: non deve andare perso.
+    void documenti_non_salvati_recuperati()
+    {
+        QTemporaryDir dir;
+        const QString recupero = dir.filePath("non-salvate");
+        ArchivioLocale db(dir.filePath("cassa.sqlite"));
+        QVERIFY2(db.apri(), qPrintable(db.ultimoErrore()));
+        const auto latte = articolo("3001", {}, 135);
+        QVERIFY(db.salvaArticolo(latte));
+        StampanteSimulata rt;
+        OperazioniCassa op(db, rt, QStringLiteral("CASSA1"));
+        op.impostaCartellaRecupero(recupero);
+
+        const auto vendi = [&](int pezzi) {
+            Carrello c;
+            c.aggiungi(latte, Quantita::pezzi(pezzi));
+            c.aggiungiPagamento({TipoPagamento::Contanti, c.totale()});
+            return op.vendi(c);
+        };
+        const auto prima = vendi(1);
+        QVERIFY(prima.ok && prima.salvata);
+        QVERIFY(op.recuperaNonSalvate().recuperate == 0 && !QDir(recupero).exists());
+
+        // Archivio che non si lascia più scrivere (qui un trigger messo da un'altra connessione)
+        const auto rompi = [&](const QString& sql) {
+            {
+                auto altra = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("rompi"));
+                altra.setDatabaseName(dir.filePath("cassa.sqlite"));
+                QVERIFY(altra.open());
+                QSqlQuery q(altra);
+                QVERIFY2(q.exec(sql), qPrintable(sql));
+                altra.close();
+            }
+            QSqlDatabase::removeDatabase(QStringLiteral("rompi"));
+        };
+        rompi("create trigger rotto before insert on coda_invio begin select raise(abort, 'archivio rotto'); end");
+
+        const auto seconda = vendi(2);
+        QVERIFY(seconda.ok);          // lo scontrino è uscito
+        QVERIFY(!seconda.salvata);
+        QVERIFY(seconda.daParte);
+        const auto annullo = op.annulla(prima.id);
+        QVERIFY(annullo.ok && !annullo.salvata && annullo.daParte);
+        const auto chiusura = op.chiusura();
+        QVERIFY(chiusura.ok && !chiusura.salvata && chiusura.daParte);
+        QCOMPARE(QDir(recupero).entryList({"*.json"}, QDir::Files).size(), 3);
+        QCOMPARE(db.vendite(QDate::currentDate()).size(), 1);
+
+        // Finché l'archivio è rotto i file restano dove sono
+        auto esito = op.recuperaNonSalvate();
+        QCOMPARE(esito.recuperate, 0);
+        QCOMPARE(esito.rimaste, 3);
+        QVERIFY(!esito.errore.isEmpty());
+        QCOMPARE(QDir(recupero).entryList({"*.json"}, QDir::Files).size(), 3);
+
+        // Per dopo: gli stessi file ripresentati (file non tolto dopo un recupero riuscito)
+        QMap<QString, QByteArray> copie;
+        for (const auto& nome : QDir(recupero).entryList({"*.json"}, QDir::Files)) {
+            QFile f(QDir(recupero).filePath(nome));
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            copie.insert(nome, f.readAll());
+        }
+
+        rompi("drop trigger rotto");
+        esito = op.recuperaNonSalvate();
+        QCOMPARE(esito.recuperate, 3);
+        QCOMPARE(esito.rimaste, 0);
+        QVERIFY(QDir(recupero).entryList({"*.json"}, QDir::Files).isEmpty());
+
+        const auto vendite = db.vendite(QDate::currentDate());
+        QCOMPARE(vendite.size(), 2);
+        QCOMPARE(db.vendita(seconda.id)->totale.cents(), 270);
+        QCOMPARE(db.vendita(prima.id)->stato, QStringLiteral("annullata"));
+        QCOMPARE(db.statoRt(rt.matricola()).azzeramento, 2);
+        QStringList rpc;
+        for (const auto& o : db.codaDaInviare())
+            rpc << o.rpc;
+        QCOMPARE(rpc, QStringList({"registra_vendita", "registra_vendita", "annulla_vendita", "registra_chiusura"}));
+
+        // Ripresentati: risultano già nell'archivio, niente doppioni in coda
+        for (auto it = copie.cbegin(); it != copie.cend(); ++it) {
+            QFile f(QDir(recupero).filePath(it.key()));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(it.value());
+        }
+        esito = op.recuperaNonSalvate();
+        QCOMPARE(esito.recuperate, 3);
+        QCOMPARE(esito.rimaste, 0);
+        QCOMPARE(db.codaDaInviare().size(), 4);
+        QCOMPARE(db.vendite(QDate::currentDate()).size(), 2);
     }
 
     void marcatore_con_margine()

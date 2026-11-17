@@ -98,7 +98,10 @@ private slots:
         QCOMPARE(c.pagamenti.value(TipoPagamento::Contanti), 1);
         QCOMPARE(c.pagamenti.value(TipoPagamento::Carta), 5);
         QCOMPARE(c.pagamenti.value(TipoPagamento::Bancomat), 6);
-        QCOMPARE(c.pagamenti.value(TipoPagamento::Satispay), 2);   // predefinito
+        QCOMPARE(c.pagamenti.value(TipoPagamento::Satispay), 3);   // predefinito
+        // Predefiniti: i numeri che SystemApp manda ai registratori del negozio (carte 3, buoni 4)
+        const auto p = ConfigurazioneCustom::predefinita();
+        QCOMPARE(p.testoPagamenti(), QStringLiteral("contanti=1; carta=3; bancomat=3; satispay=3; buonopasto=4; nonriscosso=5"));
         QCOMPARE(c.aliquote.value(QStringLiteral("2200")), 1);
         QCOMPARE(c.aliquote.value(QStringLiteral("1000")), 2);
         QCOMPARE(c.aliquote.value(QStringLiteral("N4")), 7);
@@ -304,6 +307,114 @@ private slots:
         QVERIFY(!e.ok);
         QVERIFY2(e.errore.contains(QStringLiteral("non è stato emesso")), qPrintable(e.errore));
         QVERIFY(richieste.last().contains("resetPrinter"));
+    }
+
+    // Risposta persa e registratore che per un momento non risponde nemmeno alla lettura
+    // dell'ultimo documento (sta ancora stampando): si riprova, e lo scontrino uscito si ritrova.
+    void risposta_persa_registratore_occupato()
+    {
+        QList<QByteArray> richieste;
+        int letture = 0;
+        auto trasporto = std::make_unique<TrasportoFinto>(richieste, [&letture](const QByteArray& xml) {
+            if (xml.contains("getInfo"))
+                return ok(info(41));
+            RispostaTrasporto persa;
+            persa.forseEseguita = true;
+            persa.errore = QStringLiteral("nessuna risposta");
+            if (xml.contains("getVatTotalsOnDemand")) {
+                ++letture;
+                if (letture == 1)
+                    return ok(ultimo(7, QStringLiteral("12.00")));
+                return letture == 2 ? persa : ok(ultimo(8, QStringLiteral("7.70")));
+            }
+            return persa;
+        });
+        StampanteCustomXml rt(std::move(trasporto), ConfigurazioneCustom::predefinita());
+        rt.impostaPausaRiprova(0);
+        const auto e = rt.emettiDocumentoCommerciale(carrelloDiProva());
+        QVERIFY2(e.ok, qPrintable(e.errore));
+        QCOMPARE(e.numeroDocumento, 8);
+        QCOMPARE(letture, 3);
+    }
+
+    // Registratore sparito del tutto dopo l'invio: dopo i tentativi resta l'esito incerto, e non
+    // si dice né "emesso" né "non emesso".
+    void risposta_persa_registratore_sparito()
+    {
+        QList<QByteArray> richieste;
+        int letture = 0;
+        bool tornato = false;      // il registratore risponde di nuovo
+        int ultimoNumero = 8;      // e questo è il suo ultimo documento, da 7,70
+        auto trasporto = std::make_unique<TrasportoFinto>(richieste, [&](const QByteArray& xml) {
+            if (xml.contains("getInfo"))
+                return ok(info(41));
+            if (tornato && xml.contains("getVatTotalsOnDemand"))
+                return ok(ultimo(ultimoNumero, QStringLiteral("7.70")));
+            if (tornato)
+                return ok(risposta(QStringLiteral("<nClose>0042</nClose><fiscalDoc>0009</fiscalDoc>")));
+            if (xml.contains("getVatTotalsOnDemand") && ++letture == 1)
+                return ok(ultimo(7, QStringLiteral("12.00")));
+            RispostaTrasporto persa;
+            persa.forseEseguita = true;
+            persa.errore = QStringLiteral("nessuna risposta");
+            return persa;
+        });
+        StampanteCustomXml rt(std::move(trasporto), ConfigurazioneCustom::predefinita());
+        rt.impostaPausaRiprova(0);
+        const auto e = rt.emettiDocumentoCommerciale(carrelloDiProva());
+        QVERIFY(!e.ok);
+        QVERIFY2(e.errore.contains(QStringLiteral("Esito incerto")), qPrintable(e.errore));
+        QVERIFY2(!e.errore.contains(QStringLiteral("non è stato emesso")), qPrintable(e.errore));
+        QCOMPARE(letture, 4);   // una prima dello scontrino, tre dopo
+        for (const auto& r : richieste)
+            QVERIFY(!r.contains("resetPrinter"));
+
+        // Il registratore torna e il cassiere ripete il pagamento: l'ultimo documento è nuovo e
+        // ha quel totale, quindi lo scontrino era uscito. Si registra quello, senza ristamparlo.
+        tornato = true;
+        const int inviate = richieste.size();
+        const auto ritrovato = rt.emettiDocumentoCommerciale(carrelloDiProva());
+        QVERIFY2(ritrovato.ok, qPrintable(ritrovato.errore));
+        QCOMPARE(ritrovato.numeroDocumento, 8);
+        QCOMPARE(richieste.size(), inviate + 1);   // solo la lettura dell'ultimo documento
+        QVERIFY(!richieste.last().contains("beginFiscalReceipt"));
+
+        // La vendita dopo è una vendita normale: si stampa.
+        const auto dopo = rt.emettiDocumentoCommerciale(carrelloDiProva());
+        QVERIFY2(dopo.ok, qPrintable(dopo.errore));
+        QCOMPARE(dopo.numeroDocumento, 9);
+        QVERIFY(richieste.last().contains("beginFiscalReceipt"));
+    }
+
+    // Esito incerto, ma lo scontrino NON era uscito (ultimo documento invariato): ripetendo il
+    // pagamento si stampa normalmente.
+    void esito_incerto_scontrino_non_uscito_si_ristampa()
+    {
+        QList<QByteArray> richieste;
+        int letture = 0;
+        bool tornato = false;
+        auto trasporto = std::make_unique<TrasportoFinto>(richieste, [&](const QByteArray& xml) {
+            if (xml.contains("getInfo"))
+                return ok(info(41));
+            if (tornato && xml.contains("getVatTotalsOnDemand"))
+                return ok(ultimo(7, QStringLiteral("12.00")));
+            if (tornato)
+                return ok(risposta(QStringLiteral("<nClose>0042</nClose><fiscalDoc>0008</fiscalDoc>")));
+            if (xml.contains("getVatTotalsOnDemand") && ++letture == 1)
+                return ok(ultimo(7, QStringLiteral("12.00")));
+            RispostaTrasporto persa;
+            persa.forseEseguita = true;
+            persa.errore = QStringLiteral("nessuna risposta");
+            return persa;
+        });
+        StampanteCustomXml rt(std::move(trasporto), ConfigurazioneCustom::predefinita());
+        rt.impostaPausaRiprova(0);
+        QVERIFY(!rt.emettiDocumentoCommerciale(carrelloDiProva()).ok);
+        tornato = true;
+        const auto e = rt.emettiDocumentoCommerciale(carrelloDiProva());
+        QVERIFY2(e.ok, qPrintable(e.errore));
+        QCOMPARE(e.numeroDocumento, 8);
+        QVERIFY(richieste.last().contains("beginFiscalReceipt"));
     }
 
     void scontrino_rifiutato()

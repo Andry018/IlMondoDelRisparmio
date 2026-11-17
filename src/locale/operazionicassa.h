@@ -14,6 +14,14 @@ struct EsitoOperazione {
     QUuid id;                   // vendita o reso creato
     EsitoFiscale fiscale;
     QJsonObject payload;        // per recuperare a mano una vendita non salvata
+    bool daParte = false;       // non salvata, ma scritta nella cartella di recupero: si riprova all'avvio
+};
+
+// Esito di OperazioniCassa::recuperaNonSalvate().
+struct EsitoRecupero {
+    int recuperate = 0;         // ora nell'archivio e in coda verso il server
+    int rimaste = 0;            // ancora da recuperare (vedi errore)
+    QString errore;
 };
 
 // Totali dell'azzeramento in corso, per il controllo prima della chiusura Z.
@@ -59,7 +67,16 @@ public:
 
     RiepilogoAzzeramento riepilogo() const;
 
+    // Un documento già emesso dal registratore che l'archivio non riesce a salvare (archivio
+    // bloccato o rovinato) non deve andare perso: finisce in un file in questa cartella, e
+    // recuperaNonSalvate() lo rimette nell'archivio e nella coda (all'avvio della cassa).
+    void impostaCartellaRecupero(const QString& cartella) { m_cartellaRecupero = cartella; }
+    EsitoRecupero recuperaNonSalvate();
+
 private:
+    bool mettiDaParte(const QString& operazione, QJsonObject dati);
+    bool recupera(const QJsonObject& dati, QString* errore);
+
     EsitoOperazione registra(const Carrello& carrello, const EsitoFiscale& fiscale, const QUuid& origine);
     void salvaStato(const EsitoFiscale& e);
 
@@ -67,6 +84,8 @@ private:
     StampanteFiscale& m_rt;
     QString m_terminaleId;
     QUuid m_operatore;
+    QString m_cartellaRecupero;   // vuota: nessun recupero (test)
+    int m_progressivoRecupero = 0;   // nel nome dei file: tiene l'ordine anche nello stesso millisecondo
 };
 
 // Totali dal giornale locale, quando il registratore non li fornisce.

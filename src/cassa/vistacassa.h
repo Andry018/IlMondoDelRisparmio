@@ -43,6 +43,9 @@ public:
 
     bool scontrinoAperto() const { return !m_carrelli[0].vuoto() || !m_carrelli[1].vuoto(); }
     void log(const QString& riga);
+    // Il giornale della cassa anche su disco: <cartella>/cassa-AAAAMMGG.log, un file al giorno;
+    // quelli più vecchi di "giorni" si cancellano. Senza cartella resta solo a schermo.
+    void impostaCartellaGiornale(const QString& cartella, int giorni = 90);
     void attiva();          // fuoco sul campo barcode
     void aggiornaReparti(); // tasti reparto e tasti rapidi (dopo una sincronizzazione o un cambio d'aspetto)
     void aggiornaPromozioni(); // rilette dall'archivio locale (dopo una sincronizzazione)
@@ -152,6 +155,7 @@ private:
     QLabel* m_residuo = nullptr;
     QLabel* m_messaggio = nullptr;
     QPlainTextEdit* m_giornale = nullptr;
+    QString m_cartellaGiornale;   // vuota: giornale solo a schermo
     QGridLayout* m_grigliaReparti = nullptr;
     QGridLayout* m_grigliaComandi = nullptr;
     QHBoxLayout* m_principale = nullptr;
@@ -166,5 +170,8 @@ private:
 // Prezzo digitato sul tastierino: con la virgola è in euro ("2,50"), senza è in
 // centesimi come sui registratori ("250" = 2,50).
 std::optional<Money> prezzoDaTastierino(const QString& testo);
+
+// Cosa dire al cassiere quando un documento è uscito dal registratore ma l'archivio non l'ha salvato.
+QString testoNonSalvata(bool daParte);
 
 } // namespace mdr

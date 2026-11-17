@@ -13,6 +13,8 @@
 #include <QCloseEvent>
 #include <QLabel>
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QPointer>
 #include <QStatusBar>
@@ -32,6 +34,8 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
     m_terminale = impostazioni.terminale;
 
     m_cassa = new VistaCassa(archivio, operazioni, schede());
+    if (!m_fileImpostazioni.isEmpty())
+        m_cassa->impostaCartellaGiornale(QFileInfo(m_fileImpostazioni).absoluteDir().filePath(QStringLiteral("giornale")));
     m_vendite = new VistaVendite(archivio, operazioni, schede());
     aggiungiScheda(m_cassa, QStringLiteral("Cassa"), QStringLiteral("cassa"));
     aggiungiScheda(m_vendite, QStringLiteral("Vendite"), QStringLiteral("vendite"));
@@ -58,11 +62,12 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
     m_addestramento = new QLabel(this);
     m_addestramento->setObjectName("rt_addestramento");
     m_addestramento->setStyleSheet(QStringLiteral("background: #c62828; color: white; font-weight: bold; padding: 2px 8px;"));
-    m_addestramento->setText(QStringLiteral("REGISTRATORE IN ADDESTRAMENTO: gli scontrini NON sono fiscali"));
-    m_addestramento->setVisible(m_op.rt().inAddestramento());
     statusBar()->addWidget(m_addestramento);
+    aggiornaAvvisoRt();
     if (m_op.rt().inAddestramento())
         m_cassa->log(QStringLiteral("ATTENZIONE: registratore in modalità addestramento, documenti non fiscali"));
+    else if (m_op.rt().simulato())
+        m_cassa->log(QStringLiteral("ATTENZIONE: nessun registratore collegato (simulatore), non esce nessuno scontrino"));
     statusBar()->addPermanentWidget(m_avviso);
     statusBar()->addPermanentWidget(m_statoOperatore);
     statusBar()->addPermanentWidget(m_statoCoda);
@@ -149,9 +154,26 @@ void FinestraCassa::sincronizzazioneTerminata(bool ok, int inviate, int /*artico
         m_vendite->aggiorna();
 }
 
+void FinestraCassa::aggiornaAvvisoRt()
+{
+    // Sempre in vista: una cassa che non emette scontrini fiscali non deve sembrare normale.
+    const bool addestramento = m_op.rt().inAddestramento();
+    const bool simulato = m_op.rt().simulato();
+    if (addestramento) {
+        m_addestramento->setText(QStringLiteral("REGISTRATORE IN ADDESTRAMENTO: gli scontrini NON sono fiscali"));
+        m_addestramento->setToolTip(QStringLiteral("Il registratore è in modalità addestramento: farla togliere dal tecnico "
+                                                   "prima di vendere."));
+    } else if (simulato) {
+        m_addestramento->setText(QStringLiteral("SIMULATORE: NON esce nessuno scontrino"));
+        m_addestramento->setToolTip(QStringLiteral("Nessun registratore collegato: la cassa è in prova. Per vendere, "
+                                                   "impostare l'indirizzo del registratore in Impostazioni e riavviare."));
+    }
+    m_addestramento->setVisible(addestramento || simulato);
+}
+
 void FinestraCassa::aggiornaStato()
 {
-    m_addestramento->setVisible(m_op.rt().inAddestramento());
+    aggiornaAvvisoRt();
     m_statoTerminale->setText(QStringLiteral("Terminale %1 · RT %2 (%3)")
                                   .arg(m_op.terminale(), m_op.rt().nome(), m_op.rt().matricola()));
     const int coda = archivio().contaDaInviare();

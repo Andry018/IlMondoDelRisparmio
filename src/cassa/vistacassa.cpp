@@ -12,6 +12,9 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -1156,6 +1159,13 @@ void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
         emetti();
 }
 
+QString testoNonSalvata(bool daParte)
+{
+    return daParte ? QStringLiteral("I dati sono stati messi da parte e la cassa li recupera da sola al prossimo "
+                                    "avvio. Avvisare il responsabile.")
+                   : QStringLiteral("I dati sono nel giornale della cassa: avvisare subito il responsabile.");
+}
+
 void VistaCassa::emetti()
 {
     const auto esito = m_op.vendi(carr());
@@ -1181,9 +1191,8 @@ void VistaCassa::emetti()
         log(QStringLiteral("ERRORE salvataggio vendita: %1\n%2")
                 .arg(esito.errore, QString::fromUtf8(QJsonDocument(esito.payload).toJson(QJsonDocument::Compact))));
         QMessageBox::critical(this, QStringLiteral("Archivio locale"),
-                              QStringLiteral("Scontrino emesso ma vendita NON salvata:\n%1\n\n"
-                                             "I dati sono nel giornale: avvisare il responsabile.")
-                                  .arg(esito.errore));
+                              QStringLiteral("Scontrino emesso ma vendita NON salvata:\n%1\n\n%2")
+                                  .arg(esito.errore, testoNonSalvata(esito.daParte)));
     }
 
     if (std::any_of(carr().pagamenti().cbegin(), carr().pagamenti().cend(),
@@ -1258,8 +1267,13 @@ void VistaCassa::chiusuraGiornaliera()
         return;
     }
     log(QStringLiteral("CHIUSURA Z %1 — totale %2").arg(esito.fiscale.numeroAzzeramento).arg(euro(r.netto())));
-    if (!esito.salvata)
-        log(QStringLiteral("ERRORE salvataggio chiusura: %1").arg(esito.errore));
+    if (!esito.salvata) {
+        log(QStringLiteral("ERRORE salvataggio chiusura: %1\n%2")
+                .arg(esito.errore, QString::fromUtf8(QJsonDocument(esito.payload).toJson(QJsonDocument::Compact))));
+        QMessageBox::critical(this, QStringLiteral("Archivio locale"),
+                              QStringLiteral("Chiusura eseguita sul registratore ma NON salvata:\n%1\n\n%2")
+                                  .arg(esito.errore, testoNonSalvata(esito.daParte)));
+    }
     messaggio(QStringLiteral("Chiusura Z %1 eseguita").arg(esito.fiscale.numeroAzzeramento));
     emit documentoEmesso();
     emit chiusuraEseguita();
@@ -1412,9 +1426,32 @@ void VistaCassa::verificaPrezzo(const QString& codice)
     m_codice->setFocus();
 }
 
+void VistaCassa::impostaCartellaGiornale(const QString& cartella, int giorni)
+{
+    m_cartellaGiornale = cartella;
+    QDir dir(cartella);
+    if (!dir.mkpath(QStringLiteral("."))) {
+        m_cartellaGiornale.clear();
+        return;
+    }
+    const QDate limite = QDate::currentDate().addDays(-giorni);
+    for (const auto& f : dir.entryInfoList({QStringLiteral("cassa-*.log")}, QDir::Files)) {
+        const QDate data = QDate::fromString(f.completeBaseName().mid(6), QStringLiteral("yyyyMMdd"));
+        if (data.isValid() && data < limite)
+            QFile::remove(f.absoluteFilePath());
+    }
+}
+
 void VistaCassa::log(const QString& riga)
 {
-    m_giornale->appendPlainText(QStringLiteral("%1  %2").arg(QTime::currentTime().toString("HH:mm:ss"), riga));
+    const QString testo = QStringLiteral("%1  %2").arg(QTime::currentTime().toString("HH:mm:ss"), riga);
+    m_giornale->appendPlainText(testo);
+    if (m_cartellaGiornale.isEmpty())
+        return;
+    // Anche su disco: quello che si vede a schermo sparisce alla chiusura del programma.
+    QFile f(QDir(m_cartellaGiornale).filePath(QStringLiteral("cassa-%1.log").arg(QDate::currentDate().toString(QStringLiteral("yyyyMMdd")))));
+    if (f.open(QIODevice::WriteOnly | QIODevice::Append))
+        f.write(testo.toUtf8() + "\n");
 }
 
 } // namespace mdr

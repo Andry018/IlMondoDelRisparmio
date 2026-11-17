@@ -85,7 +85,7 @@ try {
     Move-Item $Cartella $precedente
     Move-Item $appNuova $Cartella
     # Script di installazione della nuova versione accanto al programma.
-    foreach ($f in "aggiorna.ps1", "disinstalla.ps1", "Disinstalla.bat") {
+    foreach ($f in "aggiorna.ps1", "disinstalla.ps1", "Disinstalla.bat", "ProvaRegistratore.bat") {
         $s = Join-Path $radiceNuova $f
         if (Test-Path $s) { Copy-Item -Force $s $Cartella }
     }

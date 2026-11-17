@@ -55,7 +55,8 @@ private:
     QLabel* m_statoCoda = nullptr;
     QLabel* m_statoOperatore = nullptr;
     QLabel* m_avviso = nullptr;   // orologio sbagliato, account di un altro terminale
-    QLabel* m_addestramento = nullptr;   // registratore in addestramento: documenti non fiscali
+    QLabel* m_addestramento = nullptr;   // registratore in addestramento o simulatore: documenti non fiscali
+    void aggiornaAvvisoRt();
     QString m_terminale;
     void controllaServer();
 };

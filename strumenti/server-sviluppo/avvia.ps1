@@ -7,6 +7,8 @@
 #   .\strumenti\server-sviluppo\avvia.ps1 -Nuovo     ricrea il database da zero
 #   .\strumenti\server-sviluppo\avvia.ps1 -Sfondo    avvia e torna subito (fermare con -Ferma)
 #   .\strumenti\server-sviluppo\avvia.ps1 -Ferma
+#   .\strumenti\server-sviluppo\avvia.ps1 -Rete      raggiungibile anche dagli altri PC della rete
+#                                                    (prova con due computer: vedi docs\PROVA_DUE_PC.md)
 #
 # Requisiti: PostgreSQL di MSYS2 (pacman -S mingw-w64-ucrt-x86_64-postgresql), Python 3.
 # PostgREST viene scaricato la prima volta da GitHub.
@@ -15,12 +17,13 @@ param(
     [switch]$Nuovo,
     [switch]$Sfondo,
     [switch]$Ferma,
+    [switch]$Rete,
     [int]$Porta = 8000,
     [int]$PortaPg = 54340,
     [int]$PortaRest = 54341,
     [string]$PgBin = "C:\msys64\ucrt64\bin",
     [string]$VersionePostgrest = "v16.4",
-    # Migrazioni in più (es. quelle del backend non ancora committate): si aggiungono a quelle
+    # Migrazioni in piu' (es. quelle del backend non ancora committate): si aggiungono a quelle
     # del repository, in ordine di nome. Es. -MigrazioniExtra ..\.claude\worktrees\backend-api-docs\supabase\migrations
     [string]$MigrazioniExtra = ""
 )
@@ -131,8 +134,10 @@ $conf = Join-Path $dati "postgrest.conf"
 $rest = Start-Process $postgrest -ArgumentList "`"$conf`"" -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $dati "postgrest.log") -RedirectStandardError (Join-Path $dati "postgrest.err")
 $chiavi = Join-Path $dati "chiavi.txt"
+$ascolto = "127.0.0.1"
+if ($Rete) { $ascolto = "0.0.0.0" }
 $gateway = Start-Process $python -WindowStyle Hidden -PassThru `
-    -ArgumentList "-I", "-B", "`"$(Join-Path $PSScriptRoot 'gateway.py')`"", $Porta, "http://127.0.0.1:$PortaRest", $segreto, "`"$chiavi`"" `
+    -ArgumentList "-I", "-B", "`"$(Join-Path $PSScriptRoot 'gateway.py')`"", $Porta, "http://127.0.0.1:$PortaRest", $segreto, "`"$chiavi`"", $ascolto `
     -RedirectStandardOutput (Join-Path $dati "gateway.log") -RedirectStandardError (Join-Path $dati "gateway.err")
 @($rest.Id, $gateway.Id) | Set-Content $fileProcessi
 
@@ -165,6 +170,29 @@ Write-Host "  Chiave API: $anon"
 Write-Host "  Utenti (password 'prova'): admin@negozio.lan, responsabile@negozio.lan,"
 Write-Host "             cassiera@negozio.lan, magazzino@negozio.lan, cassa1@negozio.lan"
 Write-Host "  Dati e log: $dati"
+
+if ($Rete) {
+    # Indirizzi IPv4 di questo PC nella rete locale (niente loopback ne' indirizzi automatici 169.254).
+    $indirizzi = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+        ForEach-Object { $_.IPAddress })
+    Write-Host ""
+    Write-Host "Raggiungibile dagli altri PC della rete:" -ForegroundColor Green
+    foreach ($ip in $indirizzi) { Write-Host "  Server:     http://${ip}:$Porta" }
+    # Porta aperta nel firewall di Windows: serve l'amministratore, una volta sola.
+    $regola = "Mondo del Risparmio - server di sviluppo"
+    if (-not (Get-NetFirewallRule -DisplayName $regola -ErrorAction SilentlyContinue)) {
+        try {
+            New-NetFirewallRule -DisplayName $regola -Direction Inbound -Protocol TCP -LocalPort $Porta `
+                -Action Allow -Profile Any -ErrorAction Stop | Out-Null
+            Write-Host "  Aperta la porta $Porta nel firewall di Windows."
+        } catch {
+            Write-Host "  ATTENZIONE: porta $Porta non aperta nel firewall (serve PowerShell da amministratore)." -ForegroundColor Yellow
+            Write-Host "  Rilanciare una volta come amministratore, oppure accettare la richiesta di Windows" -ForegroundColor Yellow
+            Write-Host "  'Consenti accesso' per Python quando compare." -ForegroundColor Yellow
+        }
+    }
+}
 
 if ($Sfondo) { exit 0 }
 Write-Host ""

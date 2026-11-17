@@ -43,10 +43,18 @@ Su un altro PC aprire "Cassa (in finestra)" dal menu Start, scheda Impostazioni:
    - Registratore: "Rete" e l'indirizzo IP del registratore
 Salvare e vendere. Una cassa alla volta per registratore.
 
+PROVA DEL REGISTRATORE (col tecnico, in modalita' addestramento)
+Doppio clic su  ProvaRegistratore.bat  (nello zip estratto o nella cartella del programma).
+Chiede l'indirizzo IP del registratore: prima fa solo letture, poi, se si conferma, emette
+alcuni documenti di prova. Se il registratore non e' in addestramento si ferma da solo.
+Il registro della prova e' in Documenti\prova-rt.
+
 DOVE SONO I DATI
 %LOCALAPPDATA%\Mondo del Risparmio\mdr-cassa
    cassa.sqlite        archivio: articoli, vendite, coda verso il server
    mdr-cassa.ini       impostazioni: terminale, registratore, server, accesso
+   giornale\           cosa ha fatto la cassa, un file al giorno (90 giorni)
+   non-salvate\        documenti emessi ma non salvati: la cassa li recupera da sola all'avvio
 %LOCALAPPDATA%\Mondo del Risparmio\mdr-gestione
    gestione.sqlite     archivio della gestione
    mdr-gestione.ini    impostazioni: server, accesso

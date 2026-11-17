@@ -11,8 +11,11 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QThread>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+
+#include <utility>
 
 namespace mdr {
 
@@ -21,6 +24,7 @@ namespace {
 constexpr int kAttesaComando = 10000;
 constexpr int kAttesaDocumento = 60000;
 constexpr int kAttesaChiusura = 180000;
+constexpr int kLettureDopoRispostaPersa = 3;
 constexpr int kDescrizione = 22;   // caratteri della descrizione di una riga sul registratore
 constexpr int kMessaggio = 42;
 
@@ -464,10 +468,13 @@ QList<QPair<QString, QString>> coppie(const QString& testo)
 
 ConfigurazioneCustom ConfigurazioneCustom::predefinita()
 {
-    // Da confermare col rivenditore: dipende dalla tabella pagamenti programmata sul registratore.
+    // Dipende dalla tabella pagamenti programmata sul registratore. Contanti, carte e buoni sono i
+    // numeri che SystemApp manda oggi ai registratori del negozio (TAB_Tipi_Pagamenti.Tender_Cassa:
+    // contanti 1, bancomat/carte 3, buoni 4), quindi quelli già programmati. "Non riscosso" in
+    // SystemApp non c'è: 5 è da confermare col rivenditore (Impostazioni > Pagamenti RT).
     ConfigurazioneCustom c;
-    c.pagamenti = {{TipoPagamento::Contanti, 1},  {TipoPagamento::Carta, 2},      {TipoPagamento::Bancomat, 2},
-                   {TipoPagamento::Satispay, 2},  {TipoPagamento::BuonoPasto, 3}, {TipoPagamento::NonRiscosso, 4}};
+    c.pagamenti = {{TipoPagamento::Contanti, 1},  {TipoPagamento::Carta, 3},      {TipoPagamento::Bancomat, 3},
+                   {TipoPagamento::Satispay, 3},  {TipoPagamento::BuonoPasto, 4}, {TipoPagamento::NonRiscosso, 5}};
     return c;
 }
 
@@ -691,6 +698,19 @@ EsitoFiscale StampanteCustomXml::documento(const QByteArray& xml, std::optional<
         prima = ultimoDocumento();
         if (!prima)
             return {false, QStringLiteral("Registratore non raggiungibile o occupato: scontrino non emesso.")};
+        // Il tentativo di prima era finito con esito incerto e il cassiere ripete il pagamento:
+        // se nel frattempo il registratore ha un documento nuovo con quel totale, lo scontrino
+        // era uscito. Si registra quello, senza stamparne un secondo.
+        if (const auto incerto = std::exchange(m_incerto, std::nullopt);
+            incerto && prima->numero != incerto->numeroPrima && prima->totale == incerto->totale
+            && *totaleAtteso == incerto->totale) {
+            EsitoFiscale e;
+            e.ok = true;
+            e.numeroDocumento = prima->numero;
+            e.numeroAzzeramento = m_azzeramento;
+            e.dataOra = QDateTime::currentDateTime();
+            return e;
+        }
     }
 
     const auto s = invia(xml, kAttesaDocumento);
@@ -703,7 +723,14 @@ EsitoFiscale StampanteCustomXml::documento(const QByteArray& xml, std::optional<
     }
 
     if (s.esitoIgnoto && totaleAtteso) {
-        const auto dopo = ultimoDocumento();
+        // Senza questa lettura non si sa se lo scontrino è uscito: prima di arrendersi (e lasciare
+        // il controllo al cassiere) si riprova, il registratore può essere ancora occupato.
+        auto dopo = ultimoDocumento();
+        for (int tentativo = 1; !dopo && tentativo < kLettureDopoRispostaPersa; ++tentativo) {
+            if (m_pausaRiprova > 0)
+                QThread::msleep(m_pausaRiprova);
+            dopo = ultimoDocumento();
+        }
         if (dopo && dopo->numero != prima->numero && dopo->totale == *totaleAtteso) {
             EsitoFiscale e;
             e.ok = true;
@@ -716,6 +743,13 @@ EsitoFiscale StampanteCustomXml::documento(const QByteArray& xml, std::optional<
             invia(xmlComando(QStringLiteral("resetPrinter")), kAttesaComando);
             return {false, s.errore + QStringLiteral(" Lo scontrino non è stato emesso.")};
         }
+    }
+    if (s.esitoIgnoto && totaleAtteso) {
+        m_incerto = Incerto{prima->numero, *totaleAtteso};
+        return {false, s.errore + QStringLiteral("\nEsito incerto: non si sa se lo scontrino è uscito.\n"
+                                                 "Quando il registratore torna a rispondere, ripetere il pagamento "
+                                                 "senza cambiare lo scontrino: se era già uscito la cassa lo ritrova "
+                                                 "e non lo stampa una seconda volta.")};
     }
     if (s.esitoIgnoto)
         return {false, s.errore + QStringLiteral("\nEsito incerto: controllare sul registratore se il documento "

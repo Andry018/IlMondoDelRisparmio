@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(MondoDelRisparmio
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "Gestionale retail: cassa, magazzino, fatturazione"
     LANGUAGES CXX)
 
@@ -22,6 +22,12 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Sql Network)
 add_subdirectory(src/core)
 add_subdirectory(src/fiscal)
 add_subdirectory(src/locale)
+
+# Prova a mano sul registratore Custom vero (in addestramento): non è in ctest, vedi il file.
+# Si compila sempre (anche senza test) perché va nel pacchetto di installazione: la prova si fa
+# dal PC del negozio collegato al registratore.
+add_executable(mdr-prova-rt tests/prova_rt_vero.cpp)
+target_link_libraries(mdr-prova-rt PRIVATE mdr_core mdr_fiscal)
 
 if(MDR_BUILD_DESKTOP)
     add_subdirectory(src/third_party/qrcodegen)

@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
+#include <QLockFile>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QThread>
@@ -64,6 +65,20 @@ int main(int argc, char* argv[])
     // aggiorna.ps1 la riavvia con la nuova versione (o con questa, se la nuova non parte).
     if (!opzioni.isSet(confermaAvvio) && mdr::installaSePronto(dati.absolutePath()))
         return 0;
+
+    // Una sola cassa per cartella dati: due programmi sullo stesso archivio e sullo stesso
+    // registratore si pesterebbero i piedi (numeri dei documenti, coda di invio). Qualche secondo
+    // di attesa: dopo un aggiornamento la cassa di prima può essere ancora in chiusura.
+    QLockFile unaSola(dati.absoluteFilePath(QStringLiteral("mdr-cassa.lock")));
+    unaSola.setStaleLockTime(0);   // vale finché il programma che l'ha preso è vivo
+    if (!unaSola.tryLock(5000)) {
+        if (opzioni.isSet(confermaAvvio))
+            return 1;   // avvio di prova dopo un aggiornamento: nessuna finestra, aggiorna.ps1 se ne accorge
+        QMessageBox::information(nullptr, QStringLiteral("Cassa già aperta"),
+                                 QStringLiteral("La cassa è già aperta su questo PC: usare quella finestra.\n\n"
+                                                "(Per una seconda cassa di prova: mdr-cassa --dati <altra cartella>)"));
+        return 0;
+    }
 
     // Primo avvio (nessun file di impostazioni) o richiesta: procedura guidata. "Più tardi" la
     // ripropone al prossimo avvio; intanto la cassa parte come postazione di prova.
@@ -126,6 +141,23 @@ int main(int argc, char* argv[])
     }
 
     mdr::OperazioniCassa operazioni(archivio, *rt, impostazioni.terminale);
+    // Documenti emessi dal registratore che l'archivio non era riuscito a salvare: si rimettono
+    // nell'archivio e in coda adesso, prima di ricominciare a vendere.
+    operazioni.impostaCartellaRecupero(dati.absoluteFilePath(QStringLiteral("non-salvate")));
+    if (const auto recupero = operazioni.recuperaNonSalvate(); opzioni.isSet(confermaAvvio)) {
+        // Avvio di prova dopo un aggiornamento: nessuna finestra che lo fermi; l'avviso al prossimo.
+    } else if (recupero.rimaste > 0) {
+        QMessageBox::warning(nullptr, QStringLiteral("Documenti da recuperare"),
+                             QStringLiteral("%1 documenti emessi dal registratore non sono ancora nell'archivio della cassa:\n%2\n\n"
+                                            "Restano nella cartella\n%3\ne la cassa riprova a ogni avvio. Avvisare il responsabile.")
+                                 .arg(recupero.rimaste)
+                                 .arg(recupero.errore, QDir::toNativeSeparators(dati.absoluteFilePath(QStringLiteral("non-salvate")))));
+    } else if (recupero.recuperate > 0) {
+        QMessageBox::information(nullptr, QStringLiteral("Documenti recuperati"),
+                                 QStringLiteral("%1 documenti che non erano stati salvati sono stati recuperati: ora sono "
+                                                "nel giornale delle vendite e verranno inviati al server.")
+                                     .arg(recupero.recuperate));
+    }
     const QString info = QStringLiteral("Archivio: %1<br>Impostazioni: %2<br>Registratore: %3")
                              .arg(QDir::toNativeSeparators(fileArchivio), QDir::toNativeSeparators(fileImpostazioni),
                                   registratore);

@@ -141,10 +141,11 @@ private slots:
         QCOMPARE(cassa()->carrello().righe()[0].iva.basisPoints, 2200);
         QVERIFY(m_finestra->findChild<QLineEdit*>("codice")->text().isEmpty());
 
-        // Senza virgola sono centesimi, come sui registratori; X moltiplica: 3 × 1,20 al 5% (reparto 4).
+        // Senza virgola sono centesimi, come sui registratori; X moltiplica: 3 × 1,20 al 5% (reparto 5,
+        // come sul registratore del negozio).
         for (const auto* t : {"tasto_3", "tasto_X", "tasto_1", "tasto_2", "tasto_0"})
             clic(t);
-        clic("reparto_4");
+        clic("reparto_5");
         QCOMPARE(cassa()->carrello().righe().size(), 2);
         QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(3));
         QCOMPARE(cassa()->carrello().righe()[1].prezzoUnitario.cents(), 120);
@@ -153,7 +154,7 @@ private slots:
         // A schermo solo i reparti al 22% e al 5% (gli altri restano in Articolo libero, F2).
         QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_2"));
         QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_3"));
-        QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_5"));
+        QVERIFY(!m_finestra->findChild<QPushButton*>("reparto_4"));
 
         // Reparto senza prezzo: non aggiunge nulla.
         clic("reparto_1");
@@ -301,6 +302,23 @@ private slots:
         QVERIFY2(dimensione == QSize(1024, 768),
                  qPrintable(QStringLiteral("finestra %1x%2 invece di 1024x768; altezza minima delle schede:%3")
                                 .arg(dimensione.width()).arg(dimensione.height()).arg(minime)));
+    }
+
+    // Senza registratore vero la cassa lo dice sempre; e il giornale della cassa resta su disco.
+    void simulatore_dichiarato_e_giornale_su_disco()
+    {
+        auto* avviso = m_finestra->findChild<QLabel*>("rt_addestramento");
+        QVERIFY(avviso);
+        QVERIFY(avviso->isVisible());
+        QVERIFY2(avviso->text().contains("SIMULATORE"), qPrintable(avviso->text()));
+
+        cassa()->leggi("1001");
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(500));
+        QFile giornale(m_dir.filePath("giornale/cassa-%1.log").arg(QDate::currentDate().toString("yyyyMMdd")));
+        QVERIFY2(giornale.open(QIODevice::ReadOnly), qPrintable(giornale.fileName()));
+        const QString testo = QString::fromUtf8(giornale.readAll());
+        QVERIFY2(testo.contains("simulatore"), qPrintable(testo));
+        QVERIFY2(testo.contains(QRegularExpression("DOC \\d{4}-\\d{4}  .*1,89")), qPrintable(testo));
     }
 
     // MDR_SCREENSHOT=cartella: immagini a 1024x768, come sul POS Custom Silk 15".

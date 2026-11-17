@@ -16,7 +16,8 @@ $ErrorActionPreference = "Continue"
 $radice = Split-Path -Parent $PSScriptRoot
 if (-not $Uscita) { $Uscita = Join-Path $radice "dist" }
 $env:PATH = "$Msys\ucrt64\bin;$env:PATH"
-$programmi = @("mdr-cassa.exe", "mdr-gestione.exe")
+# mdr-prova-rt: prova a mano del registratore vero (installazione\ProvaRegistratore.bat).
+$programmi = @("mdr-cassa.exe", "mdr-gestione.exe", "mdr-prova-rt.exe")
 
 function Verifica([string]$cosa) {
     if ($LASTEXITCODE -ne 0) { throw "Errore: $cosa (codice $LASTEXITCODE)" }
@@ -27,7 +28,7 @@ Push-Location $radice
 try {
     & cmake --preset msys2-release -DMDR_BUILD_TESTS=OFF -DMDR_BUILD_DESKTOP=ON | Out-Null
     Verifica "configurazione cmake"
-    & cmake --build --preset release --target mdr-cassa mdr-gestione
+    & cmake --build --preset release --target mdr-cassa mdr-gestione mdr-prova-rt
     Verifica "compilazione"
 } finally {
     Pop-Location

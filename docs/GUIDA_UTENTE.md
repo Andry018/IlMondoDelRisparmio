@@ -235,5 +235,10 @@ Senza Wi-Fi il palmare continua a contare e spuntare: invia tutto quando la rete
 | "N operazioni da inviare" che non scende | il server non risponde: la cassa continua a vendere; avvisare chi segue il server |
 | Operazioni **RIFIUTATE** (in rosso) | scheda Vendite della cassa: il server ha rifiutato i dati, avvisare il responsabile |
 | Registratore non disponibile | controllare che sia acceso e in rete, poi Impostazioni > prova registratore |
+| "Esito incerto: non si sa se lo scontrino è uscito" | il registratore ha smesso di rispondere a metà scontrino. **Non chiudere la cassa** e non cambiare lo scontrino: controllare che il registratore sia acceso e in rete, poi ripetere il pagamento. Se lo scontrino era già uscito la cassa lo ritrova e non lo stampa due volte; se non era uscito lo stampa adesso |
 | Riga rossa nello stato del server (Cruscotto) | backup non riuscito o vecchio: avvisare subito chi segue il server |
 | In basso a sinistra in cassa **REGISTRATORE IN ADDESTRAMENTO** | il registratore è in prova: gli scontrini non sono fiscali, non vendere; far rimettere il registratore in servizio |
+| In basso a sinistra in cassa **SIMULATORE: NON esce nessuno scontrino** | la cassa non è collegata a nessun registratore (postazione di prova): non vendere; impostare l'indirizzo del registratore in Impostazioni e riavviare la cassa |
+| "Scontrino emesso ma vendita NON salvata" (o reso, annullo, chiusura) | lo scontrino è valido e va dato al cliente; la cassa ha messo i dati da parte (cartella `non-salvate` accanto all'archivio) e li recupera da sola al prossimo avvio: chiudere e riaprire la cassa appena possibile e avvisare il responsabile |
+| "Cassa già aperta" all'avvio | la cassa è già in funzione su quel PC (magari ridotta a icona): usare quella finestra |
+| Serve sapere cosa è successo in cassa in un certo giorno | il giornale della cassa è anche su disco: cartella `giornale` accanto all'archivio (percorso in Impostazioni), un file al giorno per 90 giorni; gli scambi col registratore sono nella cartella `registratore` |

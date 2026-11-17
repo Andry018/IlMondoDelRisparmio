@@ -90,7 +90,7 @@ struct ConfigurazioneCustom {
     QMap<QString, int> aliquote;          // "2200", "1000", "N2"... -> idVat; vuota = IVA dal reparto
 
     static ConfigurazioneCustom predefinita();
-    // Testi delle impostazioni: "contanti=1;carta=2" e "2200=1;1000=2;N4=5".
+    // Testi delle impostazioni: "contanti=1;carta=3" e "2200=1;1000=2;N4=5".
     static ConfigurazioneCustom daTesto(const QString& pagamenti, const QString& aliquote);
     QString testoPagamenti() const;
     QString testoAliquote() const;
@@ -131,6 +131,11 @@ public:
     EsitoFiscale aperturaCassetto() override;
     EsitoFiscale ristampaUltimoDocumento() override;
 
+    // Risposta di uno scontrino persa e registratore che non risponde subito alla domanda "qual è
+    // l'ultimo documento?": si richiede ancora, con questa pausa tra un tentativo e l'altro
+    // (di solito sta ancora stampando, o la rete è caduta per un momento). 0 nei test.
+    void impostaPausaRiprova(int ms) { m_pausaRiprova = ms; }
+
 private:
     struct Scambio {
         bool ok = false;
@@ -156,6 +161,14 @@ private:
     int m_azzeramento = 0;        // azzeramento in corso (ultima Z + 1), 0 = non noto
     int m_ultimoNumero = -1;      // ultimo documento emesso, -1 = non noto
     bool m_addestramento = false;
+    int m_pausaRiprova = 3000;
+    // Ultima vendita finita con esito incerto: numero dell'ultimo documento prima dell'invio e
+    // totale. Serve a riconoscerla quando il cassiere ripete il pagamento (vedi documento()).
+    struct Incerto {
+        int numeroPrima = 0;
+        Money totale;
+    };
+    std::optional<Incerto> m_incerto;
 };
 
 } // namespace mdr

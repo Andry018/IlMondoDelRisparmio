@@ -6,7 +6,9 @@
 Le richieste devono avere "apikey: <ANON_KEY>" come sul server vero. Solo per sviluppo e
 prove in locale: utenti, password e segreto sono fissi e pubblici.
 
-Uso: python -I gateway.py <porta> <url-postgrest> <segreto-jwt> <file-chiavi>
+Uso: python -I gateway.py <porta> <url-postgrest> <segreto-jwt> <file-chiavi> [indirizzo]
+Indirizzo di ascolto: 127.0.0.1 (predefinito, solo questo PC) o 0.0.0.0 (anche gli altri PC
+della rete, per provare cassa e gestione su due computer).
 """
 
 import base64
@@ -37,6 +39,7 @@ PORTA = int(sys.argv[1])
 POSTGREST = sys.argv[2].rstrip("/")
 SEGRETO = sys.argv[3].encode()
 FILE_CHIAVI = sys.argv[4]
+INDIRIZZO = sys.argv[5] if len(sys.argv) > 5 else "127.0.0.1"
 
 _rinnovi = {}   # refresh token -> email
 _blocco = threading.Lock()
@@ -151,8 +154,8 @@ class Gestore(BaseHTTPRequestHandler):
 def main():
     with open(FILE_CHIAVI, "w", encoding="utf-8") as f:
         f.write(f"server = http://127.0.0.1:{PORTA}\nanon_key = {ANON_KEY}\n")
-    server = ThreadingHTTPServer(("127.0.0.1", PORTA), Gestore)
-    sys.stderr.write(f"Gateway su http://127.0.0.1:{PORTA} -> {POSTGREST}\n")
+    server = ThreadingHTTPServer((INDIRIZZO, PORTA), Gestore)
+    sys.stderr.write(f"Gateway su http://{INDIRIZZO}:{PORTA} -> {POSTGREST}\n")
     server.serve_forever()
 
 

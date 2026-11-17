@@ -5,7 +5,7 @@
 //   mdr-prova-rt 192.168.1.50                           solo letture (informazioni e stato)
 //   mdr-prova-rt 192.168.1.50 --addestramento           + vendite, reso, annullo, ristampa, cassetto
 //   mdr-prova-rt 192.168.1.50 --addestramento --chiusura  + chiusura Z alla fine
-//   opzioni: --aliquote "2200=1;1000=2"  --pagamenti "contanti=1;carta=2"
+//   opzioni: --aliquote "2200=1;1000=2"  --pagamenti "contanti=1;carta=3"
 //            --cartella <dove scrivere il registro> (predefinita: Documenti\prova-rt)
 //
 // Senza --addestramento non si emette nessun documento: un registratore in modalità normale

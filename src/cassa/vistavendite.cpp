@@ -3,6 +3,7 @@
 #include "comune.h"
 #include "dialogooperatore.h"
 #include "locale/payloadvendita.h"
+#include "vistacassa.h"
 
 #include <QComboBox>
 #include <QDateEdit>
@@ -404,7 +405,8 @@ void VistaVendite::annulla()
     }
     if (!esito.salvata)
         QMessageBox::critical(this, QStringLiteral("Archivio locale"),
-                              QStringLiteral("Annullo emesso dall'RT ma NON salvato:\n%1").arg(esito.errore));
+                              QStringLiteral("Annullo emesso dal registratore ma NON salvato:\n%1\n\n%2")
+                                  .arg(esito.errore, testoNonSalvata(esito.daParte)));
     emit documentoEmesso();
     aggiorna();
 }
@@ -436,7 +438,10 @@ void VistaVendite::reso()
         m_op.rt().aperturaCassetto();
     if (!esito.salvata)
         QMessageBox::critical(this, QStringLiteral("Archivio locale"),
-                              QStringLiteral("Reso emesso dall'RT ma NON salvato:\n%1").arg(esito.errore));
+                              QStringLiteral("Reso emesso dal registratore ma NON salvato:\n%1\n\n%2\n\n"
+                                             "Il rimborso al cliente va fatto lo stesso: %3 in %4.")
+                                  .arg(esito.errore, testoNonSalvata(esito.daParte), euro(dialogo.carrello().totale()),
+                                       nomePagamento(dialogo.carrello().pagamenti().value(0).tipo).toLower()));
     else {
         QMessageBox fatto(QMessageBox::Information, QStringLiteral("Reso"),
                           QStringLiteral("<h2>Reso emesso</h2><p>Rimborsare <b>%1</b> in %2.</p>")

@@ -33,15 +33,17 @@ QString json(const QJsonObject& o)
     return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
 }
 
-// Reparti di default, uguali a supabase/seed.sql.
+// Reparti di default: quelli programmati sul registratore del negozio (docs/PASSAGGIO.md:
+// 22%→1, 10%→2, 4%→3, esente→4, 5%→5). Valgono solo finché la cassa non si sincronizza: poi
+// arrivano dal server. supabase/seed.sql (dati di sviluppo) ha ancora 4 e 5 scambiati.
 const QList<Reparto>& repartiIniziali()
 {
     static const QList<Reparto> r = {
         {1, QStringLiteral("Generi vari 22%"), {2200, {}}},
         {2, QStringLiteral("Alimentari 10%"),  {1000, {}}},
         {3, QStringLiteral("Alimentari 4%"),   {400, {}}},
-        {4, QStringLiteral("Prodotti 5%"),     {500, {}}},
-        {5, QStringLiteral("Esente"),          {0, QStringLiteral("N4")}},
+        {4, QStringLiteral("Esente"),          {0, QStringLiteral("N4")}},
+        {5, QStringLiteral("Prodotti 5%"),     {500, {}}},
     };
     return r;
 }
@@ -885,6 +887,14 @@ int ArchivioLocale::contaDaInviare() const
 {
     QSqlQuery q("select count(*) from coda_invio where inviata_at is null and da_verificare = 0", db());
     return q.next() ? q.value(0).toInt() : 0;
+}
+
+bool ArchivioLocale::inCoda(const QUuid& id) const
+{
+    QSqlQuery q(db());
+    q.prepare("select 1 from coda_invio where id = ?");
+    q.addBindValue(testoUuid(id));
+    return q.exec() && q.next();
 }
 
 bool ArchivioLocale::segnaDaVerificare(const QUuid& id, const QString& errore)

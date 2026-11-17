@@ -12,6 +12,7 @@ class StampanteSimulata : public StampanteFiscale {
 public:
     QString nome() const override { return QStringLiteral("Simulatore"); }
     QString matricola() const override { return QStringLiteral("99SIM000001"); }
+    bool simulato() const override { return true; }
 
     EsitoFiscale stato() override;
     EsitoFiscale emettiDocumentoCommerciale(const Carrello& carrello) override;

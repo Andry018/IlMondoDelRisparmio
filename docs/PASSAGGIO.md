@@ -18,6 +18,12 @@ trovare i problemi adesso e non il giorno del passaggio.
       caricamento: `estrai.ps1`, poi `carica.ps1 -Prova` (solo conteggi) e `carica.ps1` sul server.
       I conteggi finali devono essere uguali ai file.
 - [ ] Gestione: creare gli utenti (scheda Operatori) con codice e PIN, un account per ogni cassa.
+- [ ] **Prova del registratore** (col tecnico, in modalità addestramento), prima ancora della cassa:
+      doppio clic su `ProvaRegistratore.bat` (nello zip estratto o nella cartella del programma).
+      Chiede l'indirizzo IP: prima solo letture, poi 4 vendite, un reso, un annullo, ristampa,
+      cassetto e, se si vuole, la chiusura Z. Se il registratore non è in addestramento si ferma da
+      solo. Tenere il registro (`Documenti\prova-rt`) e una foto delle stampe: servono per
+      correggere il programma se qualche passo dà errore.
 - [ ] Una cassa con il **registratore in modalità addestramento** (col tecnico): al primo avvio la
       cassa apre la **prima installazione guidata** (server e chiave da `config\chiavi.txt`, account
       della cassa, codice CASSA1, indirizzo del registratore con *Prova registratore*), poi vendite in contanti e carta, uno sconto, un reso, un annullo, una chiusura Z.
@@ -50,6 +56,8 @@ Alla fine il database di prova si butta: il giorno del passaggio si ricarica tut
 6. [ ] Casse: prima installazione guidata (o `mdr-cassa --prima-installazione` se la cassa era
        già configurata) con l'account di ogni cassa, prima sincronizzazione (14.000 articoli:
        una decina di secondi), *Prova collegamento* col registratore **vero** (non addestramento).
+       In basso a sinistra **non** deve esserci nessuna striscia rossa (né "ADDESTRAMENTO" né
+       "SIMULATORE"): con la striscia gli scontrini non sono fiscali.
 7. [ ] Uno scontrino vero di prova da pochi centesimi, poi il suo annullo. In gestione → Vendite
        devono comparire tutti e due.
 8. [ ] Palmari ricollegati (QR nuovo se è cambiata la chiave).

@@ -75,8 +75,9 @@ Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Cu
    fiscal devices" (Custom 0577200M000082 rev. 2.00, in `Downloads` dell'utente; documento riservato
    Custom: **non va copiato nel repository**). Da verificare sull'RT vero col rivenditore, in addestramento:
    - servizio XML attivo e indirizzo IP fisso dell'RT; *Prova collegamento* in Impostazioni;
-   - **codici pagamento** (paymentType 1-30 dipendono dalla programmazione; predefiniti da confermare:
-     contanti=1, carta/bancomat/satispay=2, buono pasto=3, non riscosso=4);
+   - **codici pagamento** (paymentType 1-30 dipendono dalla programmazione). Dal 12/11/2026 i predefiniti
+     sono quelli che SystemApp manda ai registratori del negozio (`TAB_Tipi_Pagamenti.Tender_Cassa`):
+     contanti=1, carta/bancomat/satispay=3, buono=4. "Non riscosso" in SystemApp non c'è: 5 è **da confermare**;
    - **aliquote**: senza mappa si usa l'IVA del reparto (reparti dell'RT = reparti del gestionale) e le righe
      con più pezzi escono come prezzo di riga + riga "3 x 1,20"; con la mappa (`2200=1; 1000=2`) si manda
      `idVat` e la quantità vera (formato intero: da verificare);
@@ -107,6 +108,44 @@ Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Cu
    `src/gestione/filetabella.*`, `importazione.*`, `importatore.*`, `dialogoimportazione.*`; test
    `test_importazione` (con `MDR_SERVER_SVILUPPO` anche contro il server; `MDR_IMPORTA_ARTICOLI=<csv>` per le
    prestazioni con un file vero).
+
+## Affidabilità della cassa (12/11/2026)
+
+- **Simulatore sempre dichiarato**: `StampanteFiscale::simulato()`; la cassa mostra in basso la striscia rossa
+  "SIMULATORE: NON esce nessuno scontrino" (stessa etichetta `rt_addestramento` dell'addestramento). Prima una
+  cassa senza indirizzo del registratore, o configurata USB, vendeva sul simulatore senza dirlo.
+- **Una sola cassa per cartella dati** (`QLockFile` `mdr-cassa.lock` in `main.cpp`): la seconda avvisa ed esce.
+  Per aprirne un'altra di prova: `mdr-cassa --dati <altra cartella>`.
+- **Documenti emessi ma non salvati** (`OperazioniCassa::impostaCartellaRecupero`, `recuperaNonSalvate`): se
+  l'archivio SQLite rifiuta vendita, reso, annullo o chiusura dopo che il registratore ha emesso, i dati vanno
+  in `<dati>\non-salvate\*.json` e all'avvio tornano nell'archivio e nella coda (senza doppioni). Test:
+  `test_locale`, `documenti_non_salvati_recuperati`.
+- **Giornale della cassa su disco**: `<dati>\giornale\cassa-AAAAMMGG.log`, 90 giorni (prima era solo a schermo
+  e si perdeva alla chiusura, compresi i dati di una vendita non salvata).
+- Da fare ancora: prova sull'RT vero (`mdr-prova-rt`, vedi sopra); bilance in rete ed etichette Brother
+  QL570 di SystemApp, se servono.
+
+## Preparazione della prova in negozio (16/11/2026)
+
+- **Versione 0.3.0** (mai pubblicata su GitHub: pacchetto fatto a mano con `scripts\crea_pacchetto.ps1`,
+  `dist\MondoDelRisparmio-0.3.0.zip`). Per pubblicarla serve ancora `gh` (non installato su questo PC).
+- **`mdr-prova-rt` nel pacchetto**: si compila sempre (target nel `CMakeLists.txt` principale, non più in
+  `tests/`) e si installa con cassa e gestione; `installazione\ProvaRegistratore.bat` lo guida (IP, solo
+  letture, poi documenti di prova se il registratore è in addestramento). Registro in `Documenti\prova-rt`.
+- **Reparti iniziali dell'archivio locale** allineati al registratore vero (esente→4, 5%→5): valgono per una
+  cassa non ancora sincronizzata. `supabase/seed.sql` (solo sviluppo) ha ancora 4 e 5 scambiati: è dell'area
+  backend, sul server vero li allinea `carica.sql`.
+- Provato: verifica completa (C++ con server di sviluppo appena creato, database, SDI, contratto HTTP);
+  pacchetto installato in una cartella di prova senza MSYS2 nel PATH, `mdr-prova-rt` contro `rt-finto`
+  (10 passi su 10), cassa che riparte dopo una chiusura brusca, seconda copia che avvisa.
+- `test_gestione_server` falliva al secondo giro sullo stesso database (conteggi di clienti, sottoscorta e
+  fatture passive cambiati dagli altri test): ora accetta anche il database già usato. Il carico dalla
+  fattura di prova resta saltato se il server non è appena ricreato (`avvia.ps1 -Nuovo`).
+- **Scontrino con esito incerto** (`StampanteCustomXml::documento`): se la risposta si perde e il registratore
+  non risponde nemmeno alla lettura dell'ultimo documento, si riprova (3 letture, 3 secondi di pausa). Se resta
+  incerto il driver ricorda numero e totale (`m_incerto`): quando il cassiere ripete il pagamento e l'ultimo
+  documento è nuovo con quel totale, lo si registra senza ristamparlo. Vale finché la cassa resta aperta
+  (non è salvato su disco). Test in `test_custom` (`risposta_persa_registratore_*`, `esito_incerto_*`).
 
 ## Note per lavorare con l'utente
 

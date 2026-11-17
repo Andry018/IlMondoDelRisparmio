@@ -44,6 +44,8 @@ if (Test-Path $Cartella) { Remove-Item -Recurse -Force $Cartella }
 New-Item -ItemType Directory -Force $Cartella | Out-Null
 Copy-Item -Recurse -Force (Join-Path $origine "*") $Cartella
 Copy-Item -Force (Join-Path $PSScriptRoot "disinstalla.ps1"), (Join-Path $PSScriptRoot "Disinstalla.bat"), (Join-Path $PSScriptRoot "aggiorna.ps1") $Cartella
+$provaRt = Join-Path $PSScriptRoot "ProvaRegistratore.bat"
+if (Test-Path $provaRt) { Copy-Item -Force $provaRt $Cartella }
 $exe = Join-Path $Cartella "mdr-cassa.exe"
 $exeGestione = Join-Path $Cartella "mdr-gestione.exe"
 Write-Host "Programmi copiati in $Cartella"

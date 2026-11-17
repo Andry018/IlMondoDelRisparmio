@@ -49,6 +49,9 @@ public:
     // Registratore in modalità addestramento: emette, ma i documenti NON sono fiscali.
     // La cassa lo dice in rosso, perché dopo una prova nessuno venda così per sbaglio.
     virtual bool inAddestramento() const { return false; }
+    // Nessun registratore vero dietro (simulatore): non esce nessuno scontrino. Anche questo la
+    // cassa lo dice sempre, perché una postazione configurata male non venda senza scontrini.
+    virtual bool simulato() const { return false; }
 
     virtual EsitoFiscale stato() = 0;
     virtual EsitoFiscale emettiDocumentoCommerciale(const Carrello& carrello) = 0;

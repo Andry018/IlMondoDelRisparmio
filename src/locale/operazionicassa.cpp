@@ -2,7 +2,11 @@
 
 #include "payloadvendita.h"
 
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QSaveFile>
 
 #include <algorithm>
 
@@ -61,6 +65,99 @@ EsitoOperazione OperazioniCassa::registra(const Carrello& carrello, const EsitoF
     if (!m_archivio.registraVendita(esito.payload)) {
         esito.salvata = false;
         esito.errore = m_archivio.ultimoErrore();
+        esito.daParte = mettiDaParte(QStringLiteral("vendita"), {{"payload", esito.payload}});
+    }
+    return esito;
+}
+
+// ---------------------------------------------------------------------------
+// Documenti emessi ma non salvati
+// ---------------------------------------------------------------------------
+
+bool OperazioniCassa::mettiDaParte(const QString& operazione, QJsonObject dati)
+{
+    if (m_cartellaRecupero.isEmpty())
+        return false;
+    QDir dir(m_cartellaRecupero);
+    if (!dir.mkpath(QStringLiteral(".")))
+        return false;
+    dati.insert("operazione", operazione);
+    // Il nome comincia con data e ora: i file in ordine di nome sono in ordine di emissione.
+    const QString nome = QStringLiteral("%1-%2-%3-%4.json")
+                             .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmsszzz")))
+                             .arg(++m_progressivoRecupero, 4, 10, QLatin1Char('0'))
+                             .arg(operazione, QUuid::createUuid().toString(QUuid::WithoutBraces).left(8));
+    QSaveFile f(dir.filePath(nome));
+    if (!f.open(QIODevice::WriteOnly))
+        return false;
+    f.write(QJsonDocument(dati).toJson(QJsonDocument::Indented));
+    return f.commit();
+}
+
+bool OperazioniCassa::recupera(const QJsonObject& dati, QString* errore)
+{
+    const QString operazione = dati.value("operazione").toString();
+    if (operazione == QLatin1String("vendita")) {
+        const auto payload = dati.value("payload").toObject();
+        // Già nell'archivio (salvata, ma il file non era stato tolto): niente da rifare.
+        if (m_archivio.vendita(QUuid::fromString(payload.value("id").toString())))
+            return true;
+        if (m_archivio.registraVendita(payload))
+            return true;
+    } else if (operazione == QLatin1String("annullo")) {
+        const auto id = QUuid::fromString(dati.value("vendita_id").toString());
+        const auto v = m_archivio.vendita(id);
+        if (v && v->stato != QLatin1String("completata"))
+            return true;
+        if (m_archivio.registraAnnullo(id, QUuid::fromString(dati.value("operatore_id").toString())))
+            return true;
+    } else if (operazione == QLatin1String("chiusura")) {
+        const auto payload = dati.value("payload").toObject();
+        const QString matricola = dati.value("matricola").toString();
+        const int azzeramento = dati.value("azzeramento").toInt();
+        if (m_archivio.inCoda(QUuid::fromString(payload.value("id").toString())))
+            return true;
+        // registraChiusura riporta il contatore all'inizio dell'azzeramento dopo: se nel
+        // frattempo si è già venduto, il contatore di adesso va rimesso.
+        const auto prima = m_archivio.statoRt(matricola);
+        if (m_archivio.registraChiusura(matricola, azzeramento,
+                                        QDateTime::fromString(dati.value("data_ora").toString(), Qt::ISODateWithMs),
+                                        Money::fromCents(dati.value("totale").toInteger()), payload)) {
+            if (prima.azzeramento > azzeramento)
+                m_archivio.salvaStatoRt(matricola, prima.azzeramento, prima.documento);
+            return true;
+        }
+    } else {
+        if (errore)
+            *errore = QStringLiteral("operazione sconosciuta \"%1\"").arg(operazione);
+        return false;
+    }
+    if (errore)
+        *errore = m_archivio.ultimoErrore();
+    return false;
+}
+
+EsitoRecupero OperazioniCassa::recuperaNonSalvate()
+{
+    EsitoRecupero esito;
+    if (m_cartellaRecupero.isEmpty())
+        return esito;
+    const QDir dir(m_cartellaRecupero);
+    for (const auto& nome : dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name)) {
+        QFile f(dir.filePath(nome));
+        QString errore = QStringLiteral("file non leggibile");
+        const auto doc = f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll()) : QJsonDocument();
+        f.close();
+        if (doc.isObject() && recupera(doc.object(), &errore)) {
+            // Tolto solo quando è davvero nell'archivio; se non si riesce a toglierlo, al prossimo
+            // avvio risulta "già nell'archivio" e si riprova a toglierlo.
+            QFile::remove(dir.filePath(nome));
+            ++esito.recuperate;
+            continue;
+        }
+        ++esito.rimaste;
+        if (esito.errore.isEmpty())
+            esito.errore = QStringLiteral("%1: %2").arg(nome, errore);
     }
     return esito;
 }
@@ -100,6 +197,10 @@ EsitoOperazione OperazioniCassa::annulla(const QUuid& venditaId)
     if (!m_archivio.registraAnnullo(venditaId, m_operatore)) {
         esito.salvata = false;
         esito.errore = m_archivio.ultimoErrore();
+        QJsonObject dati{{"vendita_id", venditaId.toString(QUuid::WithoutBraces)}};
+        if (!m_operatore.isNull())
+            dati.insert("operatore_id", m_operatore.toString(QUuid::WithoutBraces));
+        esito.daParte = mettiDaParte(QStringLiteral("annullo"), dati);
     }
     return esito;
 }
@@ -170,6 +271,12 @@ EsitoOperazione OperazioniCassa::chiusura()
                                      esito.payload)) {
         esito.salvata = false;
         esito.errore = m_archivio.ultimoErrore();
+        esito.daParte = mettiDaParte(QStringLiteral("chiusura"),
+                                     {{"matricola", m_rt.matricola()},
+                                      {"azzeramento", fiscale.numeroAzzeramento},
+                                      {"data_ora", fiscale.dataOra.toUTC().toString(Qt::ISODateWithMs)},
+                                      {"totale", qint64(totale.cents())},
+                                      {"payload", esito.payload}});
     }
     return esito;
 }

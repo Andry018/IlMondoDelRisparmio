@@ -138,6 +138,7 @@ public:
     bool segnaInviata(const QUuid& id);
     bool segnaErrore(const QUuid& id, const QString& errore);
     int contaDaInviare() const;
+    bool inCoda(const QUuid& id) const;   // già accodata (inviata o no)
     // Rifiutata dal server per i dati (4xx): esce dalla coda e aspetta il responsabile.
     bool segnaDaVerificare(const QUuid& id, const QString& errore);
     QList<OperazioneInCoda> operazioniDaVerificare() const;

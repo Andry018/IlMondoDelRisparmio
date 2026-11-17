@@ -46,7 +46,7 @@ vendita. Ognuno ha il suo archivio SQLite e il suo file di impostazioni in
 | Cartella | Cosa contiene |
 |---|---|
 | `src/core` | Logica di dominio in C++ senza dipendenze da UI o DB: importi, quantità, IVA, barcode, carrello |
-| `src/fiscal` | Interfaccia `StampanteFiscale` e driver dei registratori telematici (per ora il simulatore) |
+| `src/fiscal` | Interfaccia `StampanteFiscale` e driver dei registratori telematici (Custom XML in rete e simulatore) |
 | `src/locale` | Archivio SQLite della postazione, operazioni di cassa, coda e sincronizzazione col server |
 | `src/ui` | Parte comune ai due programmi Qt: impostazioni della postazione, finestra base con sincronizzazione e scheda Impostazioni |
 | `src/cassa` | Programma `mdr-cassa`: vista cassa, contanti, giornale vendite |
@@ -124,9 +124,10 @@ L'account di un terminale (cassa) lavora con i permessi del cassiere.
 
 ## Da decidere / da fare
 
-- Driver del **Custom K3 F RT**: serve il manuale dei protocolli (XML Web Services in rete,
-  protocollo CUSTOM sulla COM virtuale USB) da Custom o dal rivenditore (vedi `COSA_SERVE.md`).
-  Le impostazioni del collegamento ci sono già; finché manca il driver si emette sul simulatore.
+- Driver del **Custom K3 F RT**: fatto per la rete (XML Web Services, `src/fiscal/customxml.*`), da
+  provare sull'RT vero in addestramento (`mdr-prova-rt`, vedi `CONSEGNE_FRONTEND.md`). Sulla COM
+  virtuale USB non c'è driver: con quel collegamento, o senza indirizzo, la cassa usa il simulatore
+  e lo dichiara con una striscia rossa ("SIMULATORE: NON esce nessuno scontrino").
 - Un registratore deve essere usato da una cassa alla volta: blocco/assegnazione sul server
   quando una cassa di riserva prende il registratore di un'altra.
 - Accesso per ruolo all'avvio: `mdr-gestione` solo per responsabile e amministratore.
