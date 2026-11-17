@@ -28,6 +28,7 @@ class QVBoxLayout;
 
 namespace mdr {
 
+class ModificaSchermata;
 class PannelloContanti;
 
 // Vista cassa: lettura barcode, scontrino in corso, pagamento ed emissione sull'RT.
@@ -56,6 +57,20 @@ public:
     const AspettoCassa& aspetto() const { return m_aspetto; }
     // Il pannello della schermata (per i test e la personalizzazione).
     QWidget* pannello(Pannello p) const { return m_pannelli.value(p); }
+
+    // Personalizzazione a trascinamento: sopra la schermata uno strato (ModificaSchermata) blocca
+    // i tocchi normali e permette di spostare pannelli, comandi, contanti, reparti e tasti rapidi.
+    void impostaModifica(bool accesa);
+    bool inModifica() const { return m_strato != nullptr; }
+    ModificaSchermata* strato() const { return m_strato; }
+    // Un trascinamento ha cambiato l'aspetto: lo applica e lo dice (aspettoTrascinato)
+    void cambiaAspetto(const AspettoCassa& aspetto);
+    QWidget* colonnaSchermo(int c) const;
+    // Spazio libero in basso per la barra dello strato di modifica (0 = nessuno): la schermata si
+    // restringe sopra la barra invece di finirci sotto
+    void riservaBasso(int pixel);
+    QPushButton* tastoComando(const QString& chiave) const { return m_comandi.value(chiave); }
+    PannelloContanti* contanti() const { return m_contanti; }
 
     // Per i test e l'automazione: equivale a digitare il testo e premere Invio.
     void leggi(const QString& testo);
@@ -115,6 +130,13 @@ signals:
     void operatoreCambiato();
     void scontrinoCambiato(const Carrello& attivo);     // per la schermata cliente
     void venditaConclusa(Money totale, Money resto);
+    // Dallo strato di modifica
+    void aspettoTrascinato(const AspettoCassa& aspetto);
+    void modificaFinita(bool salva);     // tasti Salva / Annulla della barra in basso
+    void altreImpostazioni();            // tasto "Altre impostazioni…" della barra
+
+protected:
+    void resizeEvent(QResizeEvent* e) override;
 
 private:
     void leggiCodice();
@@ -164,6 +186,8 @@ private:
     QMap<Pannello, QWidget*> m_pannelli;
     QHash<QString, QPushButton*> m_comandi;   // chiave di tuttiIComandi()
     PannelloContanti* m_contanti = nullptr;
+    ModificaSchermata* m_strato = nullptr;   // solo durante la personalizzazione
+    int m_margineBasso = -1;                 // margine inferiore normale del layout principale
     QTimer* m_inattivita = nullptr;
 };
 

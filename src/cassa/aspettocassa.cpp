@@ -207,6 +207,83 @@ void AspettoCassa::specchia()
     std::reverse(larghezze.begin(), larghezze.end());
 }
 
+QList<int> AspettoCassa::tagliPredefiniti()
+{
+    return {10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1};
+}
+
+void AspettoCassa::spostaPannello(Pannello p, int c, int posizione)
+{
+    c = std::clamp(c, 0, numeroColonne - 1);
+    PostoPannello posto{p, c, true};
+    for (int i = 0; i < pannelli.size(); ++i)
+        if (pannelli[i].pannello == p) {
+            pannelli.removeAt(i);
+            break;
+        }
+    // Davanti al pannello visibile numero "posizione" della colonna; oltre l'ultimo, dopo di lui
+    int visti = 0;
+    int dopoUltimo = -1;
+    for (int i = 0; i < pannelli.size(); ++i) {
+        if (pannelli[i].colonna != c)
+            continue;
+        if (pannelli[i].visibile && visti++ == posizione) {
+            pannelli.insert(i, posto);
+            return;
+        }
+        dopoUltimo = i + 1;
+    }
+    if (dopoUltimo < 0)
+        pannelli.append(posto);
+    else
+        pannelli.insert(dopoUltimo, posto);
+}
+
+void AspettoCassa::spostaComando(const QString& chiave, int posizione)
+{
+    if (!comando(chiave))
+        return;
+    comandi.removeAll(chiave);
+    comandi.insert(std::clamp(posizione, 0, int(comandi.size())), chiave);
+}
+
+void AspettoCassa::togliComando(const QString& chiave)
+{
+    comandi.removeAll(chiave);
+}
+
+void AspettoCassa::spostaTaglio(int centesimi, int posizione)
+{
+    if (!tagliPredefiniti().contains(centesimi))
+        return;
+    tagliContanti.removeAll(centesimi);
+    tagliContanti.insert(std::clamp(posizione, 0, int(tagliContanti.size())), centesimi);
+}
+
+void AspettoCassa::togliTaglio(int centesimi)
+{
+    tagliContanti.removeAll(centesimi);
+}
+
+void AspettoCassa::spostaTastoRapido(int da, int a)
+{
+    if (da < 0 || da >= tastiRapidi.size() || a < 0 || a >= tastiRapidi.size() || da == a)
+        return;
+    tastiRapidi.move(da, a);
+}
+
+void AspettoCassa::larghezzeDaPixel(const std::array<int, numeroColonne>& pixel)
+{
+    int totale = 0;
+    for (const int p : pixel)
+        totale += std::max(0, p);
+    if (totale <= 0)
+        return;
+    // Proporzioni su 12: una colonna con qualcosa dentro ha almeno 1
+    for (int c = 0; c < numeroColonne; ++c)
+        larghezze[c] = pixel[c] > 0 ? std::max(1, (pixel[c] * 12 + totale / 2) / totale) : 0;
+}
+
 void AspettoCassa::normalizza()
 {
     QList<PostoPannello> ok;
@@ -229,6 +306,13 @@ void AspettoCassa::normalizza()
         if (comando(k) && !c.contains(k))
             c << k;
     comandi = c;
+    QList<int> t;
+    for (const int x : std::as_const(tagliContanti))
+        if (tagliPredefiniti().contains(x) && !t.contains(x))
+            t << x;
+    // Banconote (da 5 €) e monete stanno in due griglie: prima le une, poi le altre, ognuna nel suo ordine
+    std::stable_partition(t.begin(), t.end(), [](int x) { return x >= 500; });
+    tagliContanti = t;
     colonneComandi = std::clamp(colonneComandi, 1, 3);
     colonneTasti = std::clamp(colonneTasti, 1, 4);
 }
@@ -275,6 +359,11 @@ AspettoCassa AspettoCassa::carica(const QString& file)
     a.colonneTasti = s.value("colonne_tasti", a.colonneTasti).toInt();
     a.colonnaPrezzo = s.value("colonna_prezzo", true).toBool();
     a.colonnaSconto = s.value("colonna_sconto", true).toBool();
+    if (s.contains("tagli_contanti")) {
+        a.tagliContanti.clear();
+        for (const auto& n : s.value("tagli_contanti").toString().split(QLatin1Char(','), Qt::SkipEmptyParts))
+            a.tagliContanti << n.trimmed().toInt();
+    }
     a.schermoCliente = s.value("schermo_cliente", false).toBool();
     a.bloccoMinuti = std::clamp(s.value("blocco_minuti", 0).toInt(), 0, 240);
     a.messaggioCliente = s.value("messaggio_cliente", a.messaggioCliente).toString();
@@ -327,6 +416,10 @@ void AspettoCassa::salva(const QString& file) const
     s.setValue("colonne_tasti", colonneTasti);
     s.setValue("colonna_prezzo", colonnaPrezzo);
     s.setValue("colonna_sconto", colonnaSconto);
+    QStringList t;
+    for (const int x : tagliContanti)
+        t << QString::number(x);
+    s.setValue("tagli_contanti", t.join(QLatin1Char(',')));
     s.setValue("schermo_cliente", schermoCliente);
     s.setValue("blocco_minuti", bloccoMinuti);
     s.setValue("messaggio_cliente", messaggioCliente);

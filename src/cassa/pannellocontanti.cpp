@@ -39,6 +39,7 @@ PannelloContanti::PannelloContanti(QWidget* parent)
         auto* b = pulsanteTaglio(c, altezzaBanconota, this);
         connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         m_banconote << b;
+        m_tutti << b;
     }
     layout->addLayout(m_grigliaBanconote);
     m_grigliaMonete = new QGridLayout;
@@ -47,6 +48,7 @@ PannelloContanti::PannelloContanti(QWidget* parent)
         auto* b = pulsanteTaglio(c, altezzaMoneta, this);
         connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         m_monete << b;
+        m_tutti << b;
     }
     layout->addLayout(m_grigliaMonete);
 
@@ -172,12 +174,40 @@ void PannelloContanti::aggiorna()
                                                                         : QStringLiteral("Incassa contanti"));
 }
 
+void PannelloContanti::impostaTagli(const QList<int>& tagli)
+{
+    m_banconote.clear();
+    m_monete.clear();
+    for (const int c : tagli)
+        if (auto* b = tastoTaglio(c))
+            (tagliBanconote().contains(c) ? m_banconote : m_monete) << b;
+    for (auto* b : std::as_const(m_tutti)) {
+        m_grigliaBanconote->removeWidget(b);
+        m_grigliaMonete->removeWidget(b);
+        b->setVisible(m_banconote.contains(b) || m_monete.contains(b));
+    }
+    m_colonneBanconote = m_colonneMonete = 0;   // si ridispone tutto
+    disponi();
+}
+
+QPushButton* PannelloContanti::tastoTaglio(int centesimi) const
+{
+    const QString nome = QStringLiteral("taglio_%1").arg(centesimi);
+    for (auto* b : m_tutti)
+        if (b->objectName() == nome)
+            return b;
+    return nullptr;
+}
+
 void PannelloContanti::disponi()
 {
-    // Quante banconote e monete per riga ci stanno nella larghezza della colonna
+    // Quante banconote e monete per riga ci stanno nella larghezza della colonna (misure dal primo
+    // tasto di ogni tipo, anche se nascosto: sono tutti uguali)
     const int largo = std::max(width(), 200);
-    const int colB = std::clamp((largo + 4) / (m_banconote.first()->minimumWidth() + 4), 2, int(m_banconote.size()));
-    const int colM = std::clamp((largo + 4) / (m_monete.first()->width() + 4), 4, int(m_monete.size()));
+    const int tastoB = tastoTaglio(tagliBanconote().first())->minimumWidth();
+    const int tastoM = tastoTaglio(tagliMonete().first())->width();
+    const int colB = std::clamp((largo + 4) / (tastoB + 4), 2, std::max(2, int(m_banconote.size())));
+    const int colM = std::clamp((largo + 4) / (tastoM + 4), 4, std::max(4, int(m_monete.size())));
     if (colB == m_colonneBanconote && colM == m_colonneMonete)
         return;
     m_colonneBanconote = colB;

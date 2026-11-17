@@ -27,6 +27,9 @@ public:
     void impostaDaPagare(Money daPagare);            // residuo dello scontrino in corso
     void mostraResto(Money totale, Money resto);     // dopo l'emissione
     void caratteri(int scala);                       // percentuale del testo (aspetto della cassa)
+    // Banconote e monete da mostrare, in ordine (AspettoCassa::tagliContanti); le altre spariscono
+    void impostaTagli(const QList<int>& tagli);
+    QPushButton* tastoTaglio(int centesimi) const;   // anche nascosto (per la personalizzazione)
 
 signals:
     void incassa();         // "Incassa": paga in contanti quanto ricevuto (o l'importo esatto)
@@ -44,8 +47,9 @@ private:
     bool m_finito = false;  // ultimo scontrino emesso: si mostra il resto
     Money m_restoFinale;
     int m_scala = 100;
-    QList<QPushButton*> m_banconote;
+    QList<QPushButton*> m_banconote;   // quelle mostrate, in ordine
     QList<QPushButton*> m_monete;
+    QList<QPushButton*> m_tutti;       // tutti i tagli, anche nascosti
     QGridLayout* m_grigliaBanconote;
     QGridLayout* m_grigliaMonete;
     QLabel* m_daPagareLabel;

@@ -90,10 +90,13 @@ struct AspettoCassa {
     int colonneTasti = 2;        // tasti reparto e rapidi per riga, 1-4
     bool colonnaPrezzo = true;   // colonne dello scontrino
     bool colonnaSconto = true;
+    // Banconote e monete dei contanti fissi, in ordine (centesimi); quelle che mancano non si vedono
+    QList<int> tagliContanti = tagliPredefiniti();
 
     static QList<TastoRapido> predefiniti();   // gli shopper di SystemApp
     static QList<PostoPannello> disposizionePredefinita();
     static QStringList comandiPredefiniti();
+    static QList<int> tagliPredefiniti();      // da 100 € a 1 cent
 
     int scala() const { return int(testo); }   // percentuale dei caratteri
     int punti(int base) const { return (base * scala() + 50) / 100; }
@@ -107,6 +110,17 @@ struct AspettoCassa {
     int colonna(Pannello p) const;
     void spostaInColonna(Pannello p, int colonna);   // in fondo alla colonna
     void specchia();   // colonne da destra a sinistra (tasti a sinistra, scontrino a destra)
+
+    // Spostamenti della personalizzazione a trascinamento (ModificaSchermata). "posizione" conta
+    // gli elementi come si vedono: per i pannelli quelli visibili della colonna, dall'alto.
+    void spostaPannello(Pannello p, int colonna, int posizione);   // e lo rende visibile
+    void spostaComando(const QString& chiave, int posizione);       // e lo mette sullo schermo
+    void togliComando(const QString& chiave);                       // resta sui tasti F e in "Altro…"
+    void spostaTaglio(int centesimi, int posizione);                // e lo mostra
+    void togliTaglio(int centesimi);
+    void spostaTastoRapido(int da, int a);                          // indici in tastiRapidi
+    // Larghezza delle colonne trascinate: dai pixel alle proporzioni (somma circa 12; 0 = nascosta)
+    void larghezzeDaPixel(const std::array<int, numeroColonne>& pixel);
     void normalizza(); // ogni pannello una volta, colonne valide, scontrino visibile, valori nei limiti
 
     static AspettoCassa carica(const QString& file);

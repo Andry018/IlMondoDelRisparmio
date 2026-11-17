@@ -6,6 +6,10 @@
 #include "fiscal/simulatore.h"
 #include "locale/payloadvendita.h"
 #include "aspettocassa.h"
+#include "modificaschermata.h"
+
+#include <QCheckBox>
+#include "pannellocontanti.h"
 #include "personalizzacassa.h"
 #include "primainstallazione.h"
 #include "schermocliente.h"
@@ -392,9 +396,22 @@ private slots:
         cassa()->paga(TipoPagamento::Contanti);
         QTest::qWait(50);
         m_finestra->grab().save(cartella + "/pos_contanti_fissi_resto.png");
+        cassa()->applicaAspetto(AspettoCassa{});
         m_finestra->personalizza();
         QTest::qWait(50);
-        m_finestra->finestraPersonalizza()->grab().save(cartella + "/pos_personalizza.png");
+        m_finestra->grab().save(cartella + "/pos_personalizza.png");   // la cassa con lo strato di modifica
+        {
+            // Un pannello a metà trascinamento: la linea arancione dice dove arriva
+            auto* s = cassa()->strato();
+            const QPoint da = s->rettangolo(ModificaSchermata::Tipo::Pannello, QStringLiteral("tastierino")).center();
+            const QRect destra = cassa()->colonnaSchermo(2)->geometry();
+            QTest::mousePress(s, Qt::LeftButton, {}, da);
+            QTest::mouseMove(s, QPoint(destra.center().x(), destra.top() + 60));
+            QTest::qWait(50);
+            m_finestra->grab().save(cartella + "/pos_personalizza_trascina.png");
+            QTest::mouseRelease(s, Qt::LeftButton, {}, da);   // rilasciato dove era partito
+        }
+        m_finestra->finestraPersonalizza()->grab().save(cartella + "/pos_personalizza_altre.png");
         m_finestra->finestraPersonalizza()->reject();
         cassa()->applicaAspetto(AspettoCassa{});
         applicaTema(AspettoCassa::Tema::Chiaro);
@@ -604,34 +621,218 @@ private slots:
         QCOMPARE(pagamentiDaPayload(v[0].payload).first().tipo, TipoPagamento::Bancomat);
     }
 
-    void personalizza_anteprima_e_annulla()
+    void aspetto_spostamenti()
     {
+        AspettoCassa a;
+        // Pannelli: posizione fra quelli visibili della colonna, dall'alto
+        a.spostaPannello(Pannello::Tastierino, 2, 0);
+        QCOMPARE(a.colonna(Pannello::Tastierino), 2);
+        auto indice = [&a](Pannello p) {
+            for (int i = 0; i < a.pannelli.size(); ++i)
+                if (a.pannelli[i].pannello == p)
+                    return i;
+            return -1;
+        };
+        QVERIFY(indice(Pannello::Tastierino) < indice(Pannello::Comandi));
+        a.spostaPannello(Pannello::Tastierino, 2, 5);   // oltre l'ultimo: in fondo alla colonna
+        QVERIFY(indice(Pannello::Tastierino) > indice(Pannello::Comandi));
+        a.spostaPannello(Pannello::Contanti, 0, 1);     // era nascosto: torna visibile, sotto lo scontrino
+        QVERIFY(a.mostrato(Pannello::Contanti));
+        QCOMPARE(a.colonna(Pannello::Contanti), 0);
+        QVERIFY(indice(Pannello::Scontrino) < indice(Pannello::Contanti));
+        QVERIFY(indice(Pannello::Contanti) < indice(Pannello::Giornale));
+        // Comandi
+        a.spostaComando(QStringLiteral("chiusura_z"), 0);
+        QCOMPARE(a.comandi.first(), QStringLiteral("chiusura_z"));
+        a.togliComando(QStringLiteral("carta"));
+        QVERIFY(!a.comandi.contains(QStringLiteral("carta")));
+        a.spostaComando(QStringLiteral("inesistente"), 0);
+        QCOMPARE(a.comandi.first(), QStringLiteral("chiusura_z"));
+        // Tagli: tolti, spostati; le monete restano dopo le banconote
+        a.togliTaglio(1);
+        a.togliTaglio(2);
+        a.spostaTaglio(2000, 0);
+        a.spostaTaglio(200, 0);   // una moneta davanti a tutto
+        a.normalizza();
+        QCOMPARE(a.tagliContanti.first(), 2000);
+        QCOMPARE(a.tagliContanti.indexOf(200), a.tagliContanti.indexOf(500) + 1);
+        QVERIFY(!a.tagliContanti.contains(1));
+        // Larghezze dai pixel trascinati
+        a.larghezzeDaPixel({600, 200, 0});
+        QCOMPARE(a.larghezze[0], 9);
+        QCOMPARE(a.larghezze[1], 3);
+        QCOMPARE(a.larghezze[2], 0);
+        // Nel file della postazione
+        const QString file = m_dir.filePath("spostamenti.ini");
+        a.salva(file);
+        const auto b = AspettoCassa::carica(file);
+        QCOMPARE(b.tagliContanti, a.tagliContanti);
+        QCOMPARE(b.comandi, a.comandi);
+        QCOMPARE(b.pannelli, a.pannelli);
+        // Tutti i tagli tolti: resta così (non tornano quelli predefiniti)
+        a.tagliContanti.clear();
+        a.salva(file);
+        QVERIFY(AspettoCassa::carica(file).tagliContanti.isEmpty());
+    }
+
+    void personalizza_trascinando()
+    {
+        using T = ModificaSchermata::Tipo;
+        auto attendi = [] { QTest::qWait(30); };   // i layout si sistemano al giro dopo
         const auto prima = cassa()->aspetto();
         m_finestra->personalizza();
-        auto* d = m_finestra->finestraPersonalizza();
-        QVERIFY(d && d->isVisible());
-        // Accendere i contanti fissi dalla tabella dei pannelli: la cassa li mostra subito
-        auto* tabella = d->findChild<QTableWidget*>("personalizza_pannelli");
-        for (int r = 0; r < tabella->rowCount(); ++r)
-            if (tabella->item(r, 0)->data(Qt::UserRole).toInt() == int(Pannello::Contanti))
-                tabella->item(r, 0)->setCheckState(Qt::Checked);
+        QVERIFY(cassa()->inModifica());
+        auto* s = cassa()->strato();
+        QVERIFY(s && s->isVisible());
+        QVERIFY(!m_finestra->finestraPersonalizza()->isVisible());   // le altre impostazioni partono chiuse
+        attendi();
+        // Lo strato copre i tasti veri: un tocco su un tasto rapido o su Contanti non vende
+        const QRect shopper = s->rettangolo(T::Rapido, QStringLiteral("0"));
+        QVERIFY(!shopper.isEmpty());
+        s->tocca(shopper.center());
+        QTest::mouseClick(s, Qt::LeftButton, {}, s->rettangolo(T::Comando, QStringLiteral("contanti")).center());
+        QVERIFY(cassa()->carrello().vuoto());
+        for (auto* sc : cassa()->findChildren<QShortcut*>())
+            QVERIFY(!sc->isEnabled());   // nemmeno i tasti F
+
+        // Contanti fissi dalla barra dei nascosti: un tocco li rimette al loro posto
+        const QRect contanti = s->rettangolo(T::Pannello, QStringLiteral("contanti"), true);
+        QVERIFY(!contanti.isEmpty());
+        s->tocca(contanti.center());
+        attendi();
         QVERIFY(cassa()->pannello(Pannello::Contanti)->isVisible());
-        QVERIFY(cassa()->aspetto().mostrato(Pannello::Contanti));
+        // Il giornale trascinato nella barra: tolto
+        const QRect giornale = s->rettangolo(T::Pannello, QStringLiteral("giornale"));
+        const QRect g = cassa()->pannello(Pannello::Giornale)->geometry();
+        QVERIFY2(!giornale.isEmpty(), qPrintable(QStringLiteral("maniglia %1,%2 %3x%4; pannello %5,%6 %7x%8; barra %9")
+                                                     .arg(giornale.x()).arg(giornale.y()).arg(giornale.width()).arg(giornale.height())
+                                                     .arg(g.x()).arg(g.y()).arg(g.width()).arg(g.height()).arg(s->barra().top())));
+        s->trascina(giornale.center(), s->barra().center());
+        attendi();
+        QVERIFY(!cassa()->aspetto().mostrato(Pannello::Giornale));
+        QVERIFY(!s->rettangolo(T::Pannello, QStringLiteral("giornale"), true).isEmpty());
+        // Lo scontrino invece non si toglie
+        s->trascina(s->rettangolo(T::Pannello, QStringLiteral("scontrino")).center(), s->barra().center());
+        attendi();
+        QVERIFY(cassa()->aspetto().mostrato(Pannello::Scontrino));
+        // Il tastierino in cima alla colonna di destra, sopra i comandi (con il mouse, come sul POS)
+        const QRect destra = cassa()->colonnaSchermo(2)->geometry();
+        const QPoint da = s->rettangolo(T::Pannello, QStringLiteral("tastierino")).center();
+        const QPoint a(destra.center().x(), destra.top() + 4);
+        QTest::mousePress(s, Qt::LeftButton, {}, da);
+        QTest::mouseMove(s, (da + a) / 2);
+        QTest::mouseMove(s, a);
+        QTest::mouseRelease(s, Qt::LeftButton, {}, a);
+        attendi();
+        QCOMPARE(cassa()->aspetto().colonna(Pannello::Tastierino), 2);
+        QVERIFY(cassa()->pannello(Pannello::Tastierino)->isVisible());
+
+        // Comandi: Bancomat davanti a Contanti; Chiusura Z dalla barra dopo Contanti
+        s->trascina(s->rettangolo(T::Comando, QStringLiteral("bancomat")).center(),
+                    s->rettangolo(T::Comando, QStringLiteral("contanti")).topLeft() + QPoint(6, 3));
+        attendi();
+        QCOMPARE(cassa()->aspetto().comandi.first(), QStringLiteral("bancomat"));
+        const QRect z = s->rettangolo(T::Comando, QStringLiteral("chiusura_z"), true);
+        QVERIFY(!z.isEmpty());
+        s->trascina(z.center(), s->rettangolo(T::Comando, QStringLiteral("contanti")).center() + QPoint(0, 3));
+        attendi();
+        const auto& comandi = cassa()->aspetto().comandi;
+        QCOMPARE(comandi.indexOf(QStringLiteral("chiusura_z")), comandi.indexOf(QStringLiteral("contanti")) + 1);
+        QVERIFY(cassa()->tastoComando(QStringLiteral("chiusura_z"))->isVisible());
+
+        // Contanti: via le monete da 1 e 2 cent, i 20 € per primi
+        for (const auto* c : {"1", "2"}) {
+            s->trascina(s->rettangolo(T::Taglio, QString::fromLatin1(c)).center(), s->barra().center());
+            attendi();
+        }
+        QVERIFY(!cassa()->aspetto().tagliContanti.contains(1));
+        QVERIFY(!cassa()->contanti()->tastoTaglio(2)->isVisible());
+        s->trascina(s->rettangolo(T::Taglio, QStringLiteral("2000")).center(),
+                    s->rettangolo(T::Taglio, QStringLiteral("10000")).topLeft() + QPoint(4, 4));
+        attendi();
+        QCOMPARE(cassa()->aspetto().tagliContanti.first(), 2000);
+        // Un tocco sulla moneta nascosta la rimette al suo posto
+        s->tocca(s->rettangolo(T::Taglio, QStringLiteral("1"), true).center());
+        attendi();
+        QCOMPARE(cassa()->aspetto().tagliContanti.last(), 1);
+
+        // Bordo fra le prime due colonne trascinato a destra: la prima prende più spazio
+        const auto quota = [](const AspettoCassa& x) {
+            return double(x.larghezze[0]) / (x.larghezze[0] + x.larghezze[1] + x.larghezze[2]);
+        };
+        const double primaQuota = quota(cassa()->aspetto());
+        const QRect bordo = s->rettangolo(T::Bordo, QStringLiteral("0"));
+        QVERIFY(!bordo.isEmpty());
+        s->trascina(bordo.center(), bordo.center() + QPoint(120, 0));
+        attendi();
+        QVERIFY2(quota(cassa()->aspetto()) > primaQuota, qPrintable(QString::number(quota(cassa()->aspetto()))));
+
+        // Annulla dalla barra: tutto come prima, tasti F di nuovo attivi
+        s->tocca(s->rettangolo(T::Azione, QStringLiteral("annulla")).center());
+        attendi();
+        QVERIFY(!cassa()->inModifica());
+        QCOMPARE(cassa()->aspetto(), prima);
+        QVERIFY(!m_finestra->finestraPersonalizza());
+        for (auto* sc : cassa()->findChildren<QShortcut*>())
+            QVERIFY(sc->isEnabled());
+    }
+
+    void finestra_contanti_con_i_tagli_scelti()
+    {
+        // Senza scelta: tutte le banconote e le monete
+        DialogoContanti tutti(Money::fromCents(500));
+        QVERIFY(tutti.findChild<QPushButton*>("taglio_1"));
+        QVERIFY(tutti.findChild<QPushButton*>("taglio_10000"));
+        // Con i tagli dell'aspetto: solo quelli
+        DialogoContanti scelti(Money::fromCents(500), nullptr, {2000, 1000, 500, 200, 50});
+        QVERIFY(!scelti.findChild<QPushButton*>("taglio_1"));
+        QVERIFY(!scelti.findChild<QPushButton*>("taglio_10000"));
+        QVERIFY(scelti.findChild<QPushButton*>("taglio_50"));
+        scelti.findChild<QPushButton*>("taglio_2000")->click();
+        QCOMPARE(scelti.resto().cents(), 1500);
+
+        // Dalle altre impostazioni: tolta la moneta da 1 cent e i 100 €, poi rimessi i 100 € al loro posto
+        m_finestra->personalizza();
+        auto* d = m_finestra->finestraPersonalizza();
+        d->findChild<QCheckBox*>("personalizza_taglio_1")->setChecked(false);
+        d->findChild<QCheckBox*>("personalizza_taglio_10000")->setChecked(false);
+        QVERIFY(!cassa()->aspetto().tagliContanti.contains(1));
+        QVERIFY(!cassa()->aspetto().tagliContanti.contains(10000));
+        d->findChild<QCheckBox*>("personalizza_taglio_10000")->setChecked(true);
+        QCOMPARE(cassa()->aspetto().tagliContanti.first(), 10000);
+        d->reject();
+        QCOMPARE(cassa()->aspetto().tagliContanti, AspettoCassa::tagliPredefiniti());
+    }
+
+    void personalizza_salva_e_altre_impostazioni()
+    {
+        using T = ModificaSchermata::Tipo;
+        m_finestra->personalizza();
+        auto* s = cassa()->strato();
+        QTest::qWait(30);
+        // "Altre impostazioni…" apre la finestrella; la X la nasconde senza annullare
+        s->tocca(s->rettangolo(T::Azione, QStringLiteral("impostazioni")).center());
+        auto* d = m_finestra->finestraPersonalizza();
+        QVERIFY(d->isVisible());
         d->findChild<QSpinBox*>("personalizza_colonne_tasti")->setValue(4);
         QCOMPARE(cassa()->aspetto().colonneTasti, 4);
-        // Annulla: tutto come prima, niente nel file
-        d->reject();
-        QCOMPARE(cassa()->aspetto(), prima);
-        QVERIFY(!cassa()->pannello(Pannello::Contanti)->isVisible());
-
-        // Di nuovo, e Salva: resta e finisce nel file della postazione
-        m_finestra->personalizza();
-        d = m_finestra->finestraPersonalizza();
+        d->close();
+        QVERIFY(!d->isVisible());
+        QVERIFY(cassa()->inModifica());
+        QCOMPARE(cassa()->aspetto().colonneTasti, 4);
+        // Un trascinamento dopo: la finestrella lo sa (Salva tiene tutte e due le cose)
+        s->trascina(s->rettangolo(T::Pannello, QStringLiteral("tastierino")).center(), s->barra().center());
+        QTest::qWait(30);
+        QVERIFY(!d->aspetto().mostrato(Pannello::Tastierino));
         d->findChild<QPushButton*>("personalizza_specchia")->click();
-        d->findChild<QPushButton*>("personalizza_salva")->click();
-        QCOMPARE(cassa()->aspetto().colonna(Pannello::Scontrino), AspettoCassa::numeroColonne - 1);
-        QCOMPARE(AspettoCassa::carica(m_dir.filePath("mdr-cassa.ini")).colonna(Pannello::Scontrino),
-                 AspettoCassa::numeroColonne - 1);
+        s->tocca(s->rettangolo(T::Azione, QStringLiteral("salva")).center());
+        QTest::qWait(30);
+        QVERIFY(!cassa()->inModifica());
+        const auto salvato = AspettoCassa::carica(m_dir.filePath("mdr-cassa.ini"));
+        QCOMPARE(salvato.colonneTasti, 4);
+        QVERIFY(!salvato.mostrato(Pannello::Tastierino));
+        QCOMPARE(salvato.colonna(Pannello::Scontrino), AspettoCassa::numeroColonne - 1);
+        QCOMPARE(cassa()->aspetto(), salvato);
         AspettoCassa{}.salva(m_dir.filePath("mdr-cassa.ini"));   // le altre prove partono dall'aspetto iniziale
     }
 

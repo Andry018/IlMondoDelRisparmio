@@ -4,6 +4,7 @@ qt_add_resources(MDR_RISORSE_CASSA risorse/risorse.qrc)
 # Le viste stanno in una libreria per poterle provare nei test (tests/test_cassa.cpp).
 add_library(mdr_cassa STATIC
     dialogocontanti.h    dialogocontanti.cpp
+    modificaschermata.h  modificaschermata.cpp
     pannellocontanti.h   pannellocontanti.cpp
     personalizzacassa.h  personalizzacassa.cpp
     dialogooperatore.h   dialogooperatore.cpp

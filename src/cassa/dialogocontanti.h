@@ -24,7 +24,8 @@ class DialogoContanti : public QDialog {
     Q_OBJECT
 
 public:
-    DialogoContanti(Money daPagare, QWidget* parent = nullptr);
+    // tagli: banconote e monete da mostrare, in ordine (AspettoCassa::tagliContanti); vuoto = tutte
+    DialogoContanti(Money daPagare, QWidget* parent = nullptr, const QList<int>& tagli = {});
 
     Money ricevuto() const { return m_ricevuto; }
     Money resto() const { return m_ricevuto > m_daPagare ? m_ricevuto - m_daPagare : Money(); }

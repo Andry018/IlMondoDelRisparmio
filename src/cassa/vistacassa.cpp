@@ -4,6 +4,7 @@
 #include "core/codicefiscale.h"
 #include "dialogocontanti.h"
 #include "dialogooperatore.h"
+#include "modificaschermata.h"
 #include "pannellocontanti.h"
 
 #include <QApplication>
@@ -395,11 +396,19 @@ void VistaCassa::disponi()
         ++quanti[posto.colonna];
     }
     const int barra = style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    for (auto* l : m_colonne) {
+        // In modifica sopra ogni pannello c'è posto per la sua maniglia (ModificaSchermata)
+        l->setContentsMargins(0, m_strato ? ModificaSchermata::spazioManiglia : 0, 0, 0);
+        l->setSpacing(m_strato ? ModificaSchermata::spazioManiglia : -1);
+    }
     for (int c = 0; c < AspettoCassa::numeroColonne; ++c) {
-        m_scorrimenti[c]->setVisible(quanti[c] > 0);
-        m_principale->setStretch(c, quanti[c] > 0 ? m_aspetto.larghezze[c] : 0);
+        // Mentre si personalizza anche le colonne vuote restano, per poterci trascinare un pannello
+        const bool vuotaInModifica = quanti[c] == 0 && m_strato;
+        m_scorrimenti[c]->setVisible(quanti[c] > 0 || vuotaInModifica);
+        m_principale->setStretch(c, quanti[c] > 0 ? m_aspetto.larghezze[c] : vuotaInModifica ? 1 : 0);
         // La colonna non si stringe sotto quello che serve ai suoi tasti (lo scorrimento è solo in verticale)
-        m_scorrimenti[c]->setMinimumWidth(quanti[c] > 0 ? m_scorrimenti[c]->widget()->minimumSizeHint().width() + barra : 0);
+        m_scorrimenti[c]->setMinimumWidth(quanti[c] > 0 ? m_scorrimenti[c]->widget()->minimumSizeHint().width() + barra
+                                          : vuotaInModifica ? 120 : 0);
     }
 
     // Comandi scelti, in ordine, su una o più colonne
@@ -676,8 +685,64 @@ void VistaCassa::applicaAspetto(const AspettoCassa& aspetto)
     }
     m_caratteri = vivi;
     m_contanti->caratteri(m_aspetto.scala());
+    m_contanti->impostaTagli(m_aspetto.tagliContanti);
     disponi();
     aggiorna();
+    if (m_strato)
+        m_strato->aggiorna();
+}
+
+void VistaCassa::impostaModifica(bool accesa)
+{
+    // I tasti F non devono pagare o chiudere mentre si sposta la schermata
+    for (auto* s : findChildren<QShortcut*>())
+        s->setEnabled(!accesa);
+    if (accesa && !m_strato) {
+        m_strato = new ModificaSchermata(*this);
+        m_strato->setGeometry(rect());
+        m_strato->show();
+        m_strato->raise();
+        m_strato->setFocus();
+    } else if (!accesa && m_strato) {
+        m_strato->hide();
+        m_strato->deleteLater();
+        m_strato = nullptr;
+        riservaBasso(0);
+    }
+    disponi();
+    if (m_strato)
+        m_strato->aggiorna();
+    else
+        attiva();
+}
+
+QWidget* VistaCassa::colonnaSchermo(int c) const
+{
+    return m_scorrimenti[c];
+}
+
+void VistaCassa::riservaBasso(int pixel)
+{
+    QMargins m = m_principale->contentsMargins();
+    if (m_margineBasso < 0)
+        m_margineBasso = m.bottom();
+    m.setBottom(pixel > 0 ? pixel + 4 : m_margineBasso);
+    m_principale->setContentsMargins(m);
+}
+
+void VistaCassa::cambiaAspetto(const AspettoCassa& aspetto)
+{
+    applicaAspetto(aspetto);
+    emit aspettoTrascinato(m_aspetto);
+}
+
+void VistaCassa::resizeEvent(QResizeEvent* e)
+{
+    QWidget::resizeEvent(e);
+    if (m_strato) {
+        m_strato->setGeometry(rect());
+        m_strato->aggiorna();
+    }
 }
 
 void VistaCassa::tasto(const QString& t)
@@ -1136,7 +1201,7 @@ void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
                 m_codice->clear();
             }
         } else if (tipo == TipoPagamento::Contanti) {
-            DialogoContanti dialogo(carr().residuo(), this);
+            DialogoContanti dialogo(carr().residuo(), this, m_aspetto.tagliContanti);
             if (dialogo.exec() != QDialog::Accepted)
                 return;
             importo = dialogo.ricevuto();

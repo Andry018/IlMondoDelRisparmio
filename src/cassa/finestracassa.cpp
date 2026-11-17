@@ -111,15 +111,34 @@ PersonalizzaCassa* FinestraCassa::finestraPersonalizza() const
 void FinestraCassa::personalizza()
 {
     if (m_personalizza) {
+        m_personalizza->show();
         m_personalizza->raise();
         m_personalizza->activateWindow();
         return;
     }
-    // Si torna sulla cassa: le modifiche si vedono lì mentre la finestra resta aperta sopra
+    // Si torna sulla cassa e si trascina lì (ModificaSchermata); la finestrella con le altre
+    // impostazioni parte nascosta e si apre dal tasto "Altre impostazioni…" della barra in basso.
     schede()->setCurrentWidget(m_cassa);
     auto* d = new PersonalizzaCassa(m_cassa->aspetto(), this);
-    d->setAttribute(Qt::WA_DeleteOnClose);
     m_personalizza = d;
+    m_cassa->impostaModifica(true);
+    connect(m_cassa, &VistaCassa::aspettoTrascinato, d, &PersonalizzaCassa::mostra);
+    connect(m_cassa, &VistaCassa::altreImpostazioni, d, [this, d] {
+        d->move(mapToGlobal(QPoint(std::max(0, width() - d->sizeHint().width() - 10), 40)));
+        d->show();
+        d->raise();
+        d->activateWindow();
+    });
+    connect(m_cassa, &VistaCassa::modificaFinita, d, [d](bool salva) {
+        if (salva)
+            d->salva();
+        else
+            d->reject();
+    });
+    connect(d, &QDialog::finished, this, [this, d] {
+        m_cassa->impostaModifica(false);
+        d->deleteLater();
+    });
     connect(d, &PersonalizzaCassa::anteprima, this, [this](const AspettoCassa& a) {
         applicaTema(a.tema);
         m_cassa->applicaAspetto(a);
@@ -131,9 +150,6 @@ void FinestraCassa::personalizza()
         m_cassa->log(QStringLiteral("Schermata della cassa personalizzata"));
     });
     connect(d, &PersonalizzaCassa::annullato, this, [this](const AspettoCassa& originale) { applicaAspetto(originale); });
-    // In alto a destra della finestra, dove di solito ci sono i comandi
-    d->move(mapToGlobal(QPoint(std::max(0, width() - d->width() - 10), 40)));
-    d->show();
 }
 
 void FinestraCassa::impostazioniApplicate(const Impostazioni& imp)

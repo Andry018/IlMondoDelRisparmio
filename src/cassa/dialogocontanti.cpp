@@ -143,10 +143,19 @@ QPushButton* pulsanteTaglio(int centesimi, int altezza, QWidget* parent)
     return b;
 }
 
-DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
+DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent, const QList<int>& tagli)
     : QDialog(parent)
     , m_daPagare(daPagare)
 {
+    // Tagli scelti nella personalizzazione (stesso ordine dei contanti fissi); senza, tutti
+    QList<int> banconote;
+    QList<int> monete;
+    for (const int c : tagli.isEmpty() ? tagliBanconote() + tagliMonete() : tagli) {
+        if (tagliBanconote().contains(c))
+            banconote << c;
+        else if (tagliMonete().contains(c))
+            monete << c;
+    }
     caricaRisorseEuro();
     setWindowTitle(QStringLiteral("Pagamento in contanti"));
     setMinimumSize(880, 580);
@@ -158,7 +167,7 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
 
     // Banconote su una riga, monete su due.
     auto* gridBanconote = new QHBoxLayout;
-    for (const int c : tagliBanconote()) {
+    for (const int c : std::as_const(banconote)) {
         auto* b = pulsanteTaglio(c, 78, this);
         connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         gridBanconote->addWidget(b);
@@ -166,8 +175,8 @@ DialogoContanti::DialogoContanti(Money daPagare, QWidget* parent)
     layout->addLayout(gridBanconote);
 
     auto* gridMonete = new QGridLayout;
-    for (int i = 0; i < tagliMonete().size(); ++i) {
-        const int c = tagliMonete()[i];
+    for (int i = 0; i < monete.size(); ++i) {
+        const int c = monete[i];
         auto* b = pulsanteTaglio(c, 76, this);
         connect(b, &QPushButton::clicked, this, [this, c] { aggiungi(Money::fromCents(c)); });
         gridMonete->addWidget(b, i / 4, i % 4);
