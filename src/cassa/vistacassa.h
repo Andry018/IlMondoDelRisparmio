@@ -91,6 +91,12 @@ public:
     void vendiTastoRapido(int indice);
     // Storno di una riga dello scontrino (✕ sulla riga, F4 per quella scelta).
     void stornaRiga(int riga);
+    // Quantità di una riga senza finestre (pensato per il touch): tocco sulla quantità della riga
+    // (o tasto Quantità riga, F9) e il campo in alto diventa la quantità; si scrive col tastierino.
+    // Invio o un tocco in qualsiasi altro punto della cassa la salva.
+    void modificaQuantita(int riga);
+    int rigaInModifica() const { return m_rigaQuantita; }   // -1 = nessuna
+    bool confermaQuantita();   // salva quella scritta; false se non valida (la riga resta com'era)
     // "Altro…": i comandi tolti dallo schermo (chiusura Z, operatore...) in una pagina a parte.
     void altriComandi();
     // Pagina dei tasti rapidi mostrata (linguette sopra i tasti quando le pagine sono più di una).
@@ -166,6 +172,9 @@ private:
     std::array<Carrello, 2> m_carrelli;
     int m_attivo = 0;
     bool m_modoVerifica = false;
+    int m_rigaQuantita = -1;   // riga di cui si sta scrivendo la quantità
+    bool m_sostituisciQuantita = false;   // la prima cifra del tastierino sostituisce quella mostrata
+    void chiudiModificaQuantita();
     QString m_paginaRapidi;   // pagina dei tasti rapidi mostrata
     QList<Promozione> m_promozioni;   // dall'archivio locale, applicate a ogni cambio dello scontrino
     std::array<QPushButton*, 2> m_tastiScontrino{};

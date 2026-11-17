@@ -42,11 +42,11 @@ quando la rete torna (in basso: "N operazioni da inviare").
 | Articolo libero | prezzo sul tastierino e poi il **tasto del reparto**: `250` + reparto = 2,50 € (con la virgola: `2,50`) |
 | Articolo libero con descrizione | **Articolo libero (F2)** |
 | Tasti rapidi (shopper, ecc.) | un tocco; un numero prima è la quantità (`3` + Shopper = 3 sacchetti) |
-| Cambiare quantità | scegliere la riga, **F9** (o **Altro… → Quantità riga**) |
+| Cambiare quantità | **toccare la quantità della riga** (o riga scelta e **F9**), scrivere col tastierino, **Invio** o un tocco altrove per salvare |
 | Togliere una riga | la **✕** rossa in fondo alla riga (oppure scegliere la riga e **F4**) |
 | Sconto | **Sconto (F3)**: % sulla riga, % sul totale, € sul totale, oppure **Arrotonda a…** (es. 5,23 → 5,00) |
 | Prezzo di un articolo senza venderlo | **Verifica prezzo (F12)** e poi leggere l'articolo |
-| Codice fiscale sullo scontrino | **Cod. fiscale (Ctrl+F)**, anche letto dalla tessera sanitaria. Con un dispositivo medico la cassa lo chiede da sola |
+| Codice fiscale sullo scontrino | **passare la tessera sanitaria sotto il lettore**, in qualsiasi momento dello scontrino: va sullo scontrino da solo. A mano, o per una partita IVA: **Cod. fiscale (Ctrl+F)**. Con un dispositivo medico e senza codice la cassa lo chiede da sola |
 | Annullare lo scontrino in corso | **Annulla scontrino (F8)** |
 
 ### Due clienti insieme

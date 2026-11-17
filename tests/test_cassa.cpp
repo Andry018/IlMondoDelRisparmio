@@ -777,6 +777,71 @@ private slots:
             QVERIFY(sc->isEnabled());
     }
 
+    void quantita_col_tastierino()
+    {
+        // Senza finestre: tocco sulla quantità, tastierino, Invio o tocco altrove
+        cassa()->leggi("1001");   // 1,89
+        cassa()->leggi("1002");   // 2,49
+        auto* righe = cassa()->findChild<QTableWidget*>("righe");
+        QTest::qWait(30);
+        auto toccaQuantita = [righe](int riga) {
+            QTest::mouseClick(righe->viewport(), Qt::LeftButton, {}, righe->visualRect(righe->model()->index(riga, 1)).center());
+            QTest::qWait(10);
+        };
+        auto tastierino = [this](const QString& t) {
+            for (auto* b : cassa()->pannello(Pannello::Tastierino)->findChildren<QPushButton*>())
+                if (b->text() == t) {
+                    QTest::mouseClick(b, Qt::LeftButton);
+                    QTest::qWait(10);
+                    return;
+                }
+            QFAIL(qPrintable(QStringLiteral("tasto %1 del tastierino non trovato").arg(t)));
+        };
+        auto* codice = cassa()->findChild<QLineEdit*>("codice");
+
+        toccaQuantita(0);
+        QCOMPARE(cassa()->rigaInModifica(), 0);
+        QCOMPARE(codice->text(), QStringLiteral("1"));
+        tastierino("3");   // sostituisce il valore selezionato
+        QCOMPARE(codice->text(), QStringLiteral("3"));
+        tastierino("Invio");
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(3));
+        QVERIFY(codice->text().isEmpty());
+
+        // Tocco altrove (sul totale): salva
+        toccaQuantita(1);
+        tastierino("2");
+        QTest::mouseClick(cassa()->findChild<QLabel*>("totale"), Qt::LeftButton);
+        QTest::qWait(10);
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+        QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(2));
+
+        // Quantità non valida: la riga resta com'era
+        toccaQuantita(1);
+        tastierino("C");
+        tastierino("0");
+        tastierino("Invio");
+        QCOMPARE(cassa()->carrello().righe()[1].quantita, Quantita::pezzi(2));
+
+        // Un barcode letto durante la quantità è un articolo, non una quantità
+        toccaQuantita(0);
+        codice->setText("8000000000001");
+        QTest::keyClick(codice, Qt::Key_Return);
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+        QCOMPARE(cassa()->carrello().righe().size(), 3);
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(3));
+
+        // Pagamento con la quantità ancora in scrittura: incassa quella nuova
+        toccaQuantita(2);   // shopper 0,05
+        tastierino("4");
+        cassa()->paga(TipoPagamento::Carta);
+        QVERIFY(cassa()->carrello().vuoto());
+        const auto v = m_archivio->vendite(QDate::currentDate());
+        QCOMPARE(v.size(), 1);
+        QCOMPARE(pagamentiDaPayload(v[0].payload).first().importo.cents(), 3 * 189 + 2 * 249 + 4 * 5);
+    }
+
     void finestra_contanti_con_i_tagli_scelti()
     {
         // Senza scelta: tutte le banconote e le monete
@@ -1295,6 +1360,51 @@ private slots:
 
         cassa()->leggi("9001");
         QCOMPARE(cassa()->carrello().totale().cents(), 1234);
+    }
+
+    void tessera_sanitaria_letta_col_lettore()
+    {
+        Articolo termometro;
+        termometro.id = QUuid::createUuid();
+        termometro.codice = "9101";
+        termometro.descrizione = "Termometro digitale CE";
+        termometro.reparto = "1";
+        termometro.prezzoVendita = Money::fromCents(990);
+        termometro.dispositivoMedico = true;
+        QVERIFY(m_archivio->salvaArticolo(termometro));
+        int domande = 0;
+        cassa()->richiestaCodiceFiscale = [&](const QString&) -> std::optional<QString> {
+            ++domande;
+            return std::nullopt;
+        };
+
+        // Letta prima degli articoli o in mezzo: va sullo scontrino senza tasti e senza domande
+        cassa()->leggi("RSSMRA80A01H501U");
+        QCOMPARE(cassa()->carrello().codiceFiscale(), QStringLiteral("RSSMRA80A01H501U"));
+        QVERIFY2(testo("messaggio").contains("RSSMRA80A01H501U"), qPrintable(testo("messaggio")));
+        cassa()->leggi("9101");
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        cassa()->paga(TipoPagamento::Carta);
+        QCOMPARE(domande, 0);   // il codice c'è già: niente domanda per il dispositivo medico
+        QVERIFY(cassa()->carrello().vuoto());
+        QVERIFY2(m_rt->giornale().last().contains("C.F. RSSMRA80A01H501U"), qPrintable(m_rt->giornale().last()));
+
+        // Lettera di controllo sbagliata o partita IVA: non è un codice fiscale letto, è un codice sconosciuto
+        cassa()->leggi("RSSMRA80A01H501A");
+        QVERIFY(cassa()->carrello().codiceFiscale().isEmpty());
+        QVERIFY(testo("messaggio").contains("non trovato"));
+        cassa()->leggi("12345678903");
+        QVERIFY(cassa()->carrello().codiceFiscale().isEmpty());
+
+        // Letta mentre si scrive una quantità: chiude la quantità e va sullo scontrino
+        cassa()->leggi("1001");
+        cassa()->modificaQuantita(0);
+        auto* codice = cassa()->findChild<QLineEdit*>("codice");
+        codice->setText("RSSMRA80A01H501U");
+        QTest::keyClick(codice, Qt::Key_Return);
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(1));
+        QCOMPARE(cassa()->carrello().codiceFiscale(), QStringLiteral("RSSMRA80A01H501U"));
     }
 
     void codice_fiscale_per_dispositivo_medico()

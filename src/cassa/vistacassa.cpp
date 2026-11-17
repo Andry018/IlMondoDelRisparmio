@@ -27,6 +27,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QStyle>
@@ -174,6 +175,11 @@ VistaCassa::VistaCassa(ArchivioLocale& archivio, OperazioniCassa& operazioni, QW
     m_righe->setSelectionMode(QAbstractItemView::SingleSelection);
     m_righe->setFocusPolicy(Qt::NoFocus);
     caratteri(m_righe, 12);
+    // Tocco sulla quantità: si cambia col tastierino (modificaQuantita), senza finestre
+    connect(m_righe, &QTableWidget::cellClicked, this, [this](int riga, int colonna) {
+        if (colonna == 1)
+            modificaQuantita(riga);
+    });
     sinistra->addWidget(m_righe, 1);
 
     m_messaggio = new QLabel(this);
@@ -445,6 +451,19 @@ void VistaCassa::messaggio(const QString& testo, bool errore)
 void VistaCassa::leggiCodice()
 {
     const QString testo = m_codice->text();
+    if (m_rigaQuantita >= 0) {
+        // Invio durante la quantità: la salva. Un numero lungo (barcode) o un codice fiscale (tessera
+        // sanitaria) è stato letto col lettore, non è una quantità: si chiude la modifica (la riga
+        // resta com'era) e si legge il codice.
+        static const QRegularExpression barcode(QStringLiteral("^\\d{7,}$"));
+        const auto cf = normalizzaCodiceFiscale(testo);
+        if (!barcode.match(testo.trimmed()).hasMatch() && !(cf.size() == 16 && codiceFiscaleValido(cf))) {
+            confermaQuantita();
+            return;
+        }
+        chiudiModificaQuantita();
+        aggiorna();
+    }
     m_codice->clear();
     leggi(testo);
 }
@@ -468,6 +487,14 @@ void VistaCassa::leggi(const QString& input)
 
     const auto articolo = m_archivio.cerca(testo);
     if (!articolo) {
+        // Tessera sanitaria letta col lettore: il codice a barre è il codice fiscale del cliente.
+        // Va sullo scontrino da solo (spesa detraibile), senza il tasto Cod. fiscale. Solo i 16
+        // caratteri con la lettera di controllo giusta: una partita IVA (11 cifre) si confonderebbe
+        // con un codice articolo, quella si mette col tasto.
+        if (const auto cf = normalizzaCodiceFiscale(testo); !quantita && cf.size() == 16 && codiceFiscaleValido(cf)) {
+            impostaCodiceFiscale(cf);
+            return;
+        }
         messaggio(QStringLiteral("Articolo non trovato: %1").arg(testo), true);
         return;
     }
@@ -747,6 +774,12 @@ void VistaCassa::resizeEvent(QResizeEvent* e)
 
 void VistaCassa::tasto(const QString& t)
 {
+    // Quantità appena aperta: la prima cifra prende il posto di quella mostrata
+    if (m_rigaQuantita >= 0 && m_sostituisciQuantita && t != QLatin1String("Invio")) {
+        m_sostituisciQuantita = false;
+        if (t != QStringLiteral("←") && t != QLatin1String("X"))
+            m_codice->clear();
+    }
     if (t == QLatin1String("Invio"))
         leggiCodice();
     else if (t == QLatin1String("C"))
@@ -863,12 +896,14 @@ QList<VistaCassa::VoceGuida> VistaCassa::vociGuida()
         {QStringLiteral("F6"), QStringLiteral("Paga con carta")},
         {QStringLiteral("F7"), QStringLiteral("Paga con bancomat")},
         {QStringLiteral("F8"), QStringLiteral("Annulla lo scontrino in corso")},
-        {QStringLiteral("F9"), QStringLiteral("Cambia la quantità della riga scelta")},
+        {QStringLiteral("F9"), QStringLiteral("Cambia la quantità della riga scelta (anche toccando la quantità): "
+                                              "tastierino e Invio")},
         {QStringLiteral("F10"), QStringLiteral("Chiusura Z di fine giornata")},
         {QStringLiteral("F11"), QStringLiteral("Passa all'altro scontrino (due clienti insieme)")},
         {QStringLiteral("F12"), QStringLiteral("Verifica prezzo: mostra il prezzo senza vendere")},
         {QStringLiteral("Ctrl+P"), QStringLiteral("Ristampa l'ultimo scontrino")},
-        {QStringLiteral("Ctrl+F"), QStringLiteral("Codice fiscale del cliente sullo scontrino")},
+        {QStringLiteral("Ctrl+F"), QStringLiteral("Codice fiscale o partita IVA del cliente sullo scontrino "
+                                                  "(la tessera sanitaria basta leggerla col lettore)")},
         {QStringLiteral("Ctrl+G"), QStringLiteral("Questa guida")},
     };
 }
@@ -908,6 +943,15 @@ bool VistaCassa::eventFilter(QObject* oggetto, QEvent* evento)
     case QEvent::TouchBegin:
         if (m_aspetto.bloccoMinuti > 0)
             m_inattivita->start(m_aspetto.bloccoMinuti * 60 * 1000);
+        // Quantità in scrittura: un tocco fuori da campo e tastierino la salva. Subito dopo la
+        // pressione (prima del rilascio, che fa scattare il tasto toccato): Contanti incassa già la
+        // quantità nuova. Non durante la pressione: aggiorna() rifà i tasti delle righe.
+        if (evento->type() == QEvent::MouseButtonPress && m_rigaQuantita >= 0) {
+            const auto* w = qobject_cast<QWidget*>(oggetto);
+            const QWidget* tastierino = m_pannelli.value(Pannello::Tastierino);
+            if (w && w->window() == window() && w != m_codice && !(tastierino && (w == tastierino || tastierino->isAncestorOf(w))))
+                QTimer::singleShot(0, this, [this] { confermaQuantita(); });
+        }
         break;
     default:
         break;
@@ -980,23 +1024,71 @@ void VistaCassa::articoloLibero()
 
 void VistaCassa::quantitaRiga()
 {
-    const int riga = m_righe->currentRow();
-    if (riga < 0)
+    // Tasto Quantità riga (F9): la riga scelta, o l'ultima
+    const int riga = m_righe->currentRow() >= 0 ? m_righe->currentRow() : int(carr().righe().size()) - 1;
+    modificaQuantita(riga);
+}
+
+void VistaCassa::modificaQuantita(int riga)
+{
+    if (riga < 0 || riga >= carr().righe().size())
         return;
-    bool ok = false;
-    const auto testo = QInputDialog::getText(this, QStringLiteral("Quantità"), QStringLiteral("Nuova quantità:"),
-                                             QLineEdit::Normal, carr().righe()[riga].quantita.toString(), &ok);
-    if (!ok)
-        return;
-    const auto q = Quantita::parse(testo);
-    if (!q || *q <= Quantita()) {
-        messaggio(QStringLiteral("Quantità non valida: %1").arg(testo), true);
-        return;
-    }
-    azzeraPagamenti();
-    carr().quantitaRiga(riga, *q);
+    if (m_rigaQuantita >= 0 && m_rigaQuantita != riga)
+        confermaQuantita();
+    m_rigaQuantita = riga;
+    m_sostituisciQuantita = true;
+    const auto& r = carr().righe()[riga];
+    // Il campo del lettore diventa quello della quantità: il tastierino (e la tastiera) scrivono lì.
+    // Il valore è tutto selezionato: la prima cifra lo sostituisce.
+    m_codice->setText(r.quantita.toString());
+    m_codice->selectAll();
+    m_codice->setPlaceholderText(QStringLiteral("Quantità"));
+    m_codice->setStyleSheet(QStringLiteral("QLineEdit { border: 3px solid #ff8f00; background: #fff3e0; color: black; }"));
+    messaggio(QStringLiteral("Quantità di «%1»: scrivere col tastierino e Invio (o toccare altrove per salvare)")
+                  .arg(r.descrizione));
     aggiorna();
     m_righe->selectRow(riga);
+    m_codice->setFocus();
+    m_codice->selectAll();
+}
+
+void VistaCassa::chiudiModificaQuantita()
+{
+    m_rigaQuantita = -1;
+    m_codice->setStyleSheet(QString());
+    m_codice->setPlaceholderText(QStringLiteral("Barcode, codice o prezzo + reparto"));
+    m_codice->clear();
+}
+
+bool VistaCassa::confermaQuantita()
+{
+    if (m_rigaQuantita < 0)
+        return true;
+    const int riga = m_rigaQuantita;
+    const QString testo = m_codice->text().trimmed();
+    chiudiModificaQuantita();
+    if (riga >= carr().righe().size()) {   // lo scontrino è cambiato nel frattempo
+        aggiorna();
+        return false;
+    }
+    const auto prima = carr().righe()[riga].quantita;
+    const auto q = testo.isEmpty() ? std::optional<Quantita>(prima) : Quantita::parse(testo);
+    if (!q || *q <= Quantita()) {
+        messaggio(QStringLiteral("Quantità non valida: %1 (la riga resta com'era)").arg(testo), true);
+        aggiorna();
+        m_righe->selectRow(riga);
+        return false;
+    }
+    if (*q != prima) {
+        azzeraPagamenti();
+        carr().quantitaRiga(riga, *q);
+        messaggio(QStringLiteral("Quantità: %1 × %2").arg(q->toString(), carr().righe()[riga].descrizione));
+    } else {
+        messaggio(QString());
+    }
+    aggiorna();
+    m_righe->selectRow(riga);
+    return true;
 }
 
 void VistaCassa::rimuoviRiga()
@@ -1170,6 +1262,9 @@ void VistaCassa::chiediCodiceFiscale()
 
 void VistaCassa::paga(TipoPagamento tipo, std::optional<Money> importo)
 {
+    // Una quantità ancora in scrittura vale prima di incassare
+    if (m_rigaQuantita >= 0 && !confermaQuantita())
+        return;
     if (carr().vuoto() || carr().residuo() <= Money())
         return;
 
@@ -1381,7 +1476,17 @@ void VistaCassa::aggiorna()
             descrizione->setForeground(QColor(0x2e, 0x7d, 0x32));
         }
         m_righe->setItem(i, 0, descrizione);
-        m_righe->setItem(i, 1, cella(r.quantita.toString(), true));
+        auto* quantita = cella(r.quantita.toString(), true);
+        quantita->setToolTip(QStringLiteral("Toccare per cambiare la quantità col tastierino"));
+        if (i == m_rigaQuantita) {
+            // Quella che si sta scrivendo: arancione come il campo in alto
+            quantita->setBackground(QColor(0xff, 0x8f, 0x00));
+            quantita->setForeground(Qt::black);
+            QFont f = quantita->font();
+            f.setBold(true);
+            quantita->setFont(f);
+        }
+        m_righe->setItem(i, 1, quantita);
         m_righe->setItem(i, 2, cella(r.prezzoUnitario.toString(), true));
         m_righe->setItem(i, 3, sconto);
         m_righe->setItem(i, 4, cella(r.totale().toString(), true));
