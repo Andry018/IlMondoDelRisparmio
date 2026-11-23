@@ -315,6 +315,50 @@ private slots:
         QVERIFY(m_finestra->findChildren<QPushButton*>("esporta_excel").size() >= 5);
     }
 
+    void tabella_vuota_dice_perche()
+    {
+        TabellaServer t({{"descrizione", QStringLiteral("Articolo")}});
+        t.testoVuoto = QStringLiteral("Nessun carico in attesa");
+        t.show();
+        t.mostra({});
+        auto* vuota = t.findChild<QLabel*>("tabella_vuota");
+        QVERIFY(vuota->isVisible());
+        QCOMPARE(vuota->text(), QStringLiteral("Nessun carico in attesa"));
+        t.mostra(QJsonDocument::fromJson(R"([{"descrizione": "Detersivo"}])").array());
+        QVERIFY(!vuota->isVisible());
+        t.mostraErrore(QStringLiteral("timeout"));
+        QVERIFY(vuota->isVisible());
+        QVERIFY(vuota->text().contains("timeout"));
+    }
+
+    void icone_dei_tasti_dal_testo()
+    {
+        QCOMPARE(iconaPerTesto(QStringLiteral("Nuovo articolo")), QStringLiteral("piu"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Nuova fattura…")), QStringLiteral("piu"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("+ fornitore")), QStringLiteral("piu"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Esporta in Excel…")), QStringLiteral("esporta"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("&Salva")), QStringLiteral("salva"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Chiudi e registra…")), QStringLiteral("spunta"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Chiudi")), QStringLiteral("esci"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Prova collegamento")), QStringLiteral("collegamento"));
+        QCOMPARE(iconaPerTesto(QStringLiteral("Proposta d'ordine…")), QStringLiteral("ordini"));
+        QVERIFY(iconaPerTesto(QStringLiteral("Annulla")).isEmpty());   // tasti delle finestre: come sono
+        QVERIFY(iconaPerTesto(QStringLiteral("Oggi")).isEmpty());
+        // Con la gestione aperta ogni tasto che compare prende l'icona disegnata, anche al posto di
+        // quella standard di Qt; quelli con "icona_fissa" (la cassa) restano come sono
+        const QIcon standard = qApp->style()->standardIcon(QStyle::SP_FileIcon);
+        QPushButton nuovo(standard, QStringLiteral("Nuovo articolo"));
+        nuovo.show();
+        QVERIFY(nuovo.icon().cacheKey() != standard.cacheKey());
+        QPushButton fisso(standard, QStringLiteral("Nuovo articolo"));
+        fisso.setProperty("icona_fissa", true);
+        fisso.show();
+        QCOMPARE(fisso.icon().cacheKey(), standard.cacheKey());
+        QPushButton altro(standard, QStringLiteral("Oggi"));
+        altro.show();
+        QCOMPARE(altro.icon().cacheKey(), standard.cacheKey());
+    }
+
     void qr_del_palmare()
     {
         // Lo stesso formato che legge il palmare (aggiornamenti.js, leggiConfigurazione)

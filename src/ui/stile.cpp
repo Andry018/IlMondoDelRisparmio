@@ -4,7 +4,9 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QHash>
 #include <QPalette>
+#include <QPushButton>
 #include <QStyle>
 #include <QStyleOptionTab>
 
@@ -362,10 +364,194 @@ QIcon iconaMenu(const QString& nome, const QColor& colore, int lato)
     } else if (nome == QLatin1String("operatore")) {
         p.drawEllipse(QRectF(22, 8, 20, 20));
         p.drawArc(QRectF(10, 34, 44, 36), 0, 180 * 16);
+    // --- Tasti della gestione (iconaPerTesto) ---
+    } else if (nome == QLatin1String("piu")) {
+        p.setPen(QPen(colore, 7, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(32, 12, 32, 52);
+        p.drawLine(12, 32, 52, 32);
+    } else if (nome == QLatin1String("modifica")) {
+        // Matita
+        QPainterPath m;
+        m.moveTo(12, 52); m.lineTo(16, 38); m.lineTo(42, 12); m.lineTo(52, 22); m.lineTo(26, 48); m.closeSubpath();
+        p.drawPath(m);
+        p.drawLine(36, 18, 46, 28);
+    } else if (nome == QLatin1String("salva")) {
+        // Dischetto
+        QPainterPath d;
+        d.moveTo(10, 10); d.lineTo(46, 10); d.lineTo(54, 18); d.lineTo(54, 54); d.lineTo(10, 54); d.closeSubpath();
+        p.drawPath(d);
+        p.drawRect(QRectF(20, 10, 20, 14));
+        p.drawRect(QRectF(18, 36, 28, 18));
+    } else if (nome == QLatin1String("aggiorna")) {
+        // Due frecce in cerchio
+        p.drawArc(QRectF(12, 12, 40, 40), 30 * 16, 150 * 16);
+        p.drawArc(QRectF(12, 12, 40, 40), 210 * 16, 150 * 16);
+        p.drawLine(QPointF(49.3, 22), QPointF(50, 11));
+        p.drawLine(QPointF(49.3, 22), QPointF(39, 20));
+        p.drawLine(QPointF(14.7, 42), QPointF(14, 53));
+        p.drawLine(QPointF(14.7, 42), QPointF(25, 44));
+    } else if (nome == QLatin1String("importa") || nome == QLatin1String("esporta")) {
+        // Vassoio con la freccia che entra (importa) o esce (esporta)
+        p.drawLine(10, 40, 10, 54);
+        p.drawLine(10, 54, 54, 54);
+        p.drawLine(54, 54, 54, 40);
+        p.drawLine(32, 8, 32, 40);
+        if (nome == QLatin1String("importa")) {
+            p.drawLine(32, 40, 22, 30);
+            p.drawLine(32, 40, 42, 30);
+        } else {
+            p.drawLine(32, 8, 22, 18);
+            p.drawLine(32, 8, 42, 18);
+        }
+    } else if (nome == QLatin1String("spunta")) {
+        p.drawEllipse(QRectF(8, 8, 48, 48));
+        p.drawLine(20, 33, 28, 41);
+        p.drawLine(28, 41, 44, 24);
+    } else if (nome == QLatin1String("elenco")) {
+        for (const int y : {16, 32, 48}) {
+            pieno(QRectF(9, y - 3, 6, 6));
+            p.drawLine(22, y, 54, y);
+        }
+    } else if (nome == QLatin1String("storico")) {
+        // Orologio
+        p.drawEllipse(QRectF(8, 8, 48, 48));
+        p.drawLine(32, 18, 32, 32);
+        p.drawLine(32, 32, 42, 38);
+    } else if (nome == QLatin1String("chiave")) {
+        p.drawEllipse(QRectF(6, 20, 22, 22));
+        p.drawLine(28, 31, 56, 31);
+        p.drawLine(48, 31, 48, 41);
+        p.drawLine(56, 31, 56, 39);
+    } else if (nome == QLatin1String("collegamento")) {
+        // Spina
+        p.drawRoundedRect(QRectF(18, 22, 28, 20), 4, 4);
+        p.drawLine(26, 10, 26, 22);
+        p.drawLine(38, 10, 38, 22);
+        p.drawLine(32, 42, 32, 56);
+    } else if (nome == QLatin1String("esci")) {
+        // Porta con la freccia
+        QPainterPath porta;
+        porta.moveTo(30, 10); porta.lineTo(10, 10); porta.lineTo(10, 54); porta.lineTo(30, 54);
+        p.drawPath(porta);
+        p.drawLine(24, 32, 54, 32);
+        p.drawLine(54, 32, 44, 22);
+        p.drawLine(54, 32, 44, 42);
     } else {
         pieno(QRectF(24, 24, 16, 16));
     }
     return QIcon(px);
+}
+
+QString iconaPerTesto(const QString& testo)
+{
+    // Inizio del testo del tasto -> disegno. Prima le frasi più lunghe ("chiudi e registra" prima
+    // di "chiudi"). Tasti che non sono qui restano senza icona: meglio niente che un'icona a caso.
+    static const QList<QPair<QString, QString>> regole{
+        {QStringLiteral("chiudi e registra"), QStringLiteral("spunta")},
+        {QStringLiteral("controlla ora"), QStringLiteral("aggiorna")},
+        {QStringLiteral("nota di credito"), QStringLiteral("resi")},
+        {QStringLiteral("per il commercialista"), QStringLiteral("fatture")},
+        {QStringLiteral("cambia password"), QStringLiteral("chiave")},
+        {QStringLiteral("imposta pin"), QStringLiteral("chiave")},
+        {QStringLiteral("giacenze da file"), QStringLiteral("importa")},
+        {QStringLiteral("scegli file"), QStringLiteral("importa")},
+        {QStringLiteral("pagina di prova"), QStringLiteral("ristampa")},
+        {QStringLiteral("annulla inventario"), QStringLiteral("annulla")},
+        {QStringLiteral("nuov"), QStringLiteral("piu")},
+        {QStringLiteral("aggiungi"), QStringLiteral("piu")},
+        {QStringLiteral("crea"), QStringLiteral("piu")},
+        {QStringLiteral("modifica"), QStringLiteral("modifica")},
+        {QStringLiteral("anagrafica"), QStringLiteral("modifica")},
+        {QStringLiteral("rettifica"), QStringLiteral("modifica")},
+        {QStringLiteral("salva"), QStringLiteral("salva")},
+        {QStringLiteral("aggiorna"), QStringLiteral("aggiorna")},
+        {QStringLiteral("ricontrolla"), QStringLiteral("aggiorna")},
+        {QStringLiteral("calcola"), QStringLiteral("aggiorna")},
+        {QStringLiteral("sincronizza"), QStringLiteral("aggiorna")},
+        {QStringLiteral("rigenera"), QStringLiteral("aggiorna")},
+        {QStringLiteral("rimetti in coda"), QStringLiteral("aggiorna")},
+        {QStringLiteral("installa"), QStringLiteral("aggiorna")},
+        {QStringLiteral("controll"), QStringLiteral("spunta")},
+        {QStringLiteral("applica"), QStringLiteral("spunta")},
+        {QStringLiteral("registra"), QStringLiteral("spunta")},
+        {QStringLiteral("segna"), QStringLiteral("spunta")},
+        {QStringLiteral("spunta"), QStringLiteral("spunta")},
+        {QStringLiteral("importa"), QStringLiteral("importa")},
+        {QStringLiteral("scarica"), QStringLiteral("importa")},
+        {QStringLiteral("esporta"), QStringLiteral("esporta")},
+        {QStringLiteral("stampa"), QStringLiteral("ristampa")},
+        {QStringLiteral("anteprima"), QStringLiteral("ristampa")},
+        {QStringLiteral("etichett"), QStringLiteral("etichette")},
+        {QStringLiteral("carico"), QStringLiteral("magazzino")},
+        {QStringLiteral("inventari"), QStringLiteral("ordini")},
+        {QStringLiteral("proposta"), QStringLiteral("ordini")},
+        {QStringLiteral("prezzi"), QStringLiteral("articoli")},
+        {QStringLiteral("storico"), QStringLiteral("storico")},
+        {QStringLiteral("movimenti"), QStringLiteral("elenco")},
+        {QStringLiteral("vedi"), QStringLiteral("cerca")},
+        {QStringLiteral("cerca"), QStringLiteral("cerca")},
+        {QStringLiteral("bollo"), QStringLiteral("fatture")},
+        {QStringLiteral("accedi"), QStringLiteral("chiave")},
+        {QStringLiteral("prova"), QStringLiteral("collegamento")},
+        {QStringLiteral("disattiva"), QStringLiteral("annulla")},
+        {QStringLiteral("rifiuta"), QStringLiteral("annulla")},
+        {QStringLiteral("togli"), QStringLiteral("annulla")},
+        {QStringLiteral("esci"), QStringLiteral("esci")},
+        {QStringLiteral("chiudi"), QStringLiteral("esci")},
+    };
+    QString t = testo.section(QLatin1Char('\n'), 0, 0);
+    t.remove(QLatin1Char('&'));
+    t = t.trimmed().toLower();
+    if (t.startsWith(QLatin1Char('+')))
+        return QStringLiteral("piu");
+    for (const auto& [inizio, icona] : regole)
+        if (t.startsWith(inizio))
+            return icona;
+    return {};
+}
+
+namespace {
+
+// Filtro dell'applicazione: quando un tasto compare, gli mette l'icona che il suo testo chiede
+// (o, se è solo un'icona, il suo nome accessibile: "Aggiorna"). Così valgono anche per le finestre
+// di dialogo e per i tasti aggiunti in futuro, senza ricordarsene in ogni vista.
+class IconeTasti : public QObject {
+public:
+    using QObject::QObject;
+
+    bool eventFilter(QObject* oggetto, QEvent* evento) override
+    {
+        if (evento->type() != QEvent::Show)
+            return false;
+        auto* b = qobject_cast<QPushButton*>(oggetto);
+        if (!b || b->property("icona_fissa").toBool())
+            return false;
+        const QString nome = iconaPerTesto(b->text().isEmpty() ? b->accessibleName() : b->text());
+        if (nome.isEmpty())
+            return false;
+        const QColor colore = b->palette().color(QPalette::ButtonText);
+        const QString chiave = nome + colore.name();
+        auto it = m_cache.find(chiave);
+        if (it == m_cache.end())
+            it = m_cache.insert(chiave, iconaMenu(nome, colore, 32));
+        b->setIcon(*it);
+        if (b->iconSize().width() < 16)
+            b->setIconSize(QSize(16, 16));
+        return false;
+    }
+
+private:
+    QHash<QString, QIcon> m_cache;   // stessa icona per tanti tasti: si disegna una volta
+};
+
+} // namespace
+
+void installaIconeTasti()
+{
+    if (qApp->property("mdr_icone_tasti").toBool())
+        return;
+    qApp->setProperty("mdr_icone_tasti", true);
+    qApp->installEventFilter(new IconeTasti(qApp));
 }
 
 // ---------------------------------------------------------------------------

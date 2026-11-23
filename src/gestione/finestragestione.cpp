@@ -15,6 +15,7 @@
 #include "vistapalmare.h"
 #include "vistapromozioni.h"
 #include "vistareport.h"
+#include "stile.h"
 
 #include <QJsonArray>
 #include <QLabel>
@@ -48,6 +49,7 @@ FinestraGestione::FinestraGestione(ArchivioLocale& archivio, Impostazioni impost
     , m_email(impostazioni.email)
 {
     setWindowTitle(QStringLiteral("Mondo del Risparmio — Gestione"));
+    installaIconeTasti();   // icone disegnate sui tasti secondo il testo, come in cassa
 
     m_cruscotto = new VistaCruscotto(client(), schede());
     // Articoli: sul server se c'è, altrimenti nell'archivio locale (prove senza server).

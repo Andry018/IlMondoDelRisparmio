@@ -42,8 +42,18 @@ QString foglioDiStile(const ColoriStile& c);
 // "operatori", "negozio", "palmare", "impostazioni", "cassa", "aspetto". Tasti della cassa:
 // "contanti", "carta", "bancomat", "pagamenti", "articolo_libero", "sconto", "annulla", "storna",
 // "quantita", "cassetto", "ristampa", "cerca", "codice_fiscale", "verifica_prezzo", "operatore".
-// Nome sconosciuto: un punto.
+// Gestione: "piu", "modifica", "salva", "aggiorna", "importa", "esporta", "spunta", "elenco",
+// "storico", "chiave", "collegamento", "esci". Nome sconosciuto: un punto.
 QIcon iconaMenu(const QString& nome, const QColor& colore, int lato = 64);
+
+// Disegno adatto al testo di un tasto ("Nuovo articolo" -> "piu", "Esporta in Excel…" -> "esporta");
+// vuoto se nessuno è adatto.
+QString iconaPerTesto(const QString& testo);
+
+// Da allora ogni QPushButton che compare prende l'icona di iconaPerTesto (al posto di quelle
+// standard di Qt), del colore del suo testo. Non tocca i tasti con la proprietà "icona_fissa"
+// (quelli della cassa, che scelgono da soli). Si chiama una volta (la gestione all'avvio).
+void installaIconeTasti();
 
 // Menu laterale della gestione: le schede a sinistra, una sotto l'altra, con icona e testo
 // orizzontale. È un QTabWidget normale (setTabText, setTabEnabled... funzionano come prima);

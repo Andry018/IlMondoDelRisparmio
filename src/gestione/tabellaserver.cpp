@@ -1,6 +1,7 @@
 #include "tabellaserver.h"
 
 #include "comune.h"
+#include "stile.h"
 #include "core/quantita.h"
 #include "locale/clientserver.h"
 
@@ -86,6 +87,19 @@ TabellaServer::TabellaServer(QList<ColonnaServer> colonne, QWidget* parent)
     m_stato = new QLabel(this);
     m_stato->setWordWrap(true);
     layout->addWidget(m_stato);
+    // Tabella vuota: il motivo al centro, al posto del riquadro bianco
+    m_vuoto = new QLabel(m_tabella->viewport());
+    m_vuoto->setObjectName("tabella_vuota");
+    m_vuoto->setAlignment(Qt::AlignCenter);
+    m_vuoto->setWordWrap(true);
+    m_vuoto->setAttribute(Qt::WA_TransparentForMouseEvents);
+    QFont f = m_vuoto->font();
+    f.setPointSizeF(f.pointSizeF() * 1.25);
+    m_vuoto->setFont(f);
+    auto* strato = new QVBoxLayout(m_tabella->viewport());
+    strato->setContentsMargins(24, 24, 24, 24);
+    strato->addWidget(m_vuoto);
+    mostraVuoto(testoVuoto);
 
     connect(m_tabella, &QTableWidget::itemSelectionChanged, this, &TabellaServer::selezioneCambiata);
     connect(m_tabella, &QTableWidget::cellDoubleClicked, this, [this](int riga) {
@@ -103,6 +117,8 @@ void TabellaServer::carica(ClientServer& client, const QString& risorsa, std::fu
     m_limite = limite.hasMatch() ? limite.captured(1).toInt() : 0;
     m_stato->setStyleSheet(QString());
     m_stato->setText(QStringLiteral("Caricamento…"));
+    if (m_righe.isEmpty())
+        mostraVuoto(QStringLiteral("Caricamento…"));
     QPointer<TabellaServer> io(this);
     client.leggi(risorsa, [io, numero, dopo](const RispostaServer& r) {
         if (!io || numero != io->m_richiesta)
@@ -124,6 +140,15 @@ void TabellaServer::mostraErrore(const QString& testo)
     m_tabella->setRowCount(0);
     m_stato->setStyleSheet(QStringLiteral("color: #c62828;"));
     m_stato->setText(QStringLiteral("Errore dal server: %1").arg(testo));
+    mostraVuoto(QStringLiteral("Elenco non disponibile: %1").arg(testo), true);
+}
+
+void TabellaServer::mostraVuoto(const QString& testo, bool errore)
+{
+    m_vuoto->setText(testo);
+    m_vuoto->setStyleSheet(QStringLiteral("color: %1;").arg(errore ? QStringLiteral("#c62828")
+                                                                   : coloriAttuali().testoSecondario.name()));
+    m_vuoto->setVisible(!testo.isEmpty());
 }
 
 void TabellaServer::mostra(const QJsonArray& righe)
@@ -162,8 +187,9 @@ void TabellaServer::mostra(const QJsonArray& righe)
     if (elastica >= 0)
         intestazione->setSectionResizeMode(elastica, QHeaderView::Stretch);
     m_stato->setStyleSheet(QString());
+    mostraVuoto(righe.isEmpty() ? testoVuoto : QString());
     if (righe.isEmpty())
-        m_stato->setText(testoVuoto);
+        m_stato->clear();   // lo dice già la tabella, al centro
     else if (m_limite > 0 && righe.size() >= m_limite)
         m_stato->setText(QStringLiteral("Prime %1 righe: usare la ricerca o i filtri per vedere le altre").arg(righe.size()));
     else

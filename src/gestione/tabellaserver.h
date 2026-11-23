@@ -66,6 +66,8 @@ private:
     QJsonArray m_righe;
     QTableWidget* m_tabella;
     QLabel* m_stato;
+    QLabel* m_vuoto;       // dentro la tabella vuota: testoVuoto, caricamento o errore
+    void mostraVuoto(const QString& testo, bool errore = false);   // testo vuoto: nascosto
     int m_richiesta = 0;   // scarta risposte arrivate fuori ordine
     int m_limite = 0;      // "limit=" dell'ultima richiesta (0 = nessuno)
 };

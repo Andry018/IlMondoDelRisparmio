@@ -922,6 +922,7 @@ void VistaCassa::icona(QPushButton* b, const QString& tasto)
                         : tasto == QLatin1String("annulla") ? QColor(0xc6, 0x28, 0x28)
                                                             : palette().color(QPalette::ButtonText);
     const int lato = m_aspetto.punti(22);
+    b->setProperty("icona_fissa", true);   // l'icona la sceglie la cassa (installaIconeTasti non la cambia)
     b->setIcon(iconaMenu(nome, colore, lato * 2));   // disegnata al doppio: nitida anche ingrandita
     b->setIconSize(QSize(lato, lato));
 }
