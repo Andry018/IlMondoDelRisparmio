@@ -33,6 +33,12 @@ endif()
 if(TARGET mdr_cassa AND TARGET mdr_gestione)
     # Cassa e gestione contro un server con i dati veri (si salta senza MDR_PROVA_SERVER).
     mdr_test_vista(test_dati_reali "mdr_cassa;mdr_gestione")
+    # Installazione completa (gestione, operatori, cassa, prima vendita) contro il server di
+    # sviluppo appena ricreato: prova e immagini di docs/GUIDA_INSTALLAZIONE.md.
+    mdr_test_vista(test_simulazione_installazione "mdr_cassa;mdr_gestione")
+    # Aggiunge una cassiera e CASSA2 al database: dopo gli altri test col server
+    set_tests_properties(test_simulazione_installazione PROPERTIES
+                         DEPENDS "test_cassa_server;test_gestione_server;test_importazione")
 endif()
 if(TARGET mdr_gestione)
     mdr_test_vista(test_gestione mdr_gestione)

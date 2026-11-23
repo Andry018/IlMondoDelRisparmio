@@ -20,6 +20,7 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStyle>
 #include <QTimer>
@@ -226,8 +227,43 @@ VistaOperatori::VistaOperatori(ClientServer& client, QWidget* parent)
         {"attivo", QStringLiteral("Attivo"), ColonnaServer::SiNo},
     }, this);
     m_tabella->setObjectName("operatori");
+    m_tabella->testoVuoto = QStringLiteral("Nessun operatore: «Nuovo utente…» per crearne uno");
     m_tabella->evidenzia = [](const QJsonObject& o) { return !o.value("attivo").toBool(); };
-    layout->addWidget(m_tabella, 1);
+    layout->addWidget(m_tabella, 2);
+
+    // Casse: ognuna col suo account, creato qui (prima serviva l'SQL a mano)
+    layout->addWidget(titoloSezione(QStringLiteral("Casse"),
+                                    QStringLiteral("Ogni cassa ha un account suo (es. cassa2) che si scrive una volta nella "
+                                                   "prima installazione della cassa; le cassiere poi entrano col PIN."),
+                                    this));
+    auto* barraCasse = new QHBoxLayout;
+    auto* nuovaCassa = new QPushButton(QStringLiteral("Nuova cassa…"), this);
+    nuovaCassa->setObjectName("nuova_cassa");
+    nuovaCassa->setToolTip(QStringLiteral("Codice (CASSA2) e account della cassa, da usare nella sua prima installazione"));
+    auto* passwordCassa = new QPushButton(QStringLiteral("Password della cassa…"), this);
+    passwordCassa->setObjectName("password_cassa");
+    passwordCassa->setToolTip(QStringLiteral("Password nuova per l'account della cassa scelta (es. PC della cassa sostituito)"));
+    barraCasse->addWidget(nuovaCassa);
+    barraCasse->addWidget(passwordCassa);
+    barraCasse->addStretch();
+    layout->addLayout(barraCasse);
+    m_casse = new TabellaServer({
+        {"id", QStringLiteral("Cassa")},
+        {"descrizione", QStringLiteral("Descrizione")},
+        {"email", QStringLiteral("Account"), ColonnaServer::Testo,
+         [](const QJsonObject& c) {
+             const QString e = c.value("email").toString();
+             return e.isEmpty() ? QStringLiteral("— manca: «Nuova cassa…» con lo stesso codice") : e;
+         }},
+        {"attivo", QStringLiteral("Attiva"), ColonnaServer::SiNo},
+        {"ultimo_contatto", QStringLiteral("Ultimo collegamento"), ColonnaServer::DataOra},
+    }, this);
+    m_casse->setObjectName("casse");
+    m_casse->testoVuoto = QStringLiteral("Nessuna cassa: «Nuova cassa…» per la prima");
+    m_casse->evidenzia = [](const QJsonObject& c) { return c.value("email").toString().isEmpty(); };
+    layout->addWidget(m_casse, 1);
+    connect(nuovaCassa, &QPushButton::clicked, this, &VistaOperatori::nuovaCassa);
+    connect(passwordCassa, &QPushButton::clicked, this, &VistaOperatori::passwordCassa);
 
     connect(modifica, &QPushButton::clicked, this, [this] {
         if (const auto o = m_tabella->selezionata())
@@ -262,6 +298,13 @@ void VistaOperatori::nuovoUtente()
     auto* pin = new QLineEdit(&d);
     pin->setEchoMode(QLineEdit::Password);
     pin->setPlaceholderText(QStringLiteral("facoltativo: 4-8 cifre, per la cassa"));
+    d.setObjectName("dialogo_nuovo_utente");
+    nome->setObjectName("utente_nome");
+    email->setObjectName("utente_account");
+    password->setObjectName("utente_password");
+    ruolo->setObjectName("utente_ruolo");
+    codice->setObjectName("utente_codice");
+    pin->setObjectName("utente_pin");
     form->addRow(QStringLiteral("Nome"), nome);
     form->addRow(QStringLiteral("Nome di accesso"), email);
     form->addRow(QStringLiteral("Password"), password);
@@ -353,6 +396,115 @@ void VistaOperatori::cambiaPassword()
 void VistaOperatori::aggiorna()
 {
     m_tabella->carica(m_client, QStringLiteral("operatori?select=id,nome,ruolo,codice,attivo,operatori_pin(updated_at)&order=nome"));
+    QPointer<VistaOperatori> io(this);
+    m_client.rpc(QStringLiteral("casse_con_account"), {}, [io](const RispostaServer& r) {
+        if (!io)
+            return;
+        if (r.ok())
+            io->m_casse->mostra(r.json().array());
+        else
+            io->m_casse->mostraErrore(r.errore);
+    });
+}
+
+QString VistaOperatori::passwordProposta()
+{
+    static const QString lettere = QStringLiteral("abcdefghjkmnpqrstuvwxyz");
+    static const QString cifre = QStringLiteral("23456789");
+    auto* g = QRandomGenerator::system();
+    QString p;
+    for (int i = 0; i < 5; ++i)
+        p += lettere.at(int(g->bounded(lettere.size())));
+    p += QLatin1Char('-');
+    for (int i = 0; i < 4; ++i)
+        p += cifre.at(int(g->bounded(cifre.size())));
+    return p;   // es. "kfrtm-4827": 10 caratteri, si detta e si ricopia senza errori
+}
+
+QString VistaOperatori::prossimaCassa(const QStringList& esistenti)
+{
+    for (int n = 1;; ++n) {
+        const QString c = QStringLiteral("CASSA%1").arg(n);
+        if (!esistenti.contains(c, Qt::CaseInsensitive))
+            return c;
+    }
+}
+
+void VistaOperatori::nuovaCassa()
+{
+    QStringList esistenti;
+    for (const auto& v : m_casse->righe())
+        esistenti << v.toObject().value("id").toString();
+    QDialog d(this);
+    d.setWindowTitle(QStringLiteral("Nuova cassa"));
+    d.setObjectName("dialogo_nuova_cassa");
+    auto* form = new QFormLayout(&d);
+    auto* codice = new QLineEdit(prossimaCassa(esistenti), &d);
+    codice->setObjectName("cassa_codice");
+    auto* descrizione = new QLineEdit(&d);
+    descrizione->setObjectName("cassa_descrizione");
+    descrizione->setPlaceholderText(QStringLiteral("facoltativa, es. banco vicino alla porta"));
+    auto* password = new QLineEdit(passwordProposta(), &d);
+    password->setObjectName("cassa_password");
+    password->setToolTip(QStringLiteral("Almeno 8 caratteri. Si scrive una volta sola, nella prima installazione della cassa"));
+    form->addRow(QStringLiteral("Codice"), codice);
+    form->addRow(QStringLiteral("Descrizione"), descrizione);
+    form->addRow(QStringLiteral("Password dell'account"), password);
+    form->addRow(nota(QStringLiteral("Annotare codice e password: servono nella prima installazione del PC della cassa. "
+                                     "Le cassiere non la usano: entrano col loro PIN."),
+                      &d));
+    auto* bottoni = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &d);
+    form->addRow(bottoni);
+    connect(bottoni, &QDialogButtonBox::accepted, &d, &QDialog::accept);
+    connect(bottoni, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    if (d.exec() != QDialog::Accepted)
+        return;
+    const QString c = codice->text().trimmed().toUpper();
+    const QString pw = password->text();
+    QPointer<VistaOperatori> io(this);
+    m_client.rpc(QStringLiteral("crea_cassa"),
+                 {{"p", QJsonObject{{"codice", c}, {"descrizione", descrizione->text().trimmed()}, {"password", pw}}}},
+                 [io, c, pw](const RispostaServer& r) {
+                     if (!io)
+                         return;
+                     if (!r.ok()) {
+                         mostraErroreServer(io, QStringLiteral("Nuova cassa"), r);
+                         return;
+                     }
+                     QMessageBox::information(io, QStringLiteral("Nuova cassa"),
+                                              QStringLiteral("Cassa %1 creata.\n\nNella prima installazione del suo PC:\n"
+                                                             "  account: %2\n  password: %3\n  codice della cassa: %1")
+                                                  .arg(c, c.toLower(), pw));
+                     io->aggiorna();
+                 });
+}
+
+void VistaOperatori::passwordCassa()
+{
+    const auto cassa = m_casse->selezionata();
+    if (!cassa) {
+        QMessageBox::information(this, QStringLiteral("Password della cassa"), QStringLiteral("Scegliere prima la cassa nell'elenco."));
+        return;
+    }
+    const QString c = cassa->value("id").toString();
+    bool ok = false;
+    const QString pw = QInputDialog::getText(this, QStringLiteral("Password della cassa"),
+                                             QStringLiteral("Password nuova per l'account di %1 (almeno 8 caratteri):").arg(c),
+                                             QLineEdit::Normal, passwordProposta(), &ok);
+    if (!ok)
+        return;
+    QPointer<VistaOperatori> io(this);
+    m_client.rpc(QStringLiteral("password_cassa"), {{"p_codice", c}, {"p_password", pw}}, [io, c, pw](const RispostaServer& r) {
+        if (!io)
+            return;
+        if (!r.ok()) {
+            mostraErroreServer(io, QStringLiteral("Password della cassa"), r);
+            return;
+        }
+        QMessageBox::information(io, QStringLiteral("Password della cassa"),
+                                 QStringLiteral("Password di %1 cambiata: «%2». Va scritta nelle Impostazioni della cassa "
+                                                "(o rifare la prima installazione).").arg(c, pw));
+    });
 }
 
 void VistaOperatori::modifica(const QJsonObject& operatore)

@@ -14,7 +14,7 @@ if (-not $Server) { $Server = Read-Host "Indirizzo del server (es. http://192.16
 if (-not $AnonKey) { $AnonKey = Read-Host "Chiave pubblica (ANON_KEY)" }
 
 if ($Server -notmatch '^https?://') { Write-Host "Indirizzo non valido (es. http://192.168.1.10:8000)" -ForegroundColor Red; exit 1 }
-$sicuro = Read-Host "Token degli aggiornamenti (Invio = nessuno)" -AsSecureString
+$sicuro = Read-Host "Token degli aggiornamenti (Invio = nessuno: col repository pubblico non serve)" -AsSecureString
 $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sicuro))
 
 Push-Location $PSScriptRoot

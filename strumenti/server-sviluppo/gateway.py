@@ -1,6 +1,9 @@
 """Gateway del server di sviluppo: imita Kong + GoTrue di Supabase davanti a PostgREST.
 
-    /auth/v1/token?grant_type=password|refresh_token   login con gli utenti di UTENTI
+    /auth/v1/token?grant_type=password|refresh_token   login con gli utenti di UTENTI (password "prova")
+                                                        e con quelli creati dalla gestione (password
+                                                        nel database, come il server del negozio)
+    /mdr/presentazione                                  senza chiave: per "Cerca il server"
     /rest/v1/...                                        inoltrato a PostgREST
 
 Le richieste devono avere "apikey: <ANON_KEY>" come sul server vero. Solo per sviluppo e
@@ -61,11 +64,30 @@ def jwt(claims):
 ANON_KEY = jwt({"role": "anon", "iss": "mdr-sviluppo", "exp": 4102444800})
 
 
+_id_dal_database = {}   # email -> id degli utenti creati dalla gestione (crea_utente, crea_cassa)
+
+
+def utente_dal_database(email, password):
+    """Id dell'utente se la password è quella di auth.users, come accesso.token_password del server
+    del negozio (infra/windows/accesso.sql); None altrimenti. Usa psql con l'ambiente di avvia.ps1
+    (PGHOST, PGPORT, PGUSER); email e password passano come variabili di psql, mai nel testo SQL."""
+    import subprocess
+    sql = ("select id from auth.users where lower(email) = lower(:'email') and coalesce(encrypted_password, '') <> '' "
+           "and encrypted_password = extensions.crypt(:'pw', encrypted_password);\n")
+    try:
+        r = subprocess.run(["psql", "-X", "-q", "-t", "-A", "-d", "mdr", "-v", "email=" + email, "-v", "pw=" + password,
+                            "-f", "-"], input=sql, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    uid = r.stdout.strip()
+    return uid if r.returncode == 0 and len(uid) == 36 else None
+
+
 def sessione(email):
     rinnovo = secrets.token_urlsafe(24)
     with _blocco:
         _rinnovi[rinnovo] = email
-    uid = UTENTI[email]
+    uid = UTENTI.get(email) or _id_dal_database[email]
     adesso = int(time.time())
     return {
         "access_token": jwt({"sub": uid, "email": email, "role": "authenticated", "aud": "authenticated",
@@ -119,6 +141,12 @@ class Gestore(BaseHTTPRequestHandler):
             if tipo == "password":
                 email = (richiesta.get("email") or "").strip().lower()
                 if email in UTENTI and richiesta.get("password") == PASSWORD:
+                    return self.json(200, sessione(email))
+                # Utenti e casse creati dalla gestione: password nel database, come in negozio
+                uid = email not in UTENTI and utente_dal_database(email, richiesta.get("password") or "")
+                if uid:
+                    with _blocco:
+                        _id_dal_database[email] = uid
                     return self.json(200, sessione(email))
                 return self.json(400, {"error": "invalid_grant", "error_description": "Invalid login credentials"})
             if tipo == "refresh_token":

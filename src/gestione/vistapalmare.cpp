@@ -93,8 +93,8 @@ VistaPalmare::VistaPalmare(QWidget* parent)
     auto* sinistra = new QVBoxLayout;
     auto* titolo = new QLabel(QStringLiteral("<h2>Collega un palmare</h2>"
         "<p>Sul palmare, nella schermata <b>Server</b> (al primo avvio, o Profilo → Server), leggere questo "
-        "codice con il lettore o con <i>Leggi il QR con la fotocamera</i>: indirizzo, chiave e token "
-        "si compilano da soli.</p>"), this);
+        "codice con il lettore o con <i>Leggi il QR con la fotocamera</i>: indirizzo e chiave "
+        "si compilano da soli. Gli aggiornamenti del palmare arrivano da soli.</p>"), this);
     titolo->setWordWrap(true);
     sinistra->addWidget(titolo);
 
@@ -105,7 +105,7 @@ VistaPalmare::VistaPalmare(QWidget* parent)
     m_token = new QLineEdit(this);
     m_token->setObjectName("token_palmare");
     m_token->setEchoMode(QLineEdit::Password);
-    m_token->setPlaceholderText(QStringLiteral("facoltativo: aggiornamenti automatici del palmare"));
+    m_token->setPlaceholderText(QStringLiteral("non serve: solo se il repository degli aggiornamenti fosse privato"));
     modulo->addRow(QStringLiteral("Indirizzo del PC:"), m_indirizzi);
     modulo->addRow(QStringLiteral("Token aggiornamenti:"), m_token);
     sinistra->addLayout(modulo);

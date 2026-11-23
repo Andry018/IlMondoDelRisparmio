@@ -2,6 +2,7 @@
     "name": "mdr-palmare",
     "version": "1.2.1",
     "private": true,
+    "license": "MPL-2.0",
     "type": "module",
     "description": "Palmare del negozio: app web (www/) impacchettata come APK Android con Capacitor.",
     "scripts": {

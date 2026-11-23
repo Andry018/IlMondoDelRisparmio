@@ -2,13 +2,27 @@
 
 Cassa, magazzino, anagrafiche e fatturazione per un punto vendita con più casse.
 Sostituisce SystemApp Cash e Terminal. Architettura in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md);
-come si usano cassa, gestione e palmare in [docs/GUIDA_UTENTE.md](docs/GUIDA_UTENTE.md).
+come si usano cassa, gestione e palmare in [docs/GUIDA_UTENTE.md](docs/GUIDA_UTENTE.md);
+come si installa in negozio (server, PC, operatori, casse) in [docs/GUIDA_INSTALLAZIONE.md](docs/GUIDA_INSTALLAZIONE.md).
 
 - **Server:** nella rete del negozio, Supabase self-hosted ([infra/supabase](infra/supabase/README.md)) oppure
   nativo su Windows senza WSL né Docker ([infra/windows](infra/windows/README.md)): stesse API per cassa, gestione e palmare
 - **Casse e PC:** due programmi Windows in C++ / Qt 6, installati entrambi su ogni PC:
   `mdr-cassa` (vendita al banco) e `mdr-gestione` (anagrafiche e amministrazione)
 - **Palmare:** app Android sulle stesse API ([palmare](palmare/README.md))
+
+## Licenza
+
+Copyright 2026 Andrea Rizzo. Il codice è distribuito con la **Mozilla Public License 2.0**
+([LICENSE](LICENSE)), che vale file per file:
+
+- chi modifica un file di questo progetto e lo distribuisce (anche dentro un programma suo) deve
+  rendere pubblico quel file modificato, con la stessa licenza;
+- i file nuovi che aggiunge restano suoi e possono rimanere privati;
+- si può usare anche in prodotti commerciali, citando la licenza.
+
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of
+the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 ## Cosa non c'è nel repository
 

@@ -32,8 +32,10 @@ PostgREST e Caddy si scaricano con versione e impronta SHA-256 fisse (in `instal
    Chiede la password di `postgres`, crea il database `mdr`, applica migrazioni e dati iniziali,
    genera segreto e chiave, installa PostgREST e Caddy in `C:\MondoDelRisparmio\server`,
    registra le attività pianificate, apre la porta 8000 nel firewall (reti private) e avvia tutto.
-   Alla fine scrive **indirizzo e chiave** da mettere nelle Impostazioni di cassa e gestione (e nel
-   QR del palmare, scheda Palmare della gestione); restano in `config\chiavi.txt`.
+   Alla fine scrive **indirizzo e chiave**, che restano in `config\chiavi.txt`. Di solito non
+   servono: cassa e gestione trovano il server da sole nella prima installazione ("Cerca il
+   server", con `/mdr/presentazione` del Caddyfile) e il palmare li prende dal QR della gestione.
+   Passi successivi (gestione, operatori, casse): [docs/GUIDA_INSTALLAZIONE.md](../../docs/GUIDA_INSTALLAZIONE.md).
 4. **Primo amministratore**: con `-Amministratore negozio@negozio.lan` (al primo giro o
    rilanciando l'installazione) chiede la password e lo crea; funziona solo se non esiste già un
    amministratore. Gli altri utenti si creano dalla gestione, scheda Operatori.

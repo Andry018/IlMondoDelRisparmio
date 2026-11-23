@@ -76,6 +76,8 @@ python strumenti\rt-finto\rt_finto.py                 # registratore Custom fint
   - database e CSV di SystemApp (dati reali del negozio, in `%USERPROFILE%\SystemApp_import`);
   - token Openapi, token GitHub, chiavi del server, certificati di firma (`*.pfx`) e loro password;
   - note personali e memoria delle sessioni (in `%USERPROFILE%\.mondodelrisparmio\note-private`).
+- Licenza **MPL 2.0** (`LICENSE`): codice di terzi solo se compatibile (MIT, BSD, Apache 2.0,
+  LGPL come Qt); niente codice copiato da progetti GPL.
 - Il repository è **pubblico**: niente dati del negozio, dei clienti o percorsi personali nei file,
   nei messaggi di commit e nelle schermate. I segreti della firma stanno nei *Secrets* di GitHub.
 - Aggiornamenti: aumentare `VERSION` in `CMakeLists.txt`, poi `scripts\pubblica_aggiornamento.ps1`

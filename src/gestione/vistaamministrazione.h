@@ -41,8 +41,20 @@ private:
     void impostaPin();
     void nuovoUtente();      // account di accesso + operatore (crea_utente)
     void cambiaPassword();   // per chi l'ha dimenticata (cambia_password)
+    // Casse: terminale e account insieme (crea_cassa), senza SQL. Propone il codice libero dopo
+    // l'ultimo (CASSA2...) e una password già pronta, da scrivere nella prima installazione della cassa.
+    void nuovaCassa();
+    void passwordCassa();    // password nuova per l'account di una cassa (password_cassa)
 
+public:
+    // Password facile da ricopiare (niente 0/O, 1/l): per gli account delle casse
+    static QString passwordProposta();
+    // Primo codice libero CASSA1, CASSA2... tra quelli dati
+    static QString prossimaCassa(const QStringList& esistenti);
+
+private:
     TabellaServer* m_tabella = nullptr;
+    TabellaServer* m_casse = nullptr;
 };
 
 // Dati del negozio (tabella impostazioni): servono alle fatture elettroniche.

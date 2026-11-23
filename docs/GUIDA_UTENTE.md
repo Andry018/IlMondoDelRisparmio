@@ -1,7 +1,7 @@
 # Guida per il negozio
 
-Come si usano ogni giorno la **cassa**, la **gestione** e il **palmare**. Per l'installazione e
-il server vedere `README.md` e `infra/supabase/README.md`.
+Come si usano ogni giorno la **cassa**, la **gestione** e il **palmare**. Per installare server,
+PC, casse e operatori: [GUIDA_INSTALLAZIONE.md](GUIDA_INSTALLAZIONE.md).
 
 ### Primo avvio su un PC nuovo
 
