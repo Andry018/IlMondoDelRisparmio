@@ -14,8 +14,7 @@ Branch `worktree-desktop-due-app` (worktree `.claude/worktrees/desktop-due-app`)
   "Virtual COM" di Custom. Il manuale dei protocolli non è pubblico: va chiesto a Custom/rivenditore.
 - **Cassa di riserva**: il PC che sostituisce una cassa guasta usa l'RT **in rete** (IP), senza
   spostare cavi; la cassa titolare può usare USB o rete.
-- Accesso per ruolo (proposto, non ancora implementato): `mdr-gestione` solo per responsabile e
-  amministratore; il ruolo decide, non il PC.
+- Accesso per ruolo: il ruolo decide, non il PC (fatto, vedi "Stato al 17/11/2026").
 
 ## Cosa è stato fatto
 
@@ -46,28 +45,22 @@ src/locale, installazione, scripts...) **prima** dell'aggiornamento automatico (
 - `crea_pacchetto.ps1` produce lo zip con entrambi gli exe (31.9 MB); `installa.ps1 -Silenzioso
   -NessunCollegamento` in una cartella temporanea installa entrambi. Script .ps1 solo ASCII, parsing ok.
 
-## Cosa resta da fare
+## Stato al 17/11/2026
 
-1. **Unire con frontend/cassa (0.2.0)**: rifare gli spostamenti su quel branch. Le modifiche
-   dell'aggiornatore a `main.cpp`, `finestraprincipale`, `impostazioni`, `vistaimpostazioni` vanno
-   portate rispettivamente in `src/cassa/main.cpp`, `src/cassa/finestracassa` (o `src/ui/finestrabase`
-   se servono a entrambi), `src/ui/impostazioni`, `src/ui/vistaimpostazioni`;
-   `installazioneaggiornamento.*` probabilmente in `src/ui` se anche la gestione si aggiorna.
-2. **Aggiornatore e due programmi**: `aggiorna.ps1` e `aggiornatore.cpp` conoscono solo
-   `mdr-cassa.exe` e la vecchia cartella `...\Cassa`. Devono sostituire entrambi gli exe e
-   controllare che nessuno dei due sia aperto (`Get-Process mdr-cassa, mdr-gestione`).
-   Lo user agent `mdr-cassa/<versione>` può restare o diventare per programma.
-3. **Driver Custom K3 F RT** dietro `StampanteFiscale`, con canale USB (Virtual COM) e rete
-   (probabilmente XML su HTTP: verificare sul manuale). Qt SerialPort non è installato in MSYS2
-   (`pacman -S mingw-w64-ucrt-x86_64-qt6-serialport` se serve).
-4. **Un RT, una cassa alla volta**: blocco/assegnazione sul server quando la cassa di riserva
-   prende l'RT di un'altra.
-5. **Accesso per ruolo** all'avvio di `mdr-gestione`.
-6. Gestione: fatture (SDI via Openapi), carichi, inventario, report.
+Documento storico (consegna dell'8/10). Le voci che erano "da fare":
 
-## Domande aperte
+| Voce | Stato |
+|---|---|
+| Unire con frontend/cassa (0.2.0) | **Fatto**: `src/cassa`, `src/gestione`, parte comune in `src/ui` (aggiornatore compreso, in `FinestraBase`) |
+| Aggiornatore e due programmi | **Fatto**: `aggiorna.ps1 -Programma mdr-cassa.exe\|mdr-gestione.exe`, controlla tutti i programmi aperti nella cartella d'installazione; si aggiornano sia la cassa sia la gestione |
+| Driver Custom K3 F RT | **Fatto in rete** (XML su HTTP, `src/fiscal/customxml.*`); USB non supportato (con USB la cassa usa il simulatore e lo dice). **Da provare sull'RT vero** in addestramento (`ProvaRegistratore.bat`) |
+| Un RT, una cassa alla volta | **Aperto**: nessun blocco sul server; lato cassa c'è solo il blocco di una cassa per cartella dati |
+| Accesso per ruolo | **Fatto**: `FinestraGestione::abilita` attiva le schede secondo il ruolo (amministratore e responsabile tutto, magazziniere magazzino/ordini/articoli, Operatori solo amministratore) |
+| Gestione: fatture, carichi, inventario, report | **Fatto** (schede Fatture, Magazzino, Vendite, Chiusure...); la prova SDI in sandbox con le credenziali del negozio manca ancora |
 
-- Modello esatto sulla targhetta dell'RT (K3 F RT?) e manuale protocolli da Custom.
-- Il protocollo XML Web Services funziona anche via USB, o il CUSTOM anche in rete? Se sì, un solo protocollo.
-- La gestione deve aggiornarsi da sola come la cassa?
-- La gestione lavora solo online (direttamente sul server) o anche su archivio locale come ora?
+Domande dell'epoca, con la risposta:
+
+- Modello dell'RT: Custom K3-F RT, protocollo XML Web Services in rete (manuale riservato, fuori dal repository).
+- Un solo protocollo: sì, XML in rete; USB non si usa.
+- La gestione si aggiorna da sola: sì, come la cassa.
+- La gestione con un server lavora direttamente sul server; l'archivio locale resta per le prove senza server.

@@ -129,10 +129,13 @@ L'account di un terminale (cassa) lavora con i permessi del cassiere.
   virtuale USB non c'è driver: con quel collegamento, o senza indirizzo, la cassa usa il simulatore
   e lo dichiara con una striscia rossa ("SIMULATORE: NON esce nessuno scontrino").
 - Un registratore deve essere usato da una cassa alla volta: blocco/assegnazione sul server
-  quando una cassa di riserva prende il registratore di un'altra.
-- Accesso per ruolo all'avvio: `mdr-gestione` solo per responsabile e amministratore.
+  quando una cassa di riserva prende il registratore di un'altra (aperto).
 - ~~Invio delle fatture elettroniche allo SDI~~: Openapi (`infra/connettore-sdi`); manca la
   prova in sandbox con le credenziali del negozio.
 - Imposta di bollo: dichiarata sempre; addebitarla ai clienti? (`impostazioni.addebita_bollo`, ora no).
-- Importazione dati da SystemApp (in attesa del tipo di database).
-- Gestione: fatture, carichi, inventario, report in `mdr-gestione`.
+- Etichette della bilancia (EAN con prefisso 2, peso o prezzo nel codice): la decodifica c'è
+  (`src/core/barcode.*`) ma la cassa non la usa; da fare se il negozio le usa.
+
+Fatti (17/11/2026): accesso per ruolo nella gestione (le schede si attivano secondo il ruolo),
+importazione da SystemApp (`docs/MIGRAZIONE_SYSTEMAPP.md`), fatture, carichi, inventario e report
+in `mdr-gestione`, pubblicazione degli aggiornamenti pronta (GitHub CLI su questo PC).
