@@ -98,8 +98,17 @@ async function accedi(email) {
     await attendi(`document.querySelector("#login")`, "schermata di accesso");
     await js(`(() => { const f = document.querySelector("#login"); f.email.value = ${JSON.stringify(email)};
                        f.password.value = "prova"; f.requestSubmit(); })()`);
-    await attendi(`!document.querySelector("#schede").hidden && document.querySelector(".tasto-schede")`, "app dopo l'accesso");
+    await attendi(`document.querySelector(".tessera")`, "menu dopo l'accesso");
     passi.push(` ✔ accesso come ${email}`);
+}
+// Torna al menu (tasto menu dalle schermate interne, Indietro dalla prima di una funzione) e apre la funzione
+async function vai(funzione) {
+    await js(`(() => { const visibile = (s) => getComputedStyle(document.querySelector(s)).display !== "none";
+                       if (document.querySelector(".tessera")) return;
+                       if (visibile("#menu")) document.querySelector("#menu").click();
+                       else document.querySelector("#indietro").click(); })()`);
+    await attendi(`document.querySelector('[data-tab="${funzione}"]')`, `menu per ${funzione}`);
+    await clic(`[data-tab="${funzione}"]`);
 }
 
 let esito = 0;
@@ -127,16 +136,27 @@ try {
     // Accesso: password sbagliata, poi giusta
     await attendi(`document.querySelector("#login")`, "schermata di accesso");
     await foto("accesso");
+    // Schermata Server: solo indirizzo (e QR), niente token; la chiave a mano è nascosta
+    await clic("#vai-imp");
+    await attendi(`document.querySelector("#imp")`, "schermata server");
+    if (await js(`Boolean(document.querySelector('#imp [name="token"]'))`)) throw new Error("campo token ancora visibile");
+    if (await js(`document.querySelector("#imp details").open`)) throw new Error("chiave a mano aperta");
+    await foto("server");
+    await clic("#annulla-imp");
+    await attendi(`document.querySelector("#login")`, "di nuovo l'accesso");
     await js(`(() => { const f = document.querySelector("#login"); f.email.value = "magazzino@prova.lan";
                        f.password.value = "sbagliata"; f.requestSubmit(); })()`);
-    await attendiAvviso("Email o password errate");
+    await attendiAvviso("Account o password errati");
     await accedi("magazzino@prova.lan");
     if (await js(`getComputedStyle(document.querySelector("#indietro")).display !== "none"`)) {
-        throw new Error("freccia Indietro visibile sulla scheda principale");
+        throw new Error("freccia Indietro visibile sul menu");
     }
-    passi.push(` ✔ schede: ${await js(`[...document.querySelectorAll(".tasto-schede")].map((b) => b.textContent.trim()).join(", ")`)}`);
+    passi.push(` ✔ menu: ${await js(`[...document.querySelectorAll(".tessera b")].map((b) => b.textContent.trim()).join(", ")`)}`);
+    await attendi(`!document.querySelector('[data-tab="ricevimento"] .contatore').hidden`, "contatore delle fatture da ricevere");
+    await foto("menu");
 
-    // Inventario (scheda iniziale)
+    // Inventario
+    await vai("inventario");
     await attendi(`document.querySelector("#ubicazione")`, "inventario aperto");
     await js(`(() => { const u = document.querySelector("#ubicazione"); u.value = "Corsia 3";
                        u.dispatchEvent(new Event("change")); })()`);
@@ -180,7 +200,7 @@ try {
     await foto("riepilogo-inventario");
 
     // Prezzi + richiesta etichetta
-    await clic('[data-tab="prezzi"]');
+    await vai("prezzi");
     await leggi("8004444000048");
     await attendi(`document.querySelector(".prezzo")`, "scheda prezzo");
     await pausa(800);   // il tempo che una schermata lasciata a metà caricamento finisca
@@ -191,7 +211,7 @@ try {
     await attendiAvviso("Etichetta richiesta");
 
     // Ricevimento merce
-    await clic('[data-tab="ricevimento"]');
+    await vai("ricevimento");
     await attendi(`document.querySelector(".riga-elenco.toccabile")`, "fatture da ricevere");
     await foto("ricevimento-fatture");
     await clic(".riga-elenco.toccabile");
@@ -212,7 +232,7 @@ try {
     passi.push(" ✔ ricevimento inviato per l'approvazione");
 
     // Carico senza fattura: un articolo nuovo creato al volo e uno già in anagrafica
-    await clic('[data-tab="carico"]');
+    await vai("carico");
     await attendi(`document.querySelector("#car-fornitore")`, "scheda carico");
     await js(`(() => { const s = document.querySelector("#car-fornitore");
                        s.value = [...s.options].find((o) => o.textContent.includes("Grossista")).value;
@@ -238,7 +258,7 @@ try {
     await attendiAvviso("Merce caricata: 2 articoli");
     passi.push(" ✔ carico dal palmare con articolo nuovo");
 
-    await clic('[data-tab="etichette"]');
+    await vai("etichette");
     await attendi(`document.querySelector(".elenco") || document.querySelector(".vuoto")`, "etichette");
     await foto("etichette");
 
@@ -249,7 +269,7 @@ try {
     await foto("profilo");
     await clic("#esci");
     await accedi("responsabile@prova.lan");
-    await clic('[data-tab="inventario"]');
+    await vai("inventario");
     await attendi(`document.querySelector("#riepilogo")`, "inventario");
     await clic("#riepilogo");
     await attendi(`document.querySelector("#chiudi")`, "tasto chiudi");

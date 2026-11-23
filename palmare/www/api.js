@@ -20,6 +20,37 @@ export function emailAccount(nome) {
     return !n || n.includes("@") ? n : `${n.toLowerCase()}@negozio.lan`;
 }
 
+// Indirizzo del server come si scrive: "192.168.1.10" -> "http://192.168.1.10:8000" (porta del
+// server del negozio); con http:// o la porta resta com'è. Vuoto se non sembra un indirizzo.
+export function indirizzoServer(testo) {
+    let t = String(testo || "").trim().replace(/\/+$/, "");
+    if (!t) return "";
+    if (!/^https?:\/\//i.test(t)) t = "http://" + t;
+    let u;
+    try { u = new URL(t); } catch { return ""; }
+    if (!u.hostname || u.pathname !== "/" || u.search) return "";
+    return `${u.protocol}//${u.hostname}:${u.port || "8000"}`;
+}
+
+// Chiave anon data dal server stesso (GET /mdr/presentazione, senza chiave: vedi il Caddyfile
+// del server del negozio): chi configura il palmare scrive solo l'indirizzo.
+export async function chiaveDalServer(url, rete = fetch) {
+    const controllo = new AbortController();
+    const timer = setTimeout(() => controllo.abort(), 6000);
+    try {
+        const r = await rete(`${url}/mdr/presentazione`, { signal: controllo.signal });
+        if (!r.ok) throw new Error(`il server non si presenta (errore ${r.status})`);
+        const o = await r.json();
+        if (o.servizio !== "mondo-del-risparmio" || !o.anon_key) throw new Error("non è il server del negozio");
+        return String(o.anon_key);
+    } catch (e) {
+        if (e.name === "AbortError" || e instanceof TypeError) throw new Error("server non raggiungibile");
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 const TIMEOUT_MS = 15000;
 
 export class Server {

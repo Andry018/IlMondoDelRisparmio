@@ -3,7 +3,7 @@
 // Il lettore di codici integrato "scrive" il codice e preme Invio: il campo del lettore è
 // sempre pronto a riceverlo.
 
-import { Server, ErroreServer, emailAccount } from "./api.js";
+import { Server, ErroreServer, emailAccount, indirizzoServer, chiaveDalServer } from "./api.js";
 import { Coda } from "./coda.js";
 import { ArchivioArticoli } from "./archivio.js";
 import { icona } from "./icone.js";
@@ -38,8 +38,41 @@ function html(stringa) {
 
 function puo(...ruoli) { return ruoli.includes(stato.ruolo); }
 
+// Segnale sonoro come i terminali di magazzino: si sente anche col palmare in tasca o in mezzo al
+// rumore. Acuto e breve = ok, due toni bassi = errore. Senza audio (browser, permessi) niente.
+let contestoAudio = null;
+function suono(tipo) {
+    try {
+        contestoAudio ??= new (window.AudioContext || window.webkitAudioContext)();
+        const toni = tipo === "ok" ? [[1760, 0, 0.07]] : [[330, 0, 0.14], [262, 0.18, 0.2]];
+        for (const [frequenza, inizio, durata] of toni) {
+            const o = contestoAudio.createOscillator();
+            const g = contestoAudio.createGain();
+            o.type = "square";
+            o.frequency.value = frequenza;
+            g.gain.value = 0.08;
+            o.connect(g).connect(contestoAudio.destination);
+            const t = contestoAudio.currentTime + inizio;
+            o.start(t);
+            o.stop(t + durata);
+        }
+    } catch { /* niente audio */ }
+}
+
+// Il bordo della barra del lettore si accende verde o rosso per un momento: si vede con la coda
+// dell'occhio mentre si leggono i codici uno dopo l'altro
+function lampeggiaLettore(tipo) {
+    document.querySelectorAll(".lettore").forEach((l) => {
+        l.classList.remove("letto-ok", "letto-ko");
+        void l.offsetWidth;   // riparte l'animazione anche con due letture di fila
+        l.classList.add(tipo === "ok" ? "letto-ok" : "letto-ko");
+    });
+}
+
 let timerAvviso;
 function avviso(testo, tipo = "ok") {
+    suono(tipo === "ok" ? "ok" : "errore");
+    lampeggiaLettore(tipo);
     const el = $("#avviso");
     const simbolo = tipo === "ok" ? "ok" : tipo === "attenzione" ? "senzarete" : "attenzione";
     el.innerHTML = `${icona(simbolo)}<span>${esc(testo)}</span>`;
@@ -73,6 +106,8 @@ function aggiornaBarra() {
     chip.hidden = n === 0 && r === 0;
     chip.textContent = r ? `${n} in coda · ${r} da vedere` : `${n} in coda`;
     $("#indietro").hidden = stato.storia.length === 0;
+    // Dalle schermate interne (dettaglio, riepilogo) un tocco riporta al menu
+    $("#menu").hidden = stato.storia.length < 2;
 }
 
 function titolo(t, sotto = "") {
@@ -120,40 +155,88 @@ if (pluginApp) {
         if (!$("#fotocamera").hidden) $("#chiudi-fotocamera").click();
         else if (!$("#foglio").hidden) chiudiFoglio();
         else if (stato.storia.length) indietro();
-        else pluginApp.minimizeApp();
+        else pluginApp.minimizeApp();   // sul menu: l'app va in secondo piano, non si chiude
     });
 }
 
+// Funzioni del palmare: menu a riquadri come i terminali di magazzino (un tocco, guanti compresi).
+// contatore: quante cose aspettano (fatture da ricevere, etichette...), letto quando si apre il menu.
 const SCHEDE = [
-    { id: "inventario", nome: "Inventario", icona: "inventario", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaInventario },
-    { id: "prezzi", nome: "Prezzi", icona: "prezzo", ruoli: null, vista: () => vistaPrezzi },
-    { id: "ricevimento", nome: "Ricevimento", icona: "camion", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaRicevimenti },
-    { id: "carico", nome: "Carico", icona: "scatola", ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaCarico },
-    { id: "etichette", nome: "Etichette", icona: "etichetta", ruoli: null, vista: () => vistaEtichette },
+    { id: "prezzi", nome: "Cerca articolo", descrizione: "Prezzo, giacenza, etichetta", icona: "cerca", ruoli: null,
+      vista: () => vistaPrezzi },
+    { id: "inventario", nome: "Inventario", descrizione: "Conta gli scaffali", icona: "inventario",
+      ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaInventario,
+      contatore: async () => {
+          const [inv] = await server.leggi("v_inventari?stato=eq.aperto&select=descrizione,articoli_contati&limit=1");
+          return inv ? { testo: "in corso", nota: inv.descrizione } : null;
+      } },
+    { id: "ricevimento", nome: "Ricevimento", descrizione: "Spunta la merce delle fatture", icona: "camion",
+      ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaRicevimenti,
+      contatore: async () => {
+          const n = (await server.leggi("v_fatture_passive_da_caricare?xml_scaricato=is.true&select=id&limit=99")).length;
+          return n ? { testo: String(n), nota: n === 1 ? "fattura da ricevere" : "fatture da ricevere" } : null;
+      } },
+    { id: "carico", nome: "Carico", descrizione: "Merce senza fattura", icona: "scatola",
+      ruoli: ["amministratore", "responsabile", "magazziniere"], vista: () => vistaCarico },
+    { id: "etichette", nome: "Etichette", descrizione: "Da stampare", icona: "etichetta", ruoli: null,
+      vista: () => vistaEtichette,
+      contatore: async () => {
+          const n = (await server.leggi("v_etichette_da_stampare?select=articolo_id&limit=99")).length;
+          return n ? { testo: String(n), nota: "da stampare" } : null;
+      } },
 ];
 
 function schedePermesse() { return SCHEDE.filter((s) => !s.ruoli || s.ruoli.includes(stato.ruolo)); }
 
+// Una funzione si apre dal menu: Indietro (o il tasto Android) torna al menu
 function mostraScheda(id) {
     const s = schedePermesse().find((x) => x.id === id) || schedePermesse()[0];
     stato.scheda = s.id;
-    localStorage.setItem("mdr.scheda", s.id);
-    document.querySelectorAll(".tasto-schede").forEach((b) => b.classList.toggle("attiva", b.dataset.tab === s.id));
-    stato.storia = [];
+    stato.storia = [[vistaMenu, []]];
     vistaCorrente = null;
     disegna([s.vista(), []]);
 }
 
+function tornaAlMenu() {
+    stato.storia = [];
+    stato.scheda = null;
+    disegna([vistaMenu, []]);
+}
+$("#menu").innerHTML = icona("menu");
+$("#menu").addEventListener("click", tornaAlMenu);
+
 function entraNellApp() {
-    document.body.classList.remove("senza-barra", "senza-schede");
+    document.body.classList.remove("senza-barra");
+    document.body.classList.add("senza-schede");   // niente barra in basso: il menu è la prima schermata
     $("#barra").hidden = false;
-    const nav = $("#schede");
-    nav.innerHTML = schedePermesse().map((s) =>
-        `<button class="tasto-schede" data-tab="${s.id}"><span class="pillola">${icona(s.icona)}</span>${s.nome}</button>`).join("");
-    nav.hidden = false;
-    nav.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => mostraScheda(b.dataset.tab)));
-    mostraScheda(localStorage.getItem("mdr.scheda") || "inventario");
+    $("#schede").hidden = true;
+    tornaAlMenu();
     sincronizzaArticoli();
+}
+
+function vistaMenu() {
+    titolo("Mondo del Risparmio", [stato.nome, stato.ruolo].filter(Boolean).join(" · "));
+    const radice = vista;
+    const griglia = html(`<div class="menu">${schedePermesse().map((s) => `
+        <button class="tessera" data-tab="${s.id}">
+            <span class="bollo-icona">${icona(s.icona)}</span>
+            <b>${esc(s.nome)}</b>
+            <small>${esc(s.descrizione)}</small>
+            <span class="contatore" hidden></span>
+        </button>`).join("")}</div>`);
+    griglia.querySelectorAll(".tessera").forEach((b) => b.addEventListener("click", () => mostraScheda(b.dataset.tab)));
+    radice.appendChild(griglia);
+    // Contatori in parallelo: senza rete restano vuoti, il menu funziona lo stesso
+    for (const s of schedePermesse().filter((x) => x.contatore)) {
+        s.contatore().then((c) => {
+            if (!c || !attiva(radice)) return;
+            const t = radice.querySelector(`[data-tab="${s.id}"]`);
+            const chip = t.querySelector(".contatore");
+            chip.textContent = c.testo;
+            chip.hidden = false;
+            t.querySelector("small").textContent = c.nota;
+        }).catch(() => {});
+    }
 }
 
 function schermoIntero(fn) {
@@ -385,17 +468,16 @@ function vistaConfigurazione() {
     vista.appendChild(html(`
         <div class="accesso">
             ${intestazioneAccesso("Collega il palmare al server del negozio")}
-            <p class="sotto" style="text-align:center">Leggi il <b>QR di configurazione</b> con il lettore${fotocameraDisponibile() ? " o la fotocamera" : ""}, oppure compila a mano.</p>
+            <p class="sotto" style="text-align:center">Leggi il <b>QR</b> della gestione (scheda Palmare) con il lettore${fotocameraDisponibile() ? " o la fotocamera" : ""}, oppure scrivi l'indirizzo del server.</p>
             ${fotocameraDisponibile() ? `<button class="tasto contorno largo" id="qr-fotocamera" type="button">${icona("fotocamera")}Leggi il QR con la fotocamera</button>` : ""}
             <form id="imp">
                 <label class="etichetta">Indirizzo del server</label>
-                <input class="campo" name="url" placeholder="http://192.168.1.10:8000" value="${esc(server.url)}" inputmode="url" autocapitalize="off">
-                <label class="etichetta">Chiave pubblica (ANON_KEY)</label>
-                <textarea class="campo" name="chiave" rows="3" autocapitalize="off">${esc(server.apikey)}</textarea>
-                ${aggiornamenti.disponibile ? `
-                <label class="etichetta">Token degli aggiornamenti (facoltativo)</label>
-                <input class="campo" name="token" type="password" value="${esc(aggiornamenti.token)}" autocapitalize="off" placeholder="github_pat_…">` : ""}
-                <button class="tasto pieno largo" type="submit" style="margin-top:20px">Salva</button>
+                <input class="campo" name="url" placeholder="es. 192.168.1.10" value="${esc(server.url)}" inputmode="url" autocapitalize="off" spellcheck="false">
+                <details class="avanzate" ${server.apikey && !server.url ? "open" : ""}>
+                    <summary>Chiave a mano (solo se il server non la dà)</summary>
+                    <textarea class="campo" name="chiave" rows="3" autocapitalize="off" spellcheck="false" placeholder="anon_key di config\\chiavi.txt">${esc(server.apikey)}</textarea>
+                </details>
+                <button class="tasto pieno largo" type="submit" style="margin-top:20px">Collega</button>
             </form>
             ${server.configurato ? `<button class="tasto contorno largo" id="annulla-imp" style="margin-top:10px">Annulla</button>` : ""}
         </div>`));
@@ -406,19 +488,36 @@ function vistaConfigurazione() {
         if (!c) return false;
         form.url.value = c.server || "";
         form.chiave.value = c.apikey || "";
-        if (form.token && c.token !== undefined) form.token.value = c.token;
+        // Il token nel QR serve solo con un repository privato: si prende senza mostrarlo
+        if (c.token !== undefined) aggiornamenti.token = c.token;
         form.requestSubmit();
         return true;
     };
     form.url.focus();
-    form.addEventListener("submit", (ev) => {
+    form.addEventListener("submit", async (ev) => {
         ev.preventDefault();
         if (daQr(form.url.value)) return;
-        const f = new FormData(ev.target);
-        if (!/^https?:\/\/.+/.test(String(f.get("url")).trim())) { avviso("Indirizzo non valido (es. http://192.168.1.10:8000)", "errore"); return; }
-        server.configura(f.get("url"), f.get("chiave"));
-        if (form.token) aggiornamenti.token = f.get("token");
-        avviso("Impostazioni salvate");
+        const url = indirizzoServer(form.url.value);
+        if (!url) { avviso("Indirizzo non valido (es. 192.168.1.10)", "errore"); return; }
+        let chiave = form.chiave.value.trim();
+        const tasto = form.querySelector('button[type="submit"]');
+        if (!chiave || url !== server.url) {
+            // La chiave la dà il server: chi configura scrive solo l'indirizzo
+            tasto.disabled = true;
+            try {
+                chiave = await chiaveDalServer(url);
+            } catch (e) {
+                if (!chiave) {
+                    form.querySelector("details").open = true;
+                    avviso(`Chiave non ricevuta: ${e.message}. Controlla l'indirizzo, o scrivi la chiave a mano`, "errore");
+                    return;
+                }
+            } finally {
+                tasto.disabled = false;
+            }
+        }
+        server.configura(url, chiave);
+        avviso("Server collegato");
         mostraAccesso();
     });
     const cam = $("#qr-fotocamera", vista);
@@ -574,7 +673,7 @@ async function sincronizzaArticoli(manuale = false) {
 // Prezzi
 // ---------------------------------------------------------------------------------------
 function vistaPrezzi() {
-    titolo("Prezzi", "Prezzo, giacenza ed etichette");
+    titolo("Cerca articolo", "Prezzo, giacenza ed etichette");
     const risultato = document.createElement("div");
     lettore(vista, async (testo) => {
         const a = await trovaArticolo(testo);

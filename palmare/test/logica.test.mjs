@@ -3,7 +3,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { euro, millesimiDaTesto, nuovoId, quantita, testoDaMillesimi } from "../www/numeri.js";
 import { Coda } from "../www/coda.js";
-import { ErroreServer, emailAccount } from "../www/api.js";
+import { ErroreServer, emailAccount, indirizzoServer, chiaveDalServer } from "../www/api.js";
+
+test("indirizzo del server come si scrive", () => {
+    assert.equal(indirizzoServer("192.168.1.10"), "http://192.168.1.10:8000");
+    assert.equal(indirizzoServer(" 192.168.1.10:8100/ "), "http://192.168.1.10:8100");
+    assert.equal(indirizzoServer("http://server-negozio:8000"), "http://server-negozio:8000");
+    assert.equal(indirizzoServer(""), "");
+    assert.equal(indirizzoServer("http://192.168.1.10:8000/rest/v1"), "", "non è l'indirizzo del server");
+});
+
+test("chiave data dal server, senza copiarla", async () => {
+    const finto = (stato, corpo) => async (url) => {
+        assert.equal(url, "http://192.168.1.10:8000/mdr/presentazione");
+        return { ok: stato === 200, status: stato, json: async () => corpo };
+    };
+    assert.equal(await chiaveDalServer("http://192.168.1.10:8000", finto(200, { servizio: "mondo-del-risparmio", anon_key: "eyJx" })), "eyJx");
+    await assert.rejects(chiaveDalServer("http://192.168.1.10:8000", finto(200, { servizio: "altro" })), /non è il server del negozio/);
+    await assert.rejects(chiaveDalServer("http://192.168.1.10:8000", finto(401, {})), /errore 401/);
+    await assert.rejects(chiaveDalServer("http://192.168.1.10:8000", async () => { throw new TypeError("fetch failed"); }),
+                         /non raggiungibile/);
+});
 
 test("account col nome breve, come in cassa e gestione", () => {
     assert.equal(emailAccount(" Mario "), "mario@negozio.lan");

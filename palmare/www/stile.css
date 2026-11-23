@@ -38,13 +38,13 @@ input, textarea { user-select: text; }
 /* ---------- Barra superiore ---------- */
 .barra {
     position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: 4px;
-    padding: calc(8px + var(--alto)) 6px 8px 8px; min-height: 64px;
+    display: flex; align-items: center; gap: 2px;
+    padding: calc(4px + var(--alto)) 4px 4px 4px; min-height: 56px;
     background: linear-gradient(135deg, var(--primario), var(--primario-2)); color: #fff;
     box-shadow: 0 2px 10px rgba(22, 57, 92, .25);
 }
 .titoli { flex: 1; min-width: 0; padding-left: 8px; }
-.titoli h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .1px;
+.titoli h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .1px;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #sottotitolo { font-size: 13px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #sottotitolo:empty { display: none; }
@@ -81,13 +81,19 @@ body.senza-schede main { padding-bottom: calc(24px + var(--basso)); }
 .bollo-icona.verde { background: var(--verde-chiaro); color: var(--verde); }
 .bollo-icona.arancio { background: var(--arancio-chiaro); color: var(--arancio); }
 
-/* Barra di lettura del codice */
+/* Barra di lettura del codice: sempre in cima sotto la barra, come sui terminali di magazzino */
 .lettore {
     display: flex; align-items: center; gap: 4px;
-    background: var(--superficie); border-radius: 999px; box-shadow: var(--ombra);
-    padding: 4px 4px 4px 16px; margin: 0 0 14px; border: 2px solid transparent;
+    background: var(--superficie); border-radius: 14px; box-shadow: var(--ombra);
+    padding: 2px 2px 2px 14px; margin: 0 0 12px; border: 2px solid var(--linea);
+    position: sticky; top: calc(62px + var(--alto)); z-index: 5;
 }
 .lettore:focus-within { border-color: var(--primario-2); }
+/* Lettura riuscita (verde) o sbagliata (rosso): un lampo sul bordo, col suono */
+.lettore.letto-ok { animation: lampo-ok .6s ease-out; }
+.lettore.letto-ko { animation: lampo-ko .9s ease-out; }
+@keyframes lampo-ok { from { border-color: var(--verde); background: var(--verde-chiaro); } }
+@keyframes lampo-ko { from { border-color: var(--rosso); background: var(--rosso-chiaro); } }
 .lettore .icona { color: var(--testo-2); }
 .lettore input {
     flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
@@ -131,7 +137,7 @@ label.etichetta { display: block; font-size: 13px; font-weight: 600; color: var(
 /* Elenchi */
 .elenco { list-style: none; margin: 0; padding: 0; background: var(--superficie); border-radius: var(--raggio);
           box-shadow: var(--ombra); overflow: hidden; }
-.riga-elenco { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; min-height: 64px; }
+.riga-elenco { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; min-height: 58px; }
 .riga-elenco + .riga-elenco { border-top: 1px solid var(--linea); }
 .riga-elenco .testo { flex: 1; min-width: 0; }
 .riga-elenco .testo b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -168,6 +174,35 @@ label.etichetta { display: block; font-size: 13px; font-weight: 600; color: var(
 .ruota { width: 36px; height: 36px; border-radius: 50%; border: 4px solid var(--primario-chiaro);
          border-top-color: var(--primario-2); animation: gira .8s linear infinite; }
 @keyframes gira { to { transform: rotate(360deg); } }
+
+/* ---------- Menu a riquadri (prima schermata) ---------- */
+.menu { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tessera {
+    position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    min-height: 148px; padding: 16px 14px; border: 0; border-radius: var(--raggio);
+    background: var(--superficie); box-shadow: var(--ombra); color: var(--testo);
+    font-family: inherit; text-align: left;
+}
+.tessera:active { background: var(--primario-chiaro); transform: scale(.98); }
+.tessera .bollo-icona { width: 56px; height: 56px; margin-bottom: 8px; }
+.tessera .bollo-icona .icona { width: 30px; height: 30px; }
+.tessera b { font-size: 19px; font-weight: 700; }
+.tessera small { font-size: 14px; color: var(--testo-2); line-height: 1.25; }
+/* La prima (Cerca articolo) è la più usata: tutta la riga */
+.tessera:first-child { grid-column: 1 / -1; min-height: 104px; flex-direction: row; align-items: center; gap: 14px; }
+.tessera:first-child .bollo-icona { margin: 0; background: var(--primario); color: #fff; }
+.tessera:first-child > b { font-size: 21px; }
+.tessera:first-child small { display: none; }
+.contatore {
+    position: absolute; top: 12px; right: 12px; min-width: 30px; height: 30px; padding: 0 9px;
+    border-radius: 999px; background: var(--accento); color: #1f1300;
+    font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+
+/* Chiave a mano nella configurazione del server: nascosta, serve solo se il server non la dà */
+details.avanzate { margin-top: 14px; }
+details.avanzate summary { color: var(--testo-2); font-size: 14px; padding: 8px 2px; }
+details.avanzate textarea { margin-top: 6px; }
 
 /* ---------- Navigazione in basso ---------- */
 .schede {
