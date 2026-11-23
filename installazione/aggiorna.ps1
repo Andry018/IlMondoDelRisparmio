@@ -118,6 +118,11 @@ for ($i = 0; $i -lt $AttesaAvvio; $i++) {
 
 if ($ok) {
     Remove-Item -Force $conferma -ErrorAction SilentlyContinue
+    # Versione nuova anche in "App installate" di Windows (se l'installazione ve l'ha registrata)
+    $chiaveApp = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MondoDelRisparmio"   # ($registro e' il log)
+    if ($Versione -and (Test-Path $chiaveApp)) {
+        Set-ItemProperty -Path $chiaveApp -Name DisplayVersion -Value $Versione -ErrorAction SilentlyContinue
+    }
     Scrivi "Aggiornamento $Versione installato. Versione precedente in $precedente"
     exit 0
 }

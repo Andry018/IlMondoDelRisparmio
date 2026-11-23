@@ -62,6 +62,23 @@ function Collegamento([string]$percorso, [string]$destinazione, [string]$argomen
 }
 
 if (-not $NessunCollegamento) {
+    # In "App installate" di Windows (Impostazioni > App), per l'utente: senza permessi di amministratore
+    $registro = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MondoDelRisparmio"
+    $fileVersione = Join-Path $Cartella "versione.txt"
+    $versioneInstallata = if (Test-Path $fileVersione) { (Get-Content $fileVersione -TotalCount 1).Trim() } else { "" }
+    New-Item -Path $registro -Force | Out-Null
+    Set-ItemProperty -Path $registro -Name DisplayName -Value "Mondo del Risparmio (cassa e gestione)"
+    Set-ItemProperty -Path $registro -Name DisplayVersion -Value $versioneInstallata
+    Set-ItemProperty -Path $registro -Name Publisher -Value "Mondo del Risparmio"
+    Set-ItemProperty -Path $registro -Name DisplayIcon -Value "$exe,0"
+    Set-ItemProperty -Path $registro -Name InstallLocation -Value $Cartella
+    Set-ItemProperty -Path $registro -Name UninstallString -Value ('"' + (Join-Path $Cartella "Disinstalla.bat") + '"')
+    Set-ItemProperty -Path $registro -Name NoModify -Value 1 -Type DWord
+    Set-ItemProperty -Path $registro -Name NoRepair -Value 1 -Type DWord
+    $kb = [int]((Get-ChildItem $Cartella -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
+    Set-ItemProperty -Path $registro -Name EstimatedSize -Value $kb -Type DWord
+    Write-Host "Registrato in App installate di Windows"
+
     $desktop = [Environment]::GetFolderPath("Desktop")
     Collegamento (Join-Path $desktop "Cassa Mondo del Risparmio.lnk") $exe "--schermo-intero" "Cassa a schermo intero"
     Collegamento (Join-Path $desktop "Gestione Mondo del Risparmio.lnk") $exeGestione "" "Anagrafiche e amministrazione"

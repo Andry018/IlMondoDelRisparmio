@@ -6,6 +6,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Fuori dalla cartella del programma (il collegamento Disinstalla parte da li'): Windows non lascia
+# cancellare la cartella corrente di un processo
+Set-Location -LiteralPath ([IO.Path]::GetTempPath())
+[Environment]::CurrentDirectory = [IO.Path]::GetTempPath()
 
 if (Get-Process mdr-cassa, mdr-gestione -ErrorAction SilentlyContinue) {
     Write-Host "ERRORE: cassa o gestione aperta: chiuderle e rilanciare." -ForegroundColor Red
@@ -27,6 +31,8 @@ foreach ($c in $collegamenti) {
     if (Test-Path $c) { Remove-Item -Recurse -Force $c }
 }
 if (Test-Path $Cartella) { Remove-Item -Recurse -Force $Cartella }
+# Via anche da "App installate" di Windows
+Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MondoDelRisparmio" -Recurse -Force -ErrorAction SilentlyContinue
 
 $dati = Join-Path $env:LOCALAPPDATA "Mondo del Risparmio"
 Write-Host "Cassa e gestione disinstallate." -ForegroundColor Green

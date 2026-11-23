@@ -75,6 +75,8 @@ do {
 # 4. Installazione, disinstallazione, istruzioni, crediti delle immagini.
 Copy-Item (Join-Path $radice "installazione\*") $pacchetto
 Copy-Item (Join-Path $radice "src\cassa\risorse\euro\CREDITI.txt") (Join-Path $app "CREDITI-immagini.txt")
+# Versione accanto ai programmi: installazione e aggiornamento la scrivono in "App installate" di Windows
+Set-Content -Path (Join-Path $app "versione.txt") -Value $versione -Encoding ASCII
 
 $zip = Join-Path $Uscita "$nome.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
