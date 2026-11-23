@@ -102,10 +102,12 @@ def messaggio_errore(testo):
 class Supabase:
     """Chiamate alle funzioni sdi_* con la service_role key."""
 
-    def __init__(self, url, chiave):
+    def __init__(self, url, chiave, chiave_ingresso=None):
+        # chiave_ingresso: la chiave che controlla l'ingresso (apikey). Su Supabase va bene anche la
+        # service_role; il server nativo su Windows (Caddy) accetta solo la chiave anon.
         self.url = url.rstrip("/")
         self.intestazioni = {
-            "apikey": chiave,
+            "apikey": chiave_ingresso or chiave,
             "Authorization": f"Bearer {chiave}",
             "Content-Type": "application/json",
         }
@@ -281,7 +283,7 @@ def da_ambiente():
     if mancanti:
         sys.exit(f"Variabili d'ambiente mancanti: {', '.join(mancanti)}")
     return Connettore(
-        Supabase(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"]),
+        Supabase(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"], os.environ.get("SUPABASE_ANON_KEY")),
         Openapi(os.environ.get("OPENAPI_URL", "https://test.invoice.openapi.com"), os.environ["OPENAPI_TOKEN"]),
         partita_iva=os.environ.get("OPENAPI_FISCAL_ID"),
         giorni_passive=int(os.environ.get("PASSIVE_GIORNI", "30")),

@@ -12,6 +12,7 @@ indirizzo (`http://<pc>:8000`) e la stessa chiave, come con Supabase.
 | **Login** | `/auth/v1/token` nel database (`accesso.sql`), password bcrypt come GoTrue | — |
 | **Backup** | all'accensione (dopo 5 minuti) e ogni 4 ore, controllato e copiato su un secondo disco | attività "MDR Backup" |
 | **Prova di ripristino** | una volta al mese, all'accensione | attività "MDR Prova ripristino" |
+| **Connettore SDI** | fatture elettroniche verso Openapi e passive dai fornitori (`infra/connettore-sdi`) | attività "MDR Connettore SDI" all'accensione, se configurato |
 
 PostgREST e Caddy si scaricano con versione e impronta SHA-256 fisse (in `installa_server.ps1`).
 
@@ -38,6 +39,35 @@ PostgREST e Caddy si scaricano con versione e impronta SHA-256 fisse (in `instal
    amministratore. Gli altri utenti si creano dalla gestione, scheda Operatori.
 5. **Dati di SystemApp**: come da [MIGRAZIONE_SYSTEMAPP](../../docs/MIGRAZIONE_SYSTEMAPP.md), poi
    l'inventario completo.
+
+## Fatture elettroniche (SDI)
+
+Il connettore (`infra/connettore-sdi/connettore_sdi.py`, lo stesso della versione Linux) gira
+sul server: è l'unico posto dove sta il token di Openapi.
+
+1. **Python 3** sul server: installatore di python.org, opzione "Install for all users"
+   (l'attività gira come SYSTEM). `installa_server.ps1` lo trova da solo; altrimenti `-Python <percorso>`.
+2. Account e token su Openapi: vedi [infra/connettore-sdi/README.md](../connettore-sdi/README.md).
+3. Da PowerShell come amministratore:
+
+   ```powershell
+   .\infra\windows\installa_server.ps1 -Sdi -SdiPartitaIva 01234567890          # prove (sandbox)
+   .\infra\windows\installa_server.ps1 -Sdi -SdiProduzione                      # fatture vere
+   ```
+
+   Chiede il token senza mostrarlo (Invio = tiene quello di prima). Token, partita IVA e
+   indirizzo di Openapi restano in `config\server.env`, leggibile solo dagli amministratori.
+   Senza `-SdiProduzione` le fatture vanno alla sandbox e **non arrivano allo SDI**; in produzione
+   una fattura inviata non si ritira (solo nota di credito).
+
+Il connettore passa da Caddy come cassa e gestione: chiave anon in `apikey`, chiave
+`service_role` (generata dall'installazione, `MDR_SERVICE_KEY`) per l'autorizzazione. Un ciclo
+ogni 2 minuti; se si ferma per un errore l'attività lo riavvia dopo 5 minuti. Log in
+`log\connettore-sdi.log`. Prova di un ciclo a mano:
+
+```powershell
+& C:\MondoDelRisparmio\server\script\connettore_sdi.ps1 -Cartella C:\MondoDelRisparmio\server -UnCiclo
+```
 
 ## Il PC si spegne la sera
 

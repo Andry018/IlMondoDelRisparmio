@@ -18,6 +18,12 @@
 #   -Postgrest, -Caddy   archivi .zip gia' scaricati (installazione senza Internet)
 #   -Amministratore      email del primo amministratore (server nuovo): chiede la password
 #   -SenzaAttivita       niente attivita' pianificate, firewall e permessi (prove)
+#   -Sdi                 configura le fatture elettroniche (Openapi): chiede il token (non va
+#                        scritto sulla riga di comando) e la partita IVA; senza -SdiProduzione
+#                        si usa la sandbox di prova (test.invoice.openapi.com)
+#   -SdiPartitaIva       partita IVA del negozio
+#   -SdiProduzione       fatture vere (invoice.openapi.com): una fattura inviata non si ritira
+#   -Python              python.exe da usare per il connettore SDI (predefinito: quello installato)
 # (file in solo ASCII: PowerShell 5.1 legge i .ps1 senza BOM come ANSI)
 param(
     [string]$Cartella = "C:\MondoDelRisparmio\server",
@@ -34,7 +40,11 @@ param(
     [string]$Amministratore = "",
     [string]$PasswordAmministratore = "",
     [switch]$SenzaAttivita,
-    [switch]$SenzaDatiIniziali
+    [switch]$SenzaDatiIniziali,
+    [switch]$Sdi,
+    [string]$SdiPartitaIva = "",
+    [switch]$SdiProduzione,
+    [string]$Python = ""
 )
 . "$PSScriptRoot\comune.ps1"
 
@@ -113,6 +123,8 @@ Copy-Item (Join-Path $PSScriptRoot "*") (Join-Path $Cartella "script") -Include 
 Remove-Item (Join-Path $Cartella "script\supabase\migrations") -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $progetto "supabase\migrations") (Join-Path $Cartella "script\supabase\migrations") -Recurse -Force
 Copy-Item (Join-Path $progetto "supabase\seed.sql") (Join-Path $Cartella "script\supabase") -Force
+# Connettore SDI: lo stesso programma della versione Linux, avviato da connettore_sdi.ps1
+Copy-Item (Join-Path $progetto "infra\connettore-sdi\connettore_sdi.py") (Join-Path $Cartella "script") -Force
 $script = Join-Path $Cartella "script"
 
 # 3. Base "come Supabase", migrazioni (con backup se il database era gia' in uso), dati iniziali, login
@@ -130,6 +142,44 @@ if (-not $conf["MDR_ANON_KEY"]) {
     # Come Supabase: la chiave anon e' un JWT con ruolo anon (scadenza 2100)
     # (niente virgolette doppie: PowerShell 5.1 le toglie dagli argomenti dei programmi)
     $conf["MDR_ANON_KEY"] = (Esegui-Sql $conf "select accesso.firma(jsonb_build_object('role', 'anon', 'iss', 'mdr', 'exp', 4102444800))").Trim()
+}
+# Chiave service_role per il connettore SDI (come SERVICE_ROLE_KEY di Supabase): resta in config\
+if (-not $conf["MDR_SERVICE_KEY"]) {
+    $conf["MDR_SERVICE_KEY"] = (Esegui-Sql $conf "select accesso.firma(jsonb_build_object('role', 'service_role', 'iss', 'mdr', 'exp', 4102444800))").Trim()
+}
+
+# Python per il connettore SDI. L'attivita' gira come SYSTEM, che non ha il PATH dell'utente:
+# si salva il percorso completo. Mai lo "python.exe" finto di WindowsApps (apre lo Store).
+function Trova-Python {
+    $candidati = @()
+    $py = Get-Command py -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) { $candidati += (& $py.Source -3 -c "import sys; print(sys.executable)" 2>$null) }
+    $candidati += Get-Command python, python3 -ErrorAction SilentlyContinue | ForEach-Object { $_.Source }
+    $candidati += Get-ChildItem "C:\Program Files\Python3*\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | ForEach-Object { $_.FullName }
+    foreach ($c in $candidati) {
+        if (-not $c -or $c -like "*WindowsApps*" -or -not (Test-Path $c)) { continue }
+        $versione = & $c -c "import sys; print(sys.version_info[0])" 2>$null
+        if ($versione -eq "3") { return $c }
+    }
+    return ""
+}
+if ($Python) { $conf["MDR_PYTHON"] = $Python }
+elseif (-not $conf["MDR_PYTHON"] -or -not (Test-Path $conf["MDR_PYTHON"])) { $conf["MDR_PYTHON"] = Trova-Python }
+
+# Fatture elettroniche (Openapi): solo con -Sdi; il token si chiede senza mostrarlo
+if ($Sdi) {
+    $sicuro = Read-Host "Token di Openapi (prodotto Invoice; Invio = lascia quello di prima)" -AsSecureString
+    $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sicuro))
+    if ($token) { $conf["MDR_OPENAPI_TOKEN"] = $token.Trim() }
+    if (-not $SdiPartitaIva -and -not $conf["MDR_OPENAPI_PIVA"]) { $SdiPartitaIva = Read-Host "Partita IVA del negozio (11 cifre)" }
+    if ($SdiPartitaIva) {
+        $SdiPartitaIva = $SdiPartitaIva.Trim() -replace '^IT', ''
+        if ($SdiPartitaIva -notmatch '^\d{11}$') { throw "Partita IVA non valida: $SdiPartitaIva (servono 11 cifre)" }
+        $conf["MDR_OPENAPI_PIVA"] = $SdiPartitaIva
+    }
+    $conf["MDR_OPENAPI_URL"] = if ($SdiProduzione) { "https://invoice.openapi.com" } else { "https://test.invoice.openapi.com" }
+    if (-not $conf["MDR_OPENAPI_TOKEN"]) { Write-Host "ATTENZIONE: nessun token Openapi: il connettore SDI resta fermo" }
 }
 Scrivi-Configurazione $Cartella $conf
 
@@ -238,6 +288,14 @@ if (-not $SenzaAttivita) {
     $azione = New-ScheduledTaskAction -Execute $ps -Argument "$comune `"$script\prova_ripristino.ps1`" -Cartella `"$Cartella`""
     Register-ScheduledTask -TaskName "MDR Prova ripristino" -Action $azione -Trigger $partenza -Principal $utente -Settings $imp -Force | Out-Null
 
+    # Connettore SDI: all'accensione, dopo il server; se si ferma per un errore riparte da solo.
+    # Senza token Openapi esce subito senza errori (e non riparte).
+    $partenza = New-ScheduledTaskTrigger -AtStartup
+    $partenza.Delay = "PT2M"
+    $azione = New-ScheduledTaskAction -Execute $ps -Argument "$comune `"$script\connettore_sdi.ps1`" -Cartella `"$Cartella`""
+    $imp = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 5) -StartWhenAvailable
+    Register-ScheduledTask -TaskName "MDR Connettore SDI" -Action $azione -Trigger $partenza -Principal $utente -Settings $imp -Force | Out-Null
+
     if (-not (Get-NetFirewallRule -DisplayName "Mondo del Risparmio server" -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName "Mondo del Risparmio server" -Direction Inbound -Protocol TCP -LocalPort $Porta `
             -Action Allow -Profile Private, Domain | Out-Null
@@ -247,11 +305,24 @@ if (-not $SenzaAttivita) {
     if ($LASTEXITCODE -ne 0) { Write-Host "ATTENZIONE: permessi della cartella config non impostati" }
 
     Start-ScheduledTask -TaskName "MDR Server"
+    # Connettore riavviato con la configurazione nuova (Register -Force non ferma quello in corsa)
+    if ($conf["MDR_OPENAPI_TOKEN"] -and $conf["MDR_PYTHON"]) {
+        Stop-ScheduledTask -TaskName "MDR Connettore SDI" -ErrorAction SilentlyContinue
+        Start-ScheduledTask -TaskName "MDR Connettore SDI"
+    }
 }
 
 Write-Host ""
 Write-Host "Server pronto. Nelle Impostazioni di cassa e gestione:"
 Get-Content (Join-Path $Cartella "config\chiavi.txt") | Select-Object -Skip 1 | ForEach-Object { Write-Host "  $_" }
+if (-not $conf["MDR_OPENAPI_TOKEN"]) {
+    Write-Host "Fatture elettroniche: non configurate (rilanciare con -Sdi quando c'e' il token Openapi)"
+} elseif (-not $conf["MDR_PYTHON"]) {
+    Write-Host "ATTENZIONE: fatture elettroniche configurate ma Python 3 non trovato: installarlo (per tutti gli utenti) e rilanciare" -ForegroundColor Yellow
+} else {
+    $ambiente = if ($conf["MDR_OPENAPI_URL"] -like "*test.*") { "PROVA (sandbox): non arrivano allo SDI" } else { "PRODUZIONE" }
+    Write-Host "Fatture elettroniche: $ambiente; log in $Cartella\log\connettore-sdi.log"
+}
 if (-not $conf["MDR_BACKUP_COPIA"]) {
     Write-Host "ATTENZIONE: nessuna seconda copia dei backup (-BackupCopia): un guasto del disco li perderebbe tutti"
 }

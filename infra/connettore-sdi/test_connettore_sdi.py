@@ -308,6 +308,33 @@ class TestConnettore(unittest.TestCase):
             oa.fattura("oa-1")
         self.assertEqual(e.exception.status, 401)
 
+    def test_chiave_ingresso_separata(self):
+        # Server nativo su Windows: Caddy vuole la chiave anon in apikey, la service_role va in Authorization
+        ricevute = []
+
+        class Ingresso(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                ricevute.append((self.headers.get("apikey"), self.headers.get("Authorization")))
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"[]")
+
+        server, url = avvia(Ingresso)
+        try:
+            cs.Supabase(url, "chiave-servizio", "chiave-anon").rpc("sdi_invii_sospesi")
+            cs.Supabase(url, "chiave-servizio").rpc("sdi_invii_sospesi")   # come su Supabase: la stessa
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(ricevute, [("chiave-anon", "Bearer chiave-servizio"),
+                                    ("chiave-servizio", "Bearer chiave-servizio")])
+
     def test_supabase_irraggiungibile(self):
         db = cs.Supabase("http://127.0.0.1:9", CHIAVE)
         with self.assertRaises(cs.ErroreHttp) as e:

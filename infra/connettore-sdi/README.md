@@ -53,6 +53,10 @@ circa ogni 60 secondi, quindi non serve andare più veloci.
 
 ## Installazione sul server
 
+**Server nativo su Windows** (quello del negozio): lo installa `infra\windows\installa_server.ps1 -Sdi`,
+vedi [infra/windows/README.md](../windows/README.md#fatture-elettroniche-sdi). Quanto segue è per
+il server Linux con Supabase in Docker.
+
 ```bash
 sudo mkdir -p /opt/mdr && sudo cp infra/connettore-sdi/connettore_sdi.py /opt/mdr/
 sudo cp infra/connettore-sdi/connettore-sdi.service infra/connettore-sdi/connettore-sdi.timer /etc/systemd/system/
@@ -68,6 +72,7 @@ journalctl -u connettore-sdi -f                             # log
 |---|---|
 | `SUPABASE_URL` | `http://localhost:8000` |
 | `SUPABASE_SERVICE_KEY` | `SERVICE_ROLE_KEY` del `.env` di Supabase |
+| `SUPABASE_ANON_KEY` | facoltativa: chiave per l'intestazione `apikey` quando l'ingresso accetta solo la anon (server su Windows); senza, si usa la service_role |
 | `OPENAPI_URL` | `https://test.invoice.openapi.com` per le prove, poi `https://invoice.openapi.com` |
 | `OPENAPI_TOKEN` | token OAuth di Openapi |
 | `OPENAPI_FISCAL_ID` | partita IVA del negozio (serve per le passive e per ritrovare gli invii sospesi) |

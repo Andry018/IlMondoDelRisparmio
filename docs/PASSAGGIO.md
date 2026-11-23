@@ -34,6 +34,10 @@ trovare i problemi adesso e non il giorno del passaggio.
       una richiesta di etichetta.
 - [ ] Backup: in gestione il cruscotto deve dire che il backup c'è; aprire la cartella della
       seconda copia e controllare che il file ci sia.
+- [ ] Fatture elettroniche in **sandbox** (serve Python 3 sul server e un token Openapi di prova):
+      `installa_server.ps1 -Sdi -SdiPartitaIva <partita IVA del negozio>`, poi una fattura vera
+      emessa dalla gestione: nella console di Openapi deve risultare valida
+      (`log\connettore-sdi.log` sul server). Non arriva allo SDI.
 - [ ] Annotare i tempi (estrazione, caricamento, prima sincronizzazione delle casse) per
       organizzare il giorno vero.
 
