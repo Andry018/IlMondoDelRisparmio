@@ -275,6 +275,93 @@ QIcon iconaMenu(const QString& nome, const QColor& colore, int lato)
         pieno(QRectF(30, 14, 8, 8));
         pieno(QRectF(41, 22, 8, 8));
         pieno(QRectF(22, 34, 10, 10));
+    // --- Tasti della cassa ---
+    } else if (nome == QLatin1String("contanti")) {
+        // Banconota: rettangolo, cerchio al centro, due angoli
+        p.drawRoundedRect(QRectF(4, 16, 56, 32), 4, 4);
+        p.drawEllipse(QRectF(24, 24, 16, 16));
+        p.drawLine(11, 24, 11, 24);
+        p.drawLine(53, 40, 53, 40);
+    } else if (nome == QLatin1String("carta")) {
+        // Carta di credito: banda magnetica e numero
+        p.drawRoundedRect(QRectF(4, 14, 56, 36), 5, 5);
+        p.setPen(QPen(colore, 7, Qt::SolidLine, Qt::FlatCap));
+        p.drawLine(5, 25, 59, 25);
+        p.setPen(penna);
+        p.drawLine(12, 40, 28, 40);
+    } else if (nome == QLatin1String("bancomat")) {
+        // Carta col chip
+        p.drawRoundedRect(QRectF(4, 14, 56, 36), 5, 5);
+        p.drawRoundedRect(QRectF(12, 23, 14, 11), 2, 2);
+        p.drawLine(12, 42, 26, 42);
+        p.drawLine(34, 42, 50, 42);
+    } else if (nome == QLatin1String("pagamenti")) {
+        // Portafoglio
+        p.drawRoundedRect(QRectF(6, 16, 52, 38), 5, 5);
+        p.drawLine(12, 16, 44, 8);
+        p.drawRoundedRect(QRectF(38, 28, 20, 14), 3, 3);
+        pieno(QRectF(44, 32, 6, 6));
+    } else if (nome == QLatin1String("articolo_libero")) {
+        // Cartellino del prezzo con il più
+        QPainterPath t;
+        t.moveTo(6, 32); t.lineTo(26, 10); t.lineTo(50, 10); t.lineTo(50, 34); t.lineTo(28, 56); t.closeSubpath();
+        p.drawPath(t);
+        p.drawLine(28, 33, 40, 33);
+        p.drawLine(34, 27, 34, 39);
+    } else if (nome == QLatin1String("sconto")) {
+        p.drawLine(16, 50, 48, 14);
+        p.drawEllipse(QRectF(12, 12, 13, 13));
+        p.drawEllipse(QRectF(39, 39, 13, 13));
+    } else if (nome == QLatin1String("annulla")) {
+        // Cerchio barrato
+        p.drawEllipse(QRectF(8, 8, 48, 48));
+        p.drawLine(22, 22, 42, 42);
+        p.drawLine(42, 22, 22, 42);
+    } else if (nome == QLatin1String("storna")) {
+        // Riga tolta: righe dello scontrino, l'ultima col meno
+        p.drawLine(8, 14, 42, 14);
+        p.drawLine(8, 28, 42, 28);
+        p.drawEllipse(QRectF(32, 34, 24, 24));
+        p.drawLine(38, 46, 50, 46);
+    } else if (nome == QLatin1String("quantita")) {
+        // Pila di scatole
+        p.drawRect(QRectF(8, 34, 22, 20));
+        p.drawRect(QRectF(34, 34, 22, 20));
+        p.drawRect(QRectF(21, 10, 22, 20));
+    } else if (nome == QLatin1String("cassetto")) {
+        // Cassetto aperto con la maniglia
+        p.drawRect(QRectF(6, 12, 52, 22));
+        p.drawRect(QRectF(10, 34, 44, 20));
+        p.drawLine(26, 44, 38, 44);
+    } else if (nome == QLatin1String("ristampa")) {
+        // Stampante con il foglio
+        p.drawRoundedRect(QRectF(6, 24, 52, 22), 4, 4);
+        p.drawRect(QRectF(18, 8, 28, 16));
+        p.drawRect(QRectF(18, 38, 28, 18));
+        pieno(QRectF(47, 30, 5, 5));
+    } else if (nome == QLatin1String("cerca")) {
+        p.drawEllipse(QRectF(8, 8, 32, 32));
+        p.setPen(QPen(colore, 7, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(37, 37, 54, 54);
+    } else if (nome == QLatin1String("codice_fiscale")) {
+        // Tessera con la persona
+        p.drawRoundedRect(QRectF(4, 12, 56, 40), 5, 5);
+        p.drawEllipse(QRectF(12, 20, 14, 14));
+        p.drawArc(QRectF(9, 36, 20, 16), 0, 180 * 16);
+        p.drawLine(34, 26, 52, 26);
+        p.drawLine(34, 38, 48, 38);
+    } else if (nome == QLatin1String("verifica_prezzo")) {
+        // Cartellino con il punto interrogativo
+        QPainterPath t;
+        t.moveTo(6, 32); t.lineTo(26, 10); t.lineTo(50, 10); t.lineTo(50, 34); t.lineTo(28, 56); t.closeSubpath();
+        p.drawPath(t);
+        QPainterPath d;
+        d.moveTo(23, 27); d.cubicTo(23, 19, 37, 19, 37, 27); d.cubicTo(37, 32, 30, 32, 30, 38);
+        p.drawPath(d);
+        pieno(QRectF(28, 43, 5, 5));
+    } else if (nome == QLatin1String("operatore")) {
+        p.drawEllipse(QRectF(22, 8, 20, 20));
+        p.drawArc(QRectF(10, 34, 44, 36), 0, 180 * 16);
     } else {
         pieno(QRectF(24, 24, 16, 16));
     }

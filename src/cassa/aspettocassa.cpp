@@ -110,6 +110,7 @@ const QList<Comando>& tuttiIComandi()
         {QStringLiteral("storna"), QStringLiteral("Storna riga"), QKeySequence(Qt::Key_F4)},
         {QStringLiteral("annulla"), QStringLiteral("Annulla scontrino"), QKeySequence(Qt::Key_F8)},
         {QStringLiteral("chiusura_z"), QStringLiteral("Chiusura Z"), QKeySequence(Qt::Key_F10)},
+        {QStringLiteral("cassetto"), QStringLiteral("Apri cassetto"), QKeySequence()},
         {QStringLiteral("operatore"), QStringLiteral("Operatore"), QKeySequence(Qt::Key_F1)},
         // Pagina con i comandi tolti dallo schermo (quelli usati di rado: chiusura Z, operatore...)
         {QStringLiteral("altro"), QStringLiteral("Altro…"), QKeySequence()},
@@ -135,11 +136,12 @@ QList<PostoPannello> AspettoCassa::disposizionePredefinita()
 
 QStringList AspettoCassa::comandiPredefiniti()
 {
-    // Sullo schermo quelli di ogni scontrino; quantità e storno sono anche sulla riga (✕),
-    // chiusura Z e operatore servono poche volte al giorno: stanno in "Altro…" (e sui tasti F).
+    // Sullo schermo quelli di ogni scontrino; quantità e storno sono anche sulla riga (✕).
+    // Chiusura Z, cassetto, operatore e gli altri comandi stanno nella fila sotto le righe dello
+    // scontrino (Cassa…, Apri cassetto, Operatore) e sui tasti F.
     return {QStringLiteral("contanti"), QStringLiteral("carta"), QStringLiteral("bancomat"),
             QStringLiteral("altri_pagamenti"), QStringLiteral("articolo_libero"), QStringLiteral("sconto"),
-            QStringLiteral("annulla"), QStringLiteral("altro")};
+            QStringLiteral("annulla")};
 }
 
 QString AspettoCassa::nomePagina(const TastoRapido& t)
@@ -353,8 +355,14 @@ AspettoCassa AspettoCassa::carica(const QString& file)
     if (const auto l = s.value("larghezze").toString().split(QLatin1Char(',')); l.size() == numeroColonne)
         for (int i = 0; i < numeroColonne; ++i)
             a.larghezze[i] = l[i].trimmed().toInt();
-    if (s.contains("comandi"))
+    if (s.contains("comandi")) {
         a.comandi = s.value("comandi").toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+        // File di prima della fila sotto lo scontrino: chiusura Z, operatore e "Altro…" passano
+        // lì e la colonna dei comandi si accorcia (una volta sola: poi vale la scelta salvata)
+        if (s.value("versione_comandi", 1).toInt() < 2)
+            for (const char* k : {"chiusura_z", "operatore", "altro", "cassetto"})
+                a.comandi.removeAll(QLatin1String(k));
+    }
     a.colonneComandi = s.value("colonne_comandi", a.colonneComandi).toInt();
     a.colonneTasti = s.value("colonne_tasti", a.colonneTasti).toInt();
     a.colonnaPrezzo = s.value("colonna_prezzo", true).toBool();
@@ -412,6 +420,7 @@ void AspettoCassa::salva(const QString& file) const
     s.setValue("pannelli", p.join(QLatin1Char(',')));
     s.setValue("larghezze", QStringLiteral("%1,%2,%3").arg(larghezze[0]).arg(larghezze[1]).arg(larghezze[2]));
     s.setValue("comandi", comandi.join(QLatin1Char(',')));
+    s.setValue("versione_comandi", 2);
     s.setValue("colonne_comandi", colonneComandi);
     s.setValue("colonne_tasti", colonneTasti);
     s.setValue("colonna_prezzo", colonnaPrezzo);

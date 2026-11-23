@@ -28,6 +28,8 @@
 #include <QFontDatabase>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSettings>
@@ -353,6 +355,27 @@ private slots:
         };
         cassa()->guidaTasti();
 
+        // Ricerca per descrizione, con la tastiera sullo schermo
+        cassa()->esegui = [&cartella](QDialog& d) {
+            d.findChild<QLineEdit*>("cerca_testo")->setText("de");
+            d.resize(1000, 740);
+            d.show();
+            QTest::qWait(50);
+            d.grab().save(cartella + "/pos_cerca_articolo.png");
+            return int(QDialog::Rejected);
+        };
+        cassa()->cercaArticolo();
+        cassa()->esegui = [](QDialog& d) { return d.exec(); };
+
+        // Scontrino pagato: resto in grande, righe vuote col suggerimento, registratore che non risponde
+        cassa()->cambiaScontrino(1);
+        cassa()->paga(TipoPagamento::Carta);   // poi torna da solo allo scontrino 1
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(1000));
+        cassa()->segnalaRt({false, QStringLiteral("Registratore non raggiungibile: collegamento a 127.0.0.1 non riuscito.")});
+        QTest::qWait(50);
+        m_finestra->grab().save(cartella + "/pos_resto_e_avviso_rt.png");
+        cassa()->segnalaRt({true});
+
         auto* schede = m_finestra->findChild<QTabWidget*>();
         for (int i = 1; i < schede->count(); ++i) {
             schede->setCurrentIndex(i);
@@ -374,6 +397,10 @@ private slots:
         cassa()->applicaAspetto(a);
         QTest::qWait(50);
         m_finestra->grab().save(cartella + "/pos_aspetto_scuro.png");
+        // Con testo grande, icone e tasti a sinistra lo scontrino ci sta ancora nei 1024 punti
+        auto* scontrino = cassa()->findChild<QWidget*>("pannello_scontrino");
+        QVERIFY2(scontrino->minimumSizeHint().width() <= scontrino->width(),
+                 qPrintable(QStringLiteral("serve %1, ci sono %2").arg(scontrino->minimumSizeHint().width()).arg(scontrino->width())));
         a.tema = AspettoCassa::Tema::Contrasto;
         a.testo = AspettoCassa::Testo::MoltoGrande;
         a.specchia();
@@ -489,9 +516,12 @@ private slots:
         QCOMPARE(cassa()->carrello().righe()[1].descrizione, QStringLiteral("Latte intero 1L"));
         QVERIFY(testo("messaggio").contains("Stornato"));
 
-        // Comandi predefiniti: chiusura Z e operatore non sono sullo schermo ma in "Altro…"
-        QVERIFY(cassa()->findChild<QPushButton*>("altro")->isVisible());
-        QVERIFY(!cassa()->findChild<QPushButton*>("chiusura_z")->isVisible());
+        // Comandi predefiniti: chiusura Z, operatore e "Altro…" non sono nella colonna di destra
+        // ma nella fila sotto le righe (Cassa…, Apri cassetto, Operatore)
+        for (const char* k : {"altro", "chiusura_z", "operatore", "cassetto"})
+            QVERIFY2(!cassa()->findChild<QPushButton*>(k)->isVisible(), k);
+        for (const char* k : {"barra_cassa", "barra_cassetto", "barra_operatore"})
+            QVERIFY2(cassa()->findChild<QPushButton*>(k)->isVisible(), k);
         QStringList nellaPagina;
         cassa()->esegui = [&nellaPagina](QDialog& d) {
             for (auto* b : d.findChildren<QPushButton*>())
@@ -501,10 +531,125 @@ private slots:
             return d.result();
         };
         cassa()->findChild<QTableWidget*>("righe")->selectRow(0);
-        clic("altro");
-        QCOMPARE(nellaPagina, (QStringList{"quantita", "storna", "chiusura_z", "operatore"}));
+        clic("barra_cassa");
+        QCOMPARE(nellaPagina, (QStringList{"quantita", "storna", "chiusura_z", "cassetto", "operatore"}));
         QCOMPARE(cassa()->carrello().righe().size(), 1);   // stornata la riga scelta
+
+        // Chiusura Z sullo schermo per scelta: nella pagina Cassa resta lo stesso
+        AspettoCassa a;
+        a.comandi << QStringLiteral("chiusura_z");
+        cassa()->applicaAspetto(a);
+        nellaPagina.clear();
+        cassa()->esegui = [&nellaPagina](QDialog& d) {
+            for (auto* b : d.findChildren<QPushButton*>())
+                if (b->objectName().startsWith("altro_"))
+                    nellaPagina << b->objectName().mid(6);
+            return QDialog::Rejected;
+        };
+        clic("barra_cassa");
+        QVERIFY(nellaPagina.contains("chiusura_z"));
         cassa()->esegui = [](QDialog& d) { return d.exec(); };
+    }
+
+    void apertura_cassetto_senza_vendita()
+    {
+        clic("barra_cassetto");
+        QVERIFY(testo("messaggio").contains("Cassetto aperto"));
+        QVERIFY(cassa()->findChild<QPlainTextEdit*>("giornale")->toPlainText().contains("Cassetto aperto senza vendita"));
+    }
+
+    void scontrino_vuoto_pezzi_e_colori()
+    {
+        auto* vuoto = cassa()->findChild<QLabel*>("scontrino_vuoto");
+        QVERIFY(vuoto->isVisible());
+        cassa()->leggi("2*1002");
+        cassa()->leggi("1001");
+        QVERIFY(!vuoto->isVisible());
+        QVERIFY2(testo("residuo").contains("3 pezzi"), qPrintable(testo("residuo")));
+        // Pagamenti colorati, annulla in rosso, ristampa nella fila sotto le righe
+        QVERIFY(cassa()->findChild<QPushButton*>("carta")->styleSheet().contains("#1565c0"));
+        QVERIFY(cassa()->findChild<QPushButton*>("annulla")->styleSheet().contains("#c62828"));
+        QVERIFY(cassa()->findChild<QPushButton*>("ristampa")->isVisible());
+        QCOMPARE(cassa()->findChild<QPushButton*>("ristampa")->y(), cassa()->findChild<QPushButton*>("barra_cassa")->y());
+        // Ogni comando ha la sua icona, anche i tasti della fila e della riga in alto
+        for (const auto& c : tuttiIComandi())
+            QVERIFY2(!cassa()->findChild<QPushButton*>(c.chiave)->icon().isNull(), qPrintable(c.chiave));
+        for (const char* k : {"barra_cassa", "barra_cassetto", "barra_operatore", "ristampa", "codice_fiscale",
+                              "verifica_prezzo", "cerca_articolo"})
+            QVERIFY2(!cassa()->findChild<QPushButton*>(k)->icon().isNull(), k);
+    }
+
+    void resto_in_grande_fino_al_prossimo_articolo()
+    {
+        cassa()->leggi("1002");
+        const Money totale = cassa()->carrello().totale();
+        cassa()->paga(TipoPagamento::Contanti, Money::fromCents(1000));
+        QVERIFY(cassa()->carrello().vuoto());
+        QCOMPARE(cassa()->restoMostrato(), Money::fromCents(1000) - totale);
+        QCOMPARE(testo("titolo_totale"), QStringLiteral("Resto da dare"));
+        QVERIFY(testo("totale").contains((Money::fromCents(1000) - totale).toString()));
+        cassa()->leggi("1001");   // si comincia il prossimo: torna il totale
+        QCOMPARE(testo("titolo_totale"), QStringLiteral("Totale"));
+        QVERIFY(cassa()->restoMostrato().isZero());
+    }
+
+    void errore_colora_il_campo_codice()
+    {
+        auto* codice = cassa()->findChild<QLineEdit*>("codice");
+        cassa()->leggi("codice-che-non-esiste");
+        QVERIFY(codice->styleSheet().contains("#c62828"));
+        QTRY_VERIFY_WITH_TIMEOUT(codice->styleSheet().isEmpty(), 3000);
+    }
+
+    void fascia_del_registratore()
+    {
+        QVERIFY(!cassa()->avvisoRtVisibile());   // simulatore: risponde
+        cassa()->segnalaRt({false, QStringLiteral("collegamento a 127.0.0.1 non riuscito")});
+        QVERIFY(cassa()->avvisoRtVisibile());
+        QVERIFY(testo("testo_avviso_rt").contains("collegamento a 127.0.0.1"));
+        const auto stato = m_finestra->findChildren<QLabel*>();
+        QVERIFY(std::any_of(stato.cbegin(), stato.cend(),
+                            [](QLabel* l) { return l->text().contains("registratore non collegato"); }));
+        clic("riprova_rt");   // il simulatore risponde: la fascia sparisce
+        QVERIFY(!cassa()->avvisoRtVisibile());
+    }
+
+    void cerca_articolo_per_descrizione()
+    {
+        cassa()->findChild<QLineEdit*>("codice")->setText("2");   // quantità scritta prima
+        int trovati = 0;
+        cassa()->esegui = [&trovati](QDialog& d) {
+            // Scritto con la tastiera sullo schermo
+            for (const char* t : {"lettera_L", "lettera_A", "lettera_T", "lettera_T"})
+                d.findChild<QPushButton*>(t)->click();
+            auto* elenco = d.findChild<QListWidget*>("cerca_risultati");
+            trovati = elenco->count();
+            if (trovati > 0)
+                emit elenco->itemClicked(elenco->item(0));
+            return d.result();
+        };
+        clic("cerca_articolo");
+        cassa()->esegui = [](QDialog& d) { return d.exec(); };
+        QVERIFY(trovati > 0);
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        QVERIFY(cassa()->carrello().righe()[0].descrizione.contains("atte", Qt::CaseInsensitive));
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(2));
+    }
+
+    void aspetto_salvato_prima_della_fila_cassa()
+    {
+        // File di una versione precedente: chiusura Z, operatore e Altro escono dalla colonna di destra
+        const QString file = m_dir.filePath("comandi-prima-della-fila.ini");
+        {
+            QSettings s(file, QSettings::IniFormat);
+            s.setValue("aspetto/comandi", "contanti,carta,chiusura_z,operatore,altro");
+        }
+        auto a = AspettoCassa::carica(file);
+        QCOMPARE(a.comandi, (QStringList{"contanti", "carta"}));
+        // Rimessi sullo schermo e salvati: la scelta resta
+        a.comandi << QStringLiteral("chiusura_z");
+        a.salva(file);
+        QCOMPARE(AspettoCassa::carica(file).comandi, (QStringList{"contanti", "carta", "chiusura_z"}));
     }
 
     void tasti_rapidi_a_pagine()
@@ -840,6 +985,40 @@ private slots:
         const auto v = m_archivio->vendite(QDate::currentDate());
         QCOMPARE(v.size(), 1);
         QCOMPARE(pagamentiDaPayload(v[0].payload).first().importo.cents(), 3 * 189 + 2 * 249 + 4 * 5);
+    }
+
+    void storno_durante_la_quantita()
+    {
+        // Un solo tocco sulla ✕ basta anche mentre si scrive una quantità
+        cassa()->leggi("1001");
+        cassa()->leggi("1002");
+        cassa()->leggi("1003");
+        auto* righe = cassa()->findChild<QTableWidget*>("righe");
+        auto* codice = cassa()->findChild<QLineEdit*>("codice");
+        QTest::qWait(30);
+        auto toccaStorno = [righe](int riga) {
+            auto* x = righe->findChild<QPushButton*>(QStringLiteral("storna_%1").arg(riga));
+            QVERIFY(x);
+            QTest::mouseClick(x, Qt::LeftButton);
+            QTest::qWait(20);
+        };
+
+        // Storno di un'altra riga: la quantità scritta si salva, la riga se ne va al primo tocco
+        cassa()->modificaQuantita(0);
+        codice->setText("7");
+        toccaStorno(1);
+        QCOMPARE(cassa()->carrello().righe().size(), 2);
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(7));
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+
+        // Storno della riga che si sta cambiando: se ne va, la quantità scritta non conta
+        cassa()->modificaQuantita(1);
+        codice->setText("9");
+        toccaStorno(1);
+        QCOMPARE(cassa()->carrello().righe().size(), 1);
+        QCOMPARE(cassa()->rigaInModifica(), -1);
+        QVERIFY(codice->text().isEmpty());
+        QCOMPARE(cassa()->carrello().righe()[0].quantita, Quantita::pezzi(7));
     }
 
     void finestra_contanti_con_i_tagli_scelti()

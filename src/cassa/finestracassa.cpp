@@ -74,6 +74,7 @@ FinestraCassa::FinestraCassa(ArchivioLocale& archivio, OperazioniCassa& operazio
     statusBar()->addPermanentWidget(m_statoTerminale);
 
     connect(m_cassa, &VistaCassa::operatoreCambiato, this, &FinestraCassa::aggiornaStato);
+    connect(m_cassa, &VistaCassa::statoRtCambiato, this, &FinestraCassa::aggiornaStato);
     connect(m_cassa, &VistaCassa::documentoEmesso, this, [this] {
         aggiornaStato();
         sincronizzaPresto();
@@ -190,14 +191,20 @@ void FinestraCassa::aggiornaAvvisoRt()
 void FinestraCassa::aggiornaStato()
 {
     aggiornaAvvisoRt();
-    m_statoTerminale->setText(QStringLiteral("Terminale %1 · RT %2 (%3)")
-                                  .arg(m_op.terminale(), m_op.rt().nome(), m_op.rt().matricola()));
+    // Senza matricola il registratore non ha mai risposto: si dice chiaro, in rosso
+    const QString matricola = m_op.rt().matricola();
+    const bool rtAssente = matricola.isEmpty() || m_cassa->avvisoRtVisibile();
+    m_statoTerminale->setText(rtAssente ? QStringLiteral("Terminale %1 · registratore non collegato").arg(m_op.terminale())
+                                        : QStringLiteral("Terminale %1 · %2 %3").arg(m_op.terminale(), m_op.rt().nome(), matricola));
+    m_statoTerminale->setStyleSheet(rtAssente ? QStringLiteral("color: #c62828; font-weight: bold;") : QString());
     const int coda = archivio().contaDaInviare();
     const int rifiutate = archivio().contaDaVerificare();
-    QString testo = coda == 0 ? QStringLiteral("Nessuna operazione in coda")
-                              : QStringLiteral("%1 operazioni da inviare").arg(coda);
+    QString testo = coda == 0   ? QStringLiteral("Nessuna operazione in coda")
+                  : coda == 1   ? QStringLiteral("1 operazione da inviare")
+                                : QStringLiteral("%1 operazioni da inviare").arg(coda);
     if (rifiutate > 0)
-        testo += QStringLiteral(" · %1 RIFIUTATE dal server (vedi Vendite)").arg(rifiutate);
+        testo += rifiutate == 1 ? QStringLiteral(" · 1 RIFIUTATA dal server (vedi Vendite)")
+                                : QStringLiteral(" · %1 RIFIUTATE dal server (vedi Vendite)").arg(rifiutate);
     m_statoCoda->setText(testo);
     // Le vendite non ancora sul server restano solo su questo PC: si devono vedere.
     m_statoCoda->setStyleSheet(coda == 0 && rifiutate == 0 ? QString() : QStringLiteral("color: #c62828; font-weight: bold;"));

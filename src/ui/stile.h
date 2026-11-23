@@ -39,7 +39,10 @@ QString foglioDiStile(const ColoriStile& c);
 
 // Icona a tratto pieno, del colore chiesto: "cruscotto", "articoli", "magazzino", "ordini",
 // "etichette", "promozioni", "vendite", "fatture", "clienti", "fornitori", "chiusure", "resi",
-// "operatori", "negozio", "palmare", "impostazioni", "cassa", "aspetto". Nome sconosciuto: un punto.
+// "operatori", "negozio", "palmare", "impostazioni", "cassa", "aspetto". Tasti della cassa:
+// "contanti", "carta", "bancomat", "pagamenti", "articolo_libero", "sconto", "annulla", "storna",
+// "quantita", "cassetto", "ristampa", "cerca", "codice_fiscale", "verifica_prezzo", "operatore".
+// Nome sconosciuto: un punto.
 QIcon iconaMenu(const QString& nome, const QColor& colore, int lato = 64);
 
 // Menu laterale della gestione: le schede a sinistra, una sotto l'altra, con icona e testo

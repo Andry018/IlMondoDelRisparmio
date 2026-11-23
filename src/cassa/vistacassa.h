@@ -15,6 +15,7 @@
 #include <optional>
 
 class QBoxLayout;
+class QFrame;
 class QGridLayout;
 class QHBoxLayout;
 class QLabel;
@@ -97,8 +98,11 @@ public:
     void modificaQuantita(int riga);
     int rigaInModifica() const { return m_rigaQuantita; }   // -1 = nessuna
     bool confermaQuantita();   // salva quella scritta; false se non valida (la riga resta com'era)
-    // "Altro…": i comandi tolti dallo schermo (chiusura Z, operatore...) in una pagina a parte.
+    // "Cassa…" (e "Altro…"): chiusura Z, apertura cassetto, operatore e i comandi tolti dallo
+    // schermo in una pagina a parte.
     void altriComandi();
+    // Apre il cassetto senza vendita (Apri cassetto): con l'operatore identificato, nel giornale.
+    void apriCassetto();
     // Pagina dei tasti rapidi mostrata (linguette sopra i tasti quando le pagine sono più di una).
     void mostraPaginaRapidi(const QString& pagina);
     QString paginaRapidi() const { return m_paginaRapidi; }
@@ -108,6 +112,16 @@ public:
     bool applicaSconto(ModoSconto modo, Money valore);
     // Copia dell'ultimo documento emesso (Ctrl+P).
     void ristampaUltimo();
+    // Ricerca dell'articolo per descrizione (tasto Cerca, Ctrl+R): per quando il barcode non si
+    // legge. Tastiera sullo schermo per il touch; il tocco sull'articolo lo vende come se letto.
+    void cercaArticolo();
+    // Fascia rossa sopra il totale quando il registratore non risponde o dà errore; sparisce
+    // alla prima operazione riuscita o col tasto Riprova (che ne chiede lo stato).
+    void segnalaRt(const EsitoFiscale& esito);
+    bool avvisoRtVisibile() const;
+    // Resto dell'ultimo scontrino in grande nel riquadro del totale (zero = nessuno): resta
+    // finché non si passa il prossimo articolo, o per mezzo minuto.
+    Money restoMostrato() const { return m_resto; }
     // Blocco per inattività (AspettoCassa::bloccoMinuti): l'operatore esce, gli scontrini restano.
     // Ogni tasto o tocco nella cassa riparte da capo.
     void bloccaOperatore();
@@ -134,6 +148,7 @@ signals:
     void documentoEmesso();   // vendita, reso, annullo o chiusura: giornale e coda cambiati
     void chiusuraEseguita();  // dopo la Z: momento buono per installare un aggiornamento
     void operatoreCambiato();
+    void statoRtCambiato();   // fascia del registratore accesa o spenta (segnalaRt)
     void scontrinoCambiato(const Carrello& attivo);     // per la schermata cliente
     void venditaConclusa(Money totale, Money resto);
     // Dallo strato di modifica
@@ -162,6 +177,10 @@ private:
     void creaComandi();                       // tasti della colonna comandi e loro tasti F
     void disponi();                           // pannelli nelle colonne secondo l'aspetto
     void altriPagamenti();
+    // Icone dei tasti (iconaMenu), ridisegnate a ogni cambio d'aspetto: colore del tema e grandezza del testo
+    static QString nomeIcona(const QString& tasto);   // objectName del tasto -> disegno; vuoto = nessuna
+    void icona(QPushButton* b, const QString& tasto);
+    void icone();
 
     ArchivioLocale& m_archivio;
     OperazioniCassa& m_op;
@@ -185,6 +204,13 @@ private:
     QLabel* m_totale = nullptr;
     QLabel* m_residuo = nullptr;
     QLabel* m_messaggio = nullptr;
+    QLabel* m_titoloTotale = nullptr;   // "Totale", o "Resto" dopo lo scontrino
+    QLabel* m_vuoto = nullptr;          // suggerimento sopra le righe quando lo scontrino è vuoto
+    QFrame* m_avvisoRt = nullptr;
+    QLabel* m_testoAvvisoRt = nullptr;
+    Money m_resto;
+    QTimer* m_tempoResto = nullptr;
+    QTimer* m_lampeggio = nullptr;      // bordo rosso del campo codice dopo un errore
     QPlainTextEdit* m_giornale = nullptr;
     QString m_cartellaGiornale;   // vuota: giornale solo a schermo
     QGridLayout* m_grigliaReparti = nullptr;
