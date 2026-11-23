@@ -1,6 +1,7 @@
 // Aggiornamenti del palmare (solo APK) dalle release GitHub del repository del negozio. Il
-// repository è privato: serve un token di sola lettura, inserito sul palmare con il QR di
-// configurazione (palmare/qr_configurazione.ps1).
+// repository è pubblico: il token non serve. Con un repository privato serve un token di sola
+// lettura, inserito sul palmare con il QR di configurazione (palmare/qr_configurazione.ps1).
+// La sicurezza non dipende dal token: ogni aggiornamento è firmato e verificato (verificaFirma).
 //
 // Ogni release "palmare-vX.Y.Z" (pubblica.ps1, mai "latest": quella è delle casse) contiene
 // palmare.manifest, firmato con la chiave degli aggiornamenti delle casse (RSA 3072, SHA-256):
@@ -123,13 +124,17 @@ export class Aggiornatore {
     }
 
     intestazioni(altre) {
-        return { Authorization: `Bearer ${this.token}`, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "mdr-palmare", ...altre };
+        // Il token solo se c'è: con il repository pubblico non serve
+        const auth = this.token ? { Authorization: `Bearer ${this.token}` } : {};
+        return { ...auth, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "mdr-palmare", ...altre };
     }
 
     async json(percorso) {
         const r = await this.rete(`${this.api}/repos/${this.repository}${percorso}`,
                                   { intestazioni: this.intestazioni({ Accept: "application/vnd.github+json" }) });
         if (r.stato === 401) throw new Error("Token degli aggiornamenti non valido o scaduto");
+        if ((r.stato === 403 || r.stato === 404) && !this.token)
+            throw new Error("Repository degli aggiornamenti non trovato: se è privato serve il token (schermata Server)");
         if (r.stato === 403 || r.stato === 404) throw new Error("Il token degli aggiornamenti non vede il repository");
         if (r.stato !== 200) throw new Error(`GitHub non risponde (errore ${r.stato})`);
         return r.corpo;
@@ -201,7 +206,8 @@ export class GestoreAggiornamenti {
     }
 
     get disponibile() { return Boolean(this.plugin.Filesystem && this.plugin.WebView && this.plugin.CapacitorHttp && this.plugin.App); }
-    get attivo() { return this.disponibile && Boolean(this.token); }
+    // Sul palmare (APK) sempre: il token serve solo se il repository è privato
+    get attivo() { return this.disponibile; }
     get token() { return this.archivio.getItem(K.token) || ""; }
     set token(valore) {
         const t = String(valore || "").trim();

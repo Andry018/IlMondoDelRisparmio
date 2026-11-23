@@ -1085,13 +1085,12 @@ async function vistaEtichette() {
 // Avvio
 // ---------------------------------------------------------------------------------------
 // ---------------------------------------------------------------------------------------
-// Aggiornamenti (solo APK, con il token: aggiornamenti.js)
+// Aggiornamenti (solo APK; il token serve solo con il repository privato: aggiornamenti.js)
 // ---------------------------------------------------------------------------------------
 let ultimoControllo = { quando: null, errore: null };
 
 function statoAggiornamenti(pronta, apk) {
     if (!aggiornamenti.disponibile) return "versione web: si aggiorna dal server";
-    if (!aggiornamenti.attivo) return "aggiornamenti automatici spenti: manca il token (schermata Server)";
     if (apk) return `nuova app ${apk.versione} da installare`;
     if (pronta) return `versione ${pronta.versione} scaricata`;
     if (ultimoControllo.errore) return `ultimo controllo non riuscito: ${ultimoControllo.errore}`;

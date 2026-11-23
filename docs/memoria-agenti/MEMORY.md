@@ -1,7 +1,0 @@
-- [SDI via Openapi](sdi-openapi.md) — e-invoicing intermediary and polling connector design
-- [Git solo su richiesta](git-solo-su-richiesta.md) — no commits/pushes unless asked; backend/<topic> branch
-- [Due app terminali](due-app-terminali.md) — mdr-cassa + mdr-gestione on every PC; RT has USB + Ethernet
-- [Ruoli agenti](ruoli-agenti.md) — frontend does cassa+gestione (branch frontend/cassa), other session backend only
-- [Consegne frontend](consegne-frontend.md) — handoff doc, private update key outside repo, POS specs
-- [Preferenze utente](preferenze-utente.md) — Italian, show UI before moving on, keep layout, no commits unless asked
-- [Database SystemApp](systemapp-db.md) — copie .mdf su D:, LocalDB (localdb)\SystemApp, copia di lavoro in C:\Users\andre\SystemApp_import

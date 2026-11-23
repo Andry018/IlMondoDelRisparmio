@@ -73,7 +73,10 @@ python strumenti\rt-finto\rt_finto.py                 # registratore Custom fint
 - Mai nel repository:
   - chiave privata degli aggiornamenti (`%USERPROFILE%\.mondodelrisparmio\aggiornamenti_privata.pem`);
   - manuale Custom "WEB SERVICES Commands manual" (documento riservato Custom);
-  - database e CSV di SystemApp (dati reali del negozio, in `C:\Users\andre\SystemApp_import`);
-  - token Openapi, token GitHub, chiavi del server.
+  - database e CSV di SystemApp (dati reali del negozio, in `%USERPROFILE%\SystemApp_import`);
+  - token Openapi, token GitHub, chiavi del server, certificati di firma (`*.pfx`) e loro password;
+  - note personali e memoria delle sessioni (in `%USERPROFILE%\.mondodelrisparmio\note-private`).
+- Il repository è **pubblico**: niente dati del negozio, dei clienti o percorsi personali nei file,
+  nei messaggi di commit e nelle schermate. I segreti della firma stanno nei *Secrets* di GitHub.
 - Aggiornamenti: aumentare `VERSION` in `CMakeLists.txt`, poi `scripts\pubblica_aggiornamento.ps1`
   (solo su richiesta: pubblica su GitHub Releases e le casse lo installano da sole).

@@ -70,7 +70,7 @@ scanner, Wi-Fi 5 GHz, Google Play/Chrome; ordinare un campione.
 
 ## Per riprendere
 ```powershell
-cd C:\Users\andre\Desktop\MondoDelRisparmio\.claude\worktrees\backend-api-docs   # o checkout del branch
+cd <cartella del repository>\.claude\worktrees\backend-api-docs   # o checkout del branch
 $env:POSTGREST = "<percorso>\postgrest.exe"   # facoltativo, per i test HTTP
 .\supabase\tests\esegui_test.ps1
 ```

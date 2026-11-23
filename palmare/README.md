@@ -46,7 +46,7 @@ L'APK di debug resta per le prove (firma diversa: per passare dall'uno all'altro
 
 ## Aggiornamenti da remoto
 
-Le release del palmare stanno sul repository (privato) del progetto, con tag `palmare-vX.Y.Z`,
+Le release del palmare stanno sul repository (pubblico) del progetto, con tag `palmare-vX.Y.Z`,
 mai "latest" (quella è delle casse). Ogni release ha un manifesto firmato con **la stessa chiave
 degli aggiornamenti delle casse**; il palmare controlla firma e SHA-256 prima di usare qualsiasi file.
 
@@ -67,9 +67,10 @@ degli aggiornamenti delle casse**; il palmare controlla firma e SHA-256 prima di
 
 Requisiti per pubblicare: `winget install GitHub.cli` e `gh auth login` (come per le casse).
 
-**Token sui palmari.** Il repository è privato: ogni palmare ha un token GitHub *fine-grained* di
-sola lettura (permesso "Contents: read" sul solo repository; va bene lo stesso delle casse). Senza
-token l'app funziona ma non si aggiorna da sola.
+**Token sui palmari.** Il repository è pubblico: il token non serve, i palmari si aggiornano da
+soli. Solo se il repository tornasse privato servirebbe un token GitHub *fine-grained* di sola
+lettura (permesso "Contents: read" sul solo repository; va bene lo stesso delle casse). La
+sicurezza non dipende dal token: ogni aggiornamento è firmato e il palmare scarta quelli non validi.
 
 **QR di configurazione.** Server, chiave pubblica e token in un solo QR, da leggere nella
 schermata Server con il lettore 2D del palmare o con la fotocamera:

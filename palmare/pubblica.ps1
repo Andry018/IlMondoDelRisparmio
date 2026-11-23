@@ -1,5 +1,5 @@
-# Pubblica un aggiornamento del palmare su GitHub Releases (repository privato): i palmari con il
-# token lo scaricano da soli (www/aggiornamenti.js).
+# Pubblica un aggiornamento del palmare su GitHub Releases (repository pubblico): i palmari lo
+# scaricano da soli, senza token (www/aggiornamenti.js); il token serve solo con un repository privato.
 #
 # Prima: aumentare "version" in palmare\package.json (es. 1.0.0 -> 1.0.1).
 #   .\palmare\pubblica.ps1 -Note "Correzioni al ricevimento"   # solo l'app: si applica da sola

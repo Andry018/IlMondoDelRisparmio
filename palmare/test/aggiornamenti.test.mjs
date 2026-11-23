@@ -16,6 +16,7 @@ const REPO = "negozio/mdr";
 let chiavi, MODULO, server, API;
 const file = new Map();       // id → { nome, byte }
 let release = [];
+let pubblico = false;         // repository pubblico: le release si leggono senza token
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const firma = async (b) => new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", chiavi.privateKey, b));
@@ -52,7 +53,9 @@ before(async () => {
             res.writeHead(200, { "Content-Type": "application/octet-stream" });
             return res.end(f.byte);
         }
-        if (req.headers.authorization !== `Bearer ${TOKEN}`) return json(401, { message: "Bad credentials" });
+        // Come GitHub: token sbagliato 401; senza token il repository privato "non esiste" (404)
+        if (req.headers.authorization && req.headers.authorization !== `Bearer ${TOKEN}`) return json(401, { message: "Bad credentials" });
+        if (!req.headers.authorization && !pubblico) return json(404, { message: "Not Found" });
         const asset = url.pathname.match(/\/releases\/assets\/(\d+)$/);
         if (asset) {
             assert.equal(req.headers.accept, "application/octet-stream");
@@ -176,11 +179,22 @@ function palmare({ versione = "1.0.0", build = 10000, archivio = new Map() } = {
     return { g, chiamate, disco, archivio };
 }
 
-test("palmare senza token o nel browser: niente aggiornamenti", async () => {
-    const { g } = palmare();
-    assert.equal(g.attivo, false);
-    assert.equal(await g.controlla(), null);
+test("nel browser: niente aggiornamenti (si aggiorna dal server)", async () => {
     assert.equal(new GestoreAggiornamenti({ plugin: {}, archivio: { getItem: () => TOKEN } }).attivo, false);
+});
+
+test("repository pubblico: aggiornamenti senza token; privato senza token: lo dice", async () => {
+    await assert.rejects(nuovo({ token: "" }).ultima(), /se è privato serve il token/);
+    pubblico = true;
+    try {
+        const u = await nuovo({ token: "" }).ultima();
+        assert.equal(u.release.tag_name, "palmare-v1.0.2");
+        const { g } = palmare();   // palmare senza token
+        assert.equal(g.attivo, true);
+        assert.deepEqual(await g.controlla(), { tipo: "www", versione: "1.0.2" });
+    } finally {
+        pubblico = false;
+    }
 });
 
 test("nuova app: scaricata, applicata alla riapertura, confermata", async () => {

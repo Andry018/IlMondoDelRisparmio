@@ -10,6 +10,24 @@ come si usano cassa, gestione e palmare in [docs/GUIDA_UTENTE.md](docs/GUIDA_UTE
   `mdr-cassa` (vendita al banco) e `mdr-gestione` (anagrafiche e amministrazione)
 - **Palmare:** app Android sulle stesse API ([palmare](palmare/README.md))
 
+## Cosa non c'è nel repository
+
+Il repository è pubblico. Restano fuori, di proposito (e `.gitignore` li esclude):
+
+- **segreti**: chiave privata degli aggiornamenti, certificati di firma degli exe e dell'APK con le
+  loro password, chiavi del server (`chiavi.txt`, segreto JWT, password di PostgreSQL), token
+  Openapi e GitHub. Quelli che servono alla compilazione su GitHub stanno nei *Secrets* del repository;
+- **dati del negozio**: database e esportazioni di SystemApp, archivi delle casse, dati di clienti e fornitori;
+- **documenti riservati**: il manuale dei comandi Web Services di Custom (si chiede a Custom).
+
+Le chiavi e le password che si trovano nel codice (`segreto-jwt-di-prova…`, password `prova`,
+partite IVA `01234567890`) sono **solo di prova**: valgono per il server di sviluppo e i test,
+mai per un server vero. Gli aggiornamenti di casse e palmari sono firmati: una release non
+firmata con la chiave del progetto viene scartata.
+
+**Problemi di sicurezza**: segnalarli in privato con *Security > Report a vulnerability* su GitHub,
+non con una issue pubblica.
+
 ## Sviluppo (Windows)
 
 Prerequisiti, da MSYS2 UCRT64:
@@ -151,9 +169,9 @@ Per ogni versione: aumentare `VERSION` in `CMakeLists.txt`, poi
 .\scripts\pubblica_aggiornamento.ps1 -Note "Cosa cambia"    # -Prova: tutto tranne la pubblicazione
 ```
 
-Repository privato: sulle casse va inserito un token GitHub *fine-grained* in sola lettura
-(Contents: Read) in Impostazioni > Aggiornamenti. Chi ha il token può leggere anche il codice:
-in alternativa pubblicare le release in un repository pubblico separato (opzione `-Repository`).
+Repository pubblico: le casse scaricano le release senza token. Il token GitHub *fine-grained*
+in sola lettura (Contents: Read, in Impostazioni > Aggiornamenti) serve solo se le release stanno
+in un repository privato (opzione `-Repository`).
 
 Test del database (avvia un PostgreSQL temporaneo, applica le migrazioni e prova i flussi):
 

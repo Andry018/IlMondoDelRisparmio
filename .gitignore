@@ -11,6 +11,35 @@ CMakeUserPresets.json
 .env.*
 /dist/
 
+# Repository pubblico: segreti e dati del negozio non entrano mai, nemmeno per sbaglio.
+# Chiavi e certificati (firma degli exe e dell'APK, aggiornamenti, server)
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+*.crt
+*.jks
+*.keystore
+key.properties
+chiavi.txt
+*segret*
+*secret*
+*credenzial*
+*credential*
+# Dati reali (SystemApp, esportazioni, archivi delle casse) e documenti riservati (manuale Custom)
+*.mdf
+*.ldf
+*.bak
+*.csv
+*.xlsx
+*.db
+*.sqlite
+*.sqlite3
+*.pdf
+# Note personali
+/note-private/
+
 # Claude Code: nel repository solo skill e impostazioni condivise
 /.claude/worktrees/
 /.claude/settings.local.json

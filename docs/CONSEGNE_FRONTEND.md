@@ -65,8 +65,8 @@ Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Cu
   pubblicare aggiornamenti accettati dalle casse. Chiave pubblica: `src/locale/chiaveaggiornamenti.h`.
 - Pubblicare: aumentare `VERSION` in `CMakeLists.txt`, poi `.\scripts\pubblica_aggiornamento.ps1 -Note "..."`
   (richiede `winget install GitHub.cli` + `gh auth login`; `-Prova` = senza caricare).
-- Repository privato → sulle casse serve un token fine-grained sola lettura (Impostazioni >
-  Aggiornamenti). Alternativa da proporre: repository pubblico solo per le release.
+- Repository pubblico: casse e palmari si aggiornano senza token (gli aggiornamenti sono firmati).
+  Il token fine-grained di sola lettura (Impostazioni > Aggiornamenti) serve solo con un repository privato.
 - La 0.1.0 non si aggiorna da sola: la **0.2.0 va installata a mano** sul POS una volta.
 
 ## Prossimi passi
@@ -94,7 +94,7 @@ Windows 7 servirebbe Qt 5.15). Server: PC con **Windows 11**. Registratore: **Cu
    (`estrai.ps1` da LocalDB a CSV, `carica.ps1`/`carica.sql` con psql in una transazione). Decisioni
    dell'utente: giacenze negative così come sono, storico vendite solo 2025 e 2026. Database di SystemApp
    (dati reali, mai nel repository): chiavetta D: `SApp_Store_DATI`, copie di lavoro in
-   `C:\Users\andre\SystemApp_import` collegate a `(localdb)\SystemApp` (MDR_Dati, MDR_2025, MDR_2026).
+   `%USERPROFILE%\SystemApp_import` collegate a `(localdb)\SystemApp` (MDR_Dati, MDR_2025, MDR_2026).
    Sul PC nuovo LocalDB va reinstallato: winget non installa Express (404 / serve admin) → scaricare con
    `SQL2025-SSEI-Expr.exe /ACTION=Download /MEDIATYPE=LocalDB /QUIET /MEDIAPATH=<cartella>`, poi
    `msiexec /i SqlLocalDB.msi IACCEPTSQLLOCALDBLICENSETERMS=YES` (UAC), `SqlLocalDB create SystemApp -s`,
