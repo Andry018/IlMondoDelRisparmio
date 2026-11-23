@@ -20,6 +20,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Fuori dalla cartella del programma: se fosse la cartella corrente, Windows non la lascerebbe
+# spostare e lo scambio fallirebbe sempre ("e' in uso"). Successo con la 0.3.0.
+Set-Location -LiteralPath ([IO.Path]::GetTempPath())
+[Environment]::CurrentDirectory = [IO.Path]::GetTempPath()   # quella del processo: Set-Location non la cambia
 if ($ArgomentiB64) { $Argomenti = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ArgomentiB64)).Trim() }
 $Cartella = $Cartella.TrimEnd('\')
 $registro = Join-Path $Dati "aggiornamento.log"

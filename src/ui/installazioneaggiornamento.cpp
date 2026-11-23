@@ -64,7 +64,9 @@ bool avviaInstallazioneAggiornamento(const QString& zip, const QString& versione
         QStringLiteral("-Programma"), QFileInfo(QCoreApplication::applicationFilePath()).fileName(),
         QStringLiteral("-ArgomentiB64"), QString::fromLatin1((QLatin1Char(' ') + argomentiDiRiavvio()).toUtf8().toBase64()),
     };
-    if (!QProcess::startDetached(QStringLiteral("powershell.exe"), argomenti, programma.absolutePath()))
+    // Cartella di lavoro FUORI da quella del programma: Windows non lascia spostare una cartella che
+    // è la cartella corrente di un processo, e lo scambio fallirebbe sempre ("è in uso", 0.3.0)
+    if (!QProcess::startDetached(QStringLiteral("powershell.exe"), argomenti, QFileInfo(copia).absolutePath()))
         return fallito(QStringLiteral("Impossibile avviare PowerShell."));
     return true;
 }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(MondoDelRisparmio
-    VERSION 0.4.0
+    VERSION 0.4.1
     DESCRIPTION "Gestionale retail: cassa, magazzino, fatturazione"
     LANGUAGES CXX)
 
