@@ -103,6 +103,17 @@ Authorization: Bearer <access_token>       # token ottenuto con il login
 
 Con la sola `ANON_KEY` (senza login) non si legge né si scrive niente.
 
+**Presentazione del server** (solo server nativo Windows, `infra/windows/Caddyfile`, e server di
+sviluppo): `GET /mdr/presentazione`, **senza** `apikey`, risponde
+`{"servizio": "mondo-del-risparmio", "anon_key": "<ANON_KEY>"}`. La prima installazione di cassa e
+gestione la chiede agli indirizzi della rete locale ("Cerca il server") o all'indirizzo scritto a
+mano, così nessuno copia la chiave. La `ANON_KEY` è pubblica per costruzione: i dati li proteggono
+login e RLS. Sul Supabase self-hosted (Kong) non c'è: lì la chiave si copia da `chiavi.txt`.
+
+**Account con nome breve**: i client aggiungono `@negozio.lan` a un nome senza `@` (`cassa1` →
+`cassa1@negozio.lan`, `ClientServer::emailAccount`, `emailAccount` del palmare); il server riceve
+sempre l'email completa.
+
 ### Due modi di collegarsi
 
 | Chi | Login | Ruolo sul server | Operatore delle vendite |

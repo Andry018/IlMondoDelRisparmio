@@ -31,8 +31,19 @@
 		respond 204
 	}
 
+	# Presentazione: casse e gestione trovano il server nella rete del negozio ("Cerca il server"
+	# nella prima installazione) e ne leggono la chiave anon, senza copiarla a mano. La chiave anon
+	# è pubblica per costruzione (sta in ogni cassa e palmare): i dati li proteggono gli account.
+	handle /mdr/presentazione {
+		header Content-Type application/json
+		respond `{"servizio": "mondo-del-risparmio", "anon_key": "{$MDR_ANON_KEY}"}` 200
+	}
+
 	# Senza la chiave giusta non si passa (come Kong su Supabase)
-	@senzaChiave not header apikey {$MDR_ANON_KEY}
+	@senzaChiave {
+		not header apikey {$MDR_ANON_KEY}
+		not path /mdr/presentazione
+	}
 	handle @senzaChiave {
 		header Content-Type application/json
 		respond `{"message": "Chiave API mancante o sbagliata"}` 401

@@ -14,6 +14,7 @@ class QNetworkAccessManager;
 namespace mdr {
 
 class ClientServer;
+class RicercaServer;
 
 // Server e chiave letti da config\chiavi.txt del server del negozio (lo scrive
 // infra/windows/installa_server.ps1): righe "server = http://…" e "anon_key = …". Con più
@@ -61,7 +62,11 @@ public:
     int nextId() const override;
     bool validateCurrentPage() override;
 
-    void provaServer();
+    void provaServer();   // senza chiave la chiede al server (/mdr/presentazione)
+    // "Cerca il server": lo trova nella rete del negozio e compila indirizzo e chiave; parte da sola
+    // la prima volta che si arriva alla pagina del server con l'indirizzo vuoto.
+    void cercaServer();
+    RicercaServer* ricerca() const { return m_ricerca; }
     void accedi();
     void provaRegistratore();
     void caricaChiavi(const QString& file);
@@ -75,6 +80,9 @@ private:
     ProvaRt m_provaRt;
     QNetworkAccessManager* m_rete;
     ClientServer* m_client;
+    RicercaServer* m_ricerca;
+    QString m_serverAllaRicerca;  // indirizzo quando è partita la ricerca: se intanto cambia, non si sovrascrive
+    bool m_cercato = false;       // la ricerca automatica parte una volta sola
     bool m_collegato = false;     // server e chiave provati
     QString m_serverProvato;      // indirizzo e chiave dell'ultima prova riuscita
     QString m_chiaveProvata;

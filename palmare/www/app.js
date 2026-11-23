@@ -3,7 +3,7 @@
 // Il lettore di codici integrato "scrive" il codice e preme Invio: il campo del lettore è
 // sempre pronto a riceverlo.
 
-import { Server, ErroreServer } from "./api.js";
+import { Server, ErroreServer, emailAccount } from "./api.js";
 import { Coda } from "./coda.js";
 import { ArchivioArticoli } from "./archivio.js";
 import { icona } from "./icone.js";
@@ -437,8 +437,8 @@ function vistaAccesso() {
         <div class="accesso">
             ${intestazioneAccesso("Accedi con il tuo account operatore")}
             <form id="login" autocomplete="on">
-                <label class="etichetta">Email</label>
-                <input class="campo" name="email" type="email" autocomplete="username" autocapitalize="off" required>
+                <label class="etichetta">Account (es. mario)</label>
+                <input class="campo" name="email" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required>
                 <label class="etichetta">Password</label>
                 <input class="campo" name="password" type="password" autocomplete="current-password" required>
                 <button class="tasto pieno largo" type="submit" style="margin-top:22px">Accedi</button>
@@ -452,7 +452,7 @@ function vistaAccesso() {
         const tasto = ev.target.querySelector("button");
         tasto.disabled = true;
         try {
-            await server.accedi(f.get("email"), f.get("password"));
+            await server.accedi(emailAccount(f.get("email")), f.get("password"));
             await caricaOperatore();
             if (!stato.ruolo) {
                 server.esci();
@@ -462,7 +462,7 @@ function vistaAccesso() {
             localStorage.setItem("mdr.email", f.get("email"));
             entraNellApp();
         } catch (e) {
-            avviso(e.stato === 400 ? "Email o password errate" : e.message, "errore");
+            avviso(e.stato === 400 ? "Account o password errati" : e.message, "errore");
         } finally {
             tasto.disabled = false;
         }

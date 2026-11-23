@@ -103,8 +103,18 @@ void ClientServer::salvaToken(const QByteArray& corpo)
     }
 }
 
-void ClientServer::accedi(const QString& email, const QString& password)
+QString ClientServer::emailAccount(const QString& nome)
 {
+    // Un'email completa resta com'è: gli account già creati devono entrare come prima
+    const QString n = nome.trimmed();
+    if (n.isEmpty() || n.contains(QLatin1Char('@')))
+        return n;
+    return n.toLower() + QLatin1Char('@') + QLatin1String(dominioAccount);
+}
+
+void ClientServer::accedi(const QString& nome, const QString& password)
+{
+    const QString email = emailAccount(nome);
     if (!configurato()) {
         emit accessoFallito(QStringLiteral("Server non configurato"));
         return;

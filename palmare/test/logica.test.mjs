@@ -3,7 +3,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { euro, millesimiDaTesto, nuovoId, quantita, testoDaMillesimi } from "../www/numeri.js";
 import { Coda } from "../www/coda.js";
-import { ErroreServer } from "../www/api.js";
+import { ErroreServer, emailAccount } from "../www/api.js";
+
+test("account col nome breve, come in cassa e gestione", () => {
+    assert.equal(emailAccount(" Mario "), "mario@negozio.lan");
+    assert.equal(emailAccount("cassa1"), "cassa1@negozio.lan");
+    assert.equal(emailAccount("Mario.Rossi@Esempio.it"), "Mario.Rossi@Esempio.it", "email completa: com'è");
+    assert.equal(emailAccount(""), "");
+});
 import { filtraArticoli } from "../www/archivio.js";
 
 test("ricerca nell'archivio del palmare (senza rete)", () => {

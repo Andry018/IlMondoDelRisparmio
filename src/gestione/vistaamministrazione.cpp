@@ -247,7 +247,9 @@ void VistaOperatori::nuovoUtente()
     auto* form = new QFormLayout(&d);
     auto* nome = new QLineEdit(&d);
     auto* email = new QLineEdit(&d);
-    email->setPlaceholderText(QStringLiteral("es. mario@negozio.lan (non serve che esista davvero)"));
+    email->setPlaceholderText(QStringLiteral("es. mario (diventa mario@negozio.lan) oppure un'email"));
+    email->setToolTip(QStringLiteral("Il nome con cui si entra in cassa, gestione e palmare. Senza @ si aggiunge "
+                                     "@negozio.lan: non serve un'email vera."));
     auto* password = new QLineEdit(&d);
     password->setEchoMode(QLineEdit::Password);
     password->setPlaceholderText(QStringLiteral("almeno 6 caratteri"));
@@ -261,7 +263,7 @@ void VistaOperatori::nuovoUtente()
     pin->setEchoMode(QLineEdit::Password);
     pin->setPlaceholderText(QStringLiteral("facoltativo: 4-8 cifre, per la cassa"));
     form->addRow(QStringLiteral("Nome"), nome);
-    form->addRow(QStringLiteral("Email di accesso"), email);
+    form->addRow(QStringLiteral("Nome di accesso"), email);
     form->addRow(QStringLiteral("Password"), password);
     form->addRow(QStringLiteral("Ruolo"), ruolo);
     form->addRow(QStringLiteral("Codice cassa"), codice);
@@ -273,11 +275,14 @@ void VistaOperatori::nuovoUtente()
     if (d.exec() != QDialog::Accepted)
         return;
 
+    // "mario" -> "mario@negozio.lan": lo stesso che fa l'accesso (ClientServer::emailAccount)
+    const QString account = ClientServer::emailAccount(email->text());
+    static const QRegularExpression valido(QStringLiteral("^[^@\\s]+@[^@\\s]+$"));
     QString problema;
     if (nome->text().trimmed().isEmpty())
         problema = QStringLiteral("Manca il nome.");
-    else if (!email->text().contains(QLatin1Char('@')))
-        problema = QStringLiteral("Email non valida.");
+    else if (!valido.match(account).hasMatch())
+        problema = QStringLiteral("Nome di accesso non valido: una parola senza spazi (es. mario) oppure un'email.");
     else if (password->text().size() < 6)
         problema = QStringLiteral("La password deve avere almeno 6 caratteri.");
     else if (!codice->text().trimmed().isEmpty()
@@ -289,15 +294,18 @@ void VistaOperatori::nuovoUtente()
         QMessageBox::warning(this, QStringLiteral("Nuovo utente"), problema);
         return;
     }
-    QJsonObject p{{"nome", nome->text().trimmed()}, {"email", email->text().trimmed()}, {"password", password->text()},
+    QJsonObject p{{"nome", nome->text().trimmed()}, {"email", account}, {"password", password->text()},
                   {"ruolo", ruolo->currentData().toString()}};
     if (!codice->text().trimmed().isEmpty())
         p.insert("codice", codice->text().trimmed());
     if (!pin->text().isEmpty())
         p.insert("pin", pin->text());
     QPointer<VistaOperatori> io(this);
-    const QString chi = email->text().trimmed();
-    m_client.rpc(QStringLiteral("crea_utente"), {{"p", p}}, [io, chi](const RispostaServer& r) {
+    const QString chi = account;
+    const QString breve = account.endsWith(QLatin1Char('@') + QLatin1String(ClientServer::dominioAccount))
+                              ? account.section(QLatin1Char('@'), 0, 0)
+                              : account;
+    m_client.rpc(QStringLiteral("crea_utente"), {{"p", p}}, [io, chi, breve](const RispostaServer& r) {
         if (!io)
             return;
         if (!r.ok()) {
@@ -305,8 +313,9 @@ void VistaOperatori::nuovoUtente()
             return;
         }
         QMessageBox::information(io, QStringLiteral("Nuovo utente"),
-                                 QStringLiteral("Creato: %1 può accedere subito alla gestione e al palmare; "
-                                                "codice e PIN arrivano alle casse con la sincronizzazione.").arg(chi));
+                                 QStringLiteral("Creato %1: entra con «%2» e la sua password nella gestione e nel "
+                                                "palmare; codice e PIN arrivano alle casse con la sincronizzazione.")
+                                     .arg(chi, breve));
         io->aggiorna();
     });
 }

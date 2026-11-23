@@ -8,10 +8,11 @@ il server vedere `README.md` e `infra/supabase/README.md`.
 Cassa e gestione, aperte la prima volta, propongono la **prima installazione guidata**:
 
 1. *Collegare al server del negozio* (o *Solo per provare*, con gli articoli di esempio).
-2. Indirizzo e chiave del server: si copiano da `config\chiavi.txt` sul PC del server, oppure
-   *Apri chiavi.txt…* (anche da una chiavetta). *Prova collegamento* dice se sono giusti.
-3. Accesso: per la cassa l'account della cassa (es. `cassa1@negozio.lan`), creato in gestione →
-   Operatori; per la gestione il proprio.
+2. Server: si **cerca da solo** nella rete del negozio (il server dev'essere acceso) e compila
+   indirizzo e chiave. Se non si trova: scrivere solo l'indirizzo del server (es. `192.168.1.10`),
+   la chiave la dà il server; come ultima strada *Apri chiavi.txt…* (`config\chiavi.txt` sul server).
+3. Accesso: per la cassa l'account della cassa (es. `cassa1`), creato in gestione → Operatori;
+   per la gestione il proprio (es. `mario`). Basta il nome: `mario` vale `mario@negozio.lan`.
 4. Solo cassa: codice (CASSA1, CASSA2…) e indirizzo IP del registratore, con *Prova registratore*
    (avvisa se è in addestramento).
 

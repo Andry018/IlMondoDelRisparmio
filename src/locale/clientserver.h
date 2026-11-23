@@ -44,8 +44,14 @@ public:
     QString refreshToken() const { return m_refreshToken; }
     void impostaRefreshToken(const QString& token);
 
+    // Accesso con email o nome breve: "cassa1" vale "cassa1@negozio.lan" (emailAccount).
     void accedi(const QString& email, const QString& password);
     void esci();
+
+    // Nome dell'account come si scrive: senza "@" si aggiunge il dominio del negozio
+    // ("Mario" -> "mario@negozio.lan"); un'email completa resta com'è.
+    static QString emailAccount(const QString& nome);
+    static constexpr const char* dominioAccount = "negozio.lan";
 
     // percorso relativo al server, es. "/rest/v1/v_incassi?giorno=gte.2026-10-01".
     // Aggiunge chiave e token (rinnovandolo se serve); con un 401 da token scaduto riprova una volta.

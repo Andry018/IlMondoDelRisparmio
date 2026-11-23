@@ -3,6 +3,7 @@ add_library(mdr_locale STATIC
     payloadvendita.h payloadvendita.cpp
     operazionicassa.h operazionicassa.cpp
     clientserver.h clientserver.cpp
+    ricercaserver.h ricercaserver.cpp
     sincronizzatore.h sincronizzatore.cpp
     firma.h firma.cpp chiaveaggiornamenti.h
     aggiornatore.h aggiornatore.cpp

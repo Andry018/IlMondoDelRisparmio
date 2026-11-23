@@ -3,6 +3,7 @@
 #include "comune.h"
 #include "fiscal/customxml.h"
 #include "locale/clientserver.h"
+#include "locale/ricercaserver.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
@@ -127,6 +128,7 @@ PrimaInstallazione::PrimaInstallazione(Postazione postazione, Impostazioni impos
     , m_provaRt(provaRtVero)
     , m_rete(new QNetworkAccessManager(this))
     , m_client(new ClientServer(this))
+    , m_ricerca(new RicercaServer(this))
 {
     const bool cassa = postazione == Postazione::Cassa;
     setObjectName("prima_installazione");
@@ -153,10 +155,10 @@ PrimaInstallazione::PrimaInstallazione(Postazione postazione, Impostazioni impos
     m_modo->addButton(prova, 1);
     negozio->setChecked(true);
     lb->addWidget(negozio);
-    lb->addWidget(nota(cassa ? QStringLiteral("Serviranno l'indirizzo e la chiave del server (nel file chiavi.txt del "
-                                              "server) e l'account della cassa, creato dalla gestione in Operatori.")
-                             : QStringLiteral("Serviranno l'indirizzo e la chiave del server (nel file chiavi.txt del "
-                                              "server) e il proprio account."),
+    lb->addWidget(nota(cassa ? QStringLiteral("Il server acceso nella rete del negozio si trova da solo. Servirà "
+                                              "l'account della cassa (es. cassa1), creato dalla gestione in Operatori.")
+                             : QStringLiteral("Il server acceso nella rete del negozio si trova da solo. Servirà il "
+                                              "proprio account (es. mario) con la sua password."),
                        benvenuto));
     lb->addSpacing(12);
     lb->addWidget(prova);
@@ -165,8 +167,8 @@ PrimaInstallazione::PrimaInstallazione(Postazione postazione, Impostazioni impos
 
     // 2. Server e chiave
     auto* server = new PaginaGuidata(QStringLiteral("Server del negozio"),
-                                     QStringLiteral("Indirizzo e chiave sono in config\\chiavi.txt sul PC del server: si "
-                                                    "copiano qui o si apre il file (anche da una chiavetta)."),
+                                     QStringLiteral("Il server si cerca da solo nella rete del negozio. Se non si trova, "
+                                                    "scrivere il suo indirizzo: la chiave la dà il server."),
                                      [this] { return m_collegato; });
     auto* ls = new QVBoxLayout(server);
     auto* form = new QFormLayout;
@@ -175,18 +177,62 @@ PrimaInstallazione::PrimaInstallazione(Postazione postazione, Impostazioni impos
     m_server->setPlaceholderText(QStringLiteral("es. 192.168.1.10 oppure http://192.168.1.10:8000"));
     m_chiave = new QLineEdit(m_imp.apiKey, server);
     m_chiave->setObjectName("guida_chiave");
-    m_chiave->setPlaceholderText(QStringLiteral("anon_key: una riga lunga che inizia con eyJ"));
+    m_chiave->setPlaceholderText(QStringLiteral("si compila da sola (oppure anon_key di chiavi.txt)"));
     form->addRow(QStringLiteral("Indirizzo"), m_server);
     form->addRow(QStringLiteral("Chiave"), m_chiave);
     ls->addLayout(form);
     auto* tastiServer = new QHBoxLayout;
+    auto* cerca = new QPushButton(QStringLiteral("Cerca il server"), server);
+    cerca->setObjectName("guida_cerca_server");
+    cerca->setDefault(true);
     auto* apri = new QPushButton(QStringLiteral("Apri chiavi.txt…"), server);
     apri->setObjectName("guida_apri_chiavi");
+    apri->setToolTip(QStringLiteral("Se il server non si trova: indirizzo e chiave dal file config\\chiavi.txt del server"));
     auto* provaServer = new QPushButton(QStringLiteral("Prova collegamento"), server);
     provaServer->setObjectName("guida_prova_server");
+    tastiServer->addWidget(cerca);
     tastiServer->addWidget(apri);
     tastiServer->addStretch();
     tastiServer->addWidget(provaServer);
+    connect(cerca, &QPushButton::clicked, this, &PrimaInstallazione::cercaServer);
+    connect(m_ricerca, &RicercaServer::finita, this, [this](const QList<ServerTrovato>& trovati) {
+        if (trovati.isEmpty()) {
+            imposta(m_statoServer, QStringLiteral("Nessun server trovato. È acceso? Questo PC è collegato alla rete del "
+                                                  "negozio? Altrimenti scrivere l'indirizzo del server qui sopra."),
+                    true);
+            return;
+        }
+        if (m_server->text() != m_serverAllaRicerca)   // intanto è stato scritto un indirizzo: si rispetta
+            return;
+        QStringList altri;
+        for (int i = 1; i < trovati.size(); ++i)
+            altri << trovati[i].indirizzo;
+        m_server->setText(trovati.first().indirizzo);
+        m_chiave->setText(trovati.first().chiave);
+        this->provaServer();
+        if (!altri.isEmpty())
+            imposta(m_statoServer, QStringLiteral("Trovato %1 (ci sono anche %2). Prova in corso…")
+                                       .arg(trovati.first().indirizzo, altri.join(QStringLiteral(", "))), false);
+    });
+    connect(m_ricerca, &RicercaServer::presentazione, this, [this](const QUrl& indirizzo, const QString& chiave, const QString& errore) {
+        if (completaIndirizzo(m_server->text()) != indirizzo.toString(QUrl::StripTrailingSlash))
+            return;   // l'indirizzo è cambiato intanto
+        if (chiave.isEmpty()) {
+            imposta(m_statoServer, QStringLiteral("Il server non ha dato la chiave (%1): copiarla da chiavi.txt sul PC "
+                                                  "del server, oppure «Apri chiavi.txt…».").arg(errore),
+                    true);
+            return;
+        }
+        m_chiave->setText(chiave);
+        this->provaServer();
+    });
+    // Prima volta sulla pagina del server, indirizzo vuoto: si cerca subito
+    connect(this, &QWizard::currentIdChanged, this, [this](int id) {
+        if (id == Server && !m_cercato && m_server->text().trimmed().isEmpty()) {
+            m_cercato = true;
+            cercaServer();
+        }
+    });
     ls->addLayout(tastiServer);
     m_statoServer = new QLabel(server);
     m_statoServer->setObjectName("guida_stato_server");
@@ -213,19 +259,21 @@ PrimaInstallazione::PrimaInstallazione(Postazione postazione, Impostazioni impos
 
     // 3. Accesso
     auto* accesso = new PaginaGuidata(QStringLiteral("Accesso"),
-                                      cassa ? QStringLiteral("L'account della cassa (es. cassa1@negozio.lan). Le cassiere poi "
-                                                             "entrano col loro PIN: questo serve solo al PC.")
-                                            : QStringLiteral("Il proprio account (email e password). Gli account si creano "
-                                                             "dalla gestione, nella scheda Operatori."),
+                                      cassa ? QStringLiteral("L'account della cassa (es. cassa1) e la sua password. Le "
+                                                             "cassiere poi entrano col loro PIN: questo serve solo al PC.")
+                                            : QStringLiteral("Il proprio account (es. mario) e la password. Gli account si "
+                                                             "creano dalla gestione, nella scheda Operatori."),
                                       [this] { return autenticato(); });
     auto* la = new QVBoxLayout(accesso);
     auto* formAccesso = new QFormLayout;
     m_email = new QLineEdit(m_imp.email, accesso);
     m_email->setObjectName("guida_email");
+    m_email->setPlaceholderText(cassa ? QStringLiteral("es. cassa1") : QStringLiteral("es. mario"));
+    m_email->setToolTip(QStringLiteral("Nome breve (diventa nome@negozio.lan) oppure l'email completa"));
     m_password = new QLineEdit(accesso);
     m_password->setObjectName("guida_password");
     m_password->setEchoMode(QLineEdit::Password);
-    formAccesso->addRow(QStringLiteral("Email"), m_email);
+    formAccesso->addRow(QStringLiteral("Account"), m_email);
     formAccesso->addRow(QStringLiteral("Password"), m_password);
     la->addLayout(formAccesso);
     auto* tastiAccesso = new QHBoxLayout;
@@ -393,7 +441,10 @@ void PrimaInstallazione::provaServer()
         return;
     }
     if (chiave.isEmpty()) {
-        imposta(m_statoServer, QStringLiteral("Manca la chiave (anon_key)."), true);
+        // La chiave la dà il server stesso (/mdr/presentazione): chi installa scrive solo l'indirizzo
+        m_server->setText(indirizzo);
+        imposta(m_statoServer, QStringLiteral("Chiedo la chiave al server…"), false);
+        m_ricerca->chiedi(QUrl(indirizzo));
         return;
     }
     m_server->setText(indirizzo);
@@ -428,10 +479,23 @@ void PrimaInstallazione::provaServer()
     });
 }
 
+void PrimaInstallazione::cercaServer()
+{
+    if (m_ricerca->inCorso())
+        return;
+    m_serverAllaRicerca = m_server->text();
+    m_collegato = false;
+    pagina(this, Server)->cambiata();
+    imposta(m_statoServer, QStringLiteral("Cerco il server nella rete del negozio…"), false);
+    // Porta di un indirizzo già scritto (es. :8100), altrimenti quella solita
+    const QUrl scritto(completaIndirizzo(m_server->text()));
+    m_ricerca->cerca(quint16(scritto.port(RicercaServer::portaPredefinita)));
+}
+
 void PrimaInstallazione::accedi()
 {
     if (m_email->text().trimmed().isEmpty() || m_password->text().isEmpty()) {
-        imposta(m_statoAccesso, QStringLiteral("Scrivere email e password."), true);
+        imposta(m_statoAccesso, QStringLiteral("Scrivere account e password."), true);
         return;
     }
     m_imp.refreshToken.clear();

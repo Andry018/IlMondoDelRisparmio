@@ -17,7 +17,11 @@
 #include "riepilogocommercialista.h"
 #include "primainstallazione.h"
 #include "stile.h"
+#include "fintoserver.h"
+#include "locale/ricercaserver.h"
 #include <QApplication>
+#include <QHostAddress>
+#include <QSignalSpy>
 #include <QFontDatabase>
 #include <QTabBar>
 #include "locale/clientserver.h"
@@ -313,6 +317,49 @@ private slots:
         QCOMPARE(letto->righe.first(), (QStringList{"Detersivo", "2,500", "3,78"}));
         // Ogni scheda ha il suo pulsante dove serve
         QVERIFY(m_finestra->findChildren<QPushButton*>("esporta_excel").size() >= 5);
+    }
+
+    void account_col_nome_breve()
+    {
+        QCOMPARE(ClientServer::emailAccount(QStringLiteral(" Mario ")), QStringLiteral("mario@negozio.lan"));
+        QCOMPARE(ClientServer::emailAccount(QStringLiteral("cassa1")), QStringLiteral("cassa1@negozio.lan"));
+        QCOMPARE(ClientServer::emailAccount(QStringLiteral("Mario.Rossi@Esempio.it")), QStringLiteral("Mario.Rossi@Esempio.it"));
+        QCOMPARE(ClientServer::emailAccount(QString()), QString());
+    }
+
+    void ricerca_del_server_nella_rete()
+    {
+        QCOMPARE(RicercaServer::chiaveDaPresentazione(R"({"servizio": "mondo-del-risparmio", "anon_key": "eyJabc"})"),
+                 QStringLiteral("eyJabc"));
+        QVERIFY(RicercaServer::chiaveDaPresentazione(R"({"servizio": "altro", "anon_key": "x"})").isEmpty());
+        QVERIFY(RicercaServer::chiaveDaPresentazione("<html>").isEmpty());
+        const auto indirizzi = RicercaServer::indirizziDaProvare();
+        QCOMPARE(indirizzi.first(), QHostAddress(QHostAddress::LocalHost));   // prima questo PC
+        QVERIFY(indirizzi.size() <= 1 + 254 * 8);
+
+        // Un finto server del negozio su questo PC: la ricerca lo trova, con la sua chiave
+        FintoServer finto;
+        finto.gestore = [](const FintoServer::Richiesta& r) -> FintoServer::Risposta {
+            if (r.percorso == QLatin1String("/mdr/presentazione"))
+                return {200, R"({"servizio": "mondo-del-risparmio", "anon_key": "eyJfinta"})"};
+            return {404, "{}"};
+        };
+        RicercaServer ricerca;
+        ricerca.attesaMs = 800;
+        QSignalSpy finita(&ricerca, &RicercaServer::finita);
+        ricerca.cerca(finto.porta());
+        QVERIFY(finita.wait(15000));
+        const auto trovati = finita.first().first().value<QList<ServerTrovato>>();
+        QCOMPARE(trovati.size(), 1);
+        QCOMPARE(trovati.first().chiave, QStringLiteral("eyJfinta"));
+        QVERIFY(trovati.first().indirizzo.endsWith(QStringLiteral(":%1").arg(finto.porta())));
+        QVERIFY(finto.richieste.first().intestazioni.value("apikey").isEmpty());   // senza chiave
+
+        // Indirizzo scritto a mano: la chiave la dà il server
+        QSignalSpy presentazione(&ricerca, &RicercaServer::presentazione);
+        ricerca.chiedi(finto.url());
+        QVERIFY(presentazione.wait(5000));
+        QCOMPARE(presentazione.first().at(1).toString(), QStringLiteral("eyJfinta"));
     }
 
     void tabella_vuota_dice_perche()

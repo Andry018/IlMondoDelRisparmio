@@ -13,6 +13,13 @@ export class ErroreServer extends Error {
     }
 }
 
+// Nome dell'account come si scrive: senza "@" si aggiunge il dominio del negozio ("Mario" ->
+// "mario@negozio.lan"); un'email completa resta com'è. Come ClientServer::emailAccount (C++).
+export function emailAccount(nome) {
+    const n = String(nome || "").trim();
+    return !n || n.includes("@") ? n : `${n.toLowerCase()}@negozio.lan`;
+}
+
 const TIMEOUT_MS = 15000;
 
 export class Server {

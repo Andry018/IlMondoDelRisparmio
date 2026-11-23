@@ -25,8 +25,8 @@ trovare i problemi adesso e non il giorno del passaggio.
       solo. Tenere il registro (`Documenti\prova-rt`) e una foto delle stampe: servono per
       correggere il programma se qualche passo dà errore.
 - [ ] Una cassa con il **registratore in modalità addestramento** (col tecnico): al primo avvio la
-      cassa apre la **prima installazione guidata** (server e chiave da `config\chiavi.txt`, account
-      della cassa, codice CASSA1, indirizzo del registratore con *Prova registratore*), poi vendite in contanti e carta, uno sconto, un reso, un annullo, una chiusura Z.
+      cassa apre la **prima installazione guidata** (il server si trova da solo, account della
+      cassa `cassa1`, codice CASSA1, indirizzo del registratore con *Prova registratore*), poi vendite in contanti e carta, uno sconto, un reso, un annullo, una chiusura Z.
       In gestione → Chiusure la Z deve quadrare.
 - [ ] Staccare il cavo di rete della cassa, fare due vendite, riattaccarlo: devono arrivare al
       server (gestione → Vendite) senza doppioni.

@@ -440,6 +440,42 @@ private slots:
         QVERIFY(fatto);
     }
 
+    void prima_installazione_senza_chiave_e_nome_breve()
+    {
+        // Come la farà chi installa: "Cerca il server" (lo trova su questo PC), poi account breve
+        const QUrl sviluppo(qEnvironmentVariable("MDR_SERVER_SVILUPPO"));
+        PrimaInstallazione guida(Postazione::Gestione, Impostazioni{});
+        guida.show();
+        auto* server = guida.findChild<QLineEdit*>("guida_server");
+        auto* chiave = guida.findChild<QLineEdit*>("guida_chiave");
+        server->setText(QStringLiteral("127.0.0.1:%1").arg(sviluppo.port()));   // la porta del server di sviluppo
+        guida.next();
+        guida.findChild<QPushButton*>("guida_cerca_server")->click();
+        QTRY_VERIFY_WITH_TIMEOUT(guida.collegato(), 15000);
+        QCOMPARE(chiave->text(), qEnvironmentVariable("MDR_CHIAVE_SVILUPPO"));   // la chiave l'ha data il server
+
+        // Solo l'indirizzo, senza chiave: la chiede al server
+        chiave->clear();
+        guida.provaServer();
+        QTRY_VERIFY_WITH_TIMEOUT(guida.collegato(), 8000);
+        QCOMPARE(chiave->text(), qEnvironmentVariable("MDR_CHIAVE_SVILUPPO"));
+
+        guida.next();
+        guida.findChild<QLineEdit*>("guida_email")->setText("Responsabile");   // = responsabile@negozio.lan
+        guida.findChild<QLineEdit*>("guida_password")->setText("prova");
+        guida.accedi();
+        QTRY_VERIFY_WITH_TIMEOUT(guida.autenticato(), 8000);
+        QCOMPARE(guida.impostazioni().email, QStringLiteral("responsabile@negozio.lan"));
+        if (const auto cartella = qEnvironmentVariable("MDR_SCREENSHOT"); !cartella.isEmpty()) {
+            guida.back();
+            QTest::qWait(100);
+            guida.grab().save(cartella + "/guida_server_trovato.png");
+            guida.next();
+            QTest::qWait(100);
+            guida.grab().save(cartella + "/guida_accesso.png");
+        }
+    }
+
     void prima_installazione_col_server()
     {
         // Tutta la procedura contro il server di sviluppo: chiave sbagliata, poi giusta, accesso

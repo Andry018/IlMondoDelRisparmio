@@ -104,6 +104,9 @@ class Gestore(BaseHTTPRequestHandler):
     def gestisci(self):
         url = urllib.parse.urlsplit(self.path)
         dati = self.corpo()
+        # Presentazione senza chiave, come il Caddyfile del server vero ("Cerca il server")
+        if url.path == "/mdr/presentazione" and self.command == "GET":
+            return self.json(200, {"servizio": "mondo-del-risparmio", "anon_key": ANON_KEY})
         if self.headers.get("apikey") != ANON_KEY:
             return self.json(401, {"message": "Invalid API key"})
 
